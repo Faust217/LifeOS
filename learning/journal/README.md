@@ -6,4 +6,6 @@ Use filenames such as `YYYY-MM-DD-short-topic.md`. A useful entry explains what 
 
 Do not store secrets, API keys, passwords, raw private financial data, or full sensitive prompts here. Move durable product rules to `docs/`, architectural decisions to `docs/adr/`, and current handoff status to `docs/PROJECT_STATE.md`.
 
-No implementation journal entry exists yet because the repository currently contains documentation and governance only.
+Current entries:
+
+- [2026-08-17: Monorepo skeleton](2026-08-17-monorepo-skeleton.md) - dependency-free Go/web workspace structure, ownership boundaries, and structural checks.

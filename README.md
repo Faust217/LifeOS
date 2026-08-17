@@ -6,7 +6,7 @@ LifeOS is a self-hostable, AI-optional Personal Life Data & Decision System. It 
 
 ## Repository Status
 
-This repository is currently in the **Foundation** milestone. It contains the product, architecture, domain, scope, governance, and learning baseline. No product features or application skeleton have been implemented yet.
+This repository is currently in the **Foundation** milestone. It contains the accepted documentation/governance baseline and a minimal buildable monorepo skeleton with explicit Go module boundaries and an empty private web workspace. No product or domain behavior has been implemented.
 
 See [Project State](docs/PROJECT_STATE.md) for the current handoff point.
 
@@ -45,4 +45,4 @@ The Word files remain the original baseline. Maintained project state and future
 
 ## Current Boundary
 
-There are intentionally no setup, install, or run commands yet. Those belong to a later, explicitly authorized implementation task after the documentation foundation is reviewed.
+The skeleton intentionally has no dependency-install or application-start workflow yet. The API command is an empty build target, and the web workspace contains metadata only; setup and runtime behavior belong to later, separately authorized Foundation issues.

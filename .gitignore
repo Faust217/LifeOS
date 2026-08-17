@@ -1,0 +1,6 @@
+# Repository-local command caches
+/.cache/
+
+# Web workspace generated files
+node_modules/
+dist/

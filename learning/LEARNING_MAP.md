@@ -20,7 +20,7 @@ Suggested status values:
 | Area | LifeOS application | Status | Evidence / next checkpoint |
 | --- | --- | --- | --- |
 | Product and domain modeling | Preserve the difference between actual money, plans, wishlist, assets, and splits | Exploring | Documentation baseline extracted; validate during first finance implementation |
-| Go project structure | Modular monolith, module-owned services, thin adapters | Not assessed | Foundation application skeleton |
+| Go project structure | Modular monolith, module-owned services, thin adapters | Applied | Issue #2 root Go module and 12 internal module packages pass package discovery and build checks; see `journal/2026-08-17-monorepo-skeleton.md` |
 | Go domain/application services | Business invariants and deterministic calculations | Not assessed | First Account and FinancialEvent use cases |
 | PostgreSQL relational modeling | Owner scoping, constraints, relations, indexes | Not assessed | First schema design and review |
 | SQL with `pgx`/`sqlc` | Explicit queries and typed access | Not assessed | First account and financial-event queries |
