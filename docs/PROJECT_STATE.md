@@ -10,7 +10,7 @@
 
 ## Current Status
 
-The Product Owner has reviewed and accepted the repository documentation baseline extracted from the English and Chinese v0.2 Master Project Blueprints. ADR-001 through ADR-010 record the accepted initial architecture decisions. The private GitHub repository has an open [Foundation milestone](https://github.com/Faust217/LifeOS/milestone/1) containing 15 ordered, independently reviewable issues. Issue #1 now satisfies its environment-inspection acceptance criteria and awaits Product Owner review. Go, Docker Engine/Compose/Desktop, Git, Node.js, and the available package-manager tooling are verified, with no remaining Foundation environment blocker. No application skeleton, project dependency, migration, or deployment configuration has been implemented.
+The Product Owner has reviewed and accepted the repository documentation baseline extracted from the English and Chinese v0.2 Master Project Blueprints. ADR-001 through ADR-010 record the accepted initial architecture decisions. The private GitHub repository has an open [Foundation milestone](https://github.com/Faust217/LifeOS/milestone/1) containing 15 ordered, independently reviewable issues. Issue #1 has been accepted and closed as completed. Go, Docker Engine/Compose/Desktop, Git, Node.js, and the available package-manager tooling are verified, with no remaining Foundation environment blocker. No application skeleton, project dependency, migration, or deployment configuration has been implemented.
 
 ## Completed
 
@@ -26,11 +26,11 @@ The Product Owner has reviewed and accepted the repository documentation baselin
 - Recorded and accepted ADR-001 through ADR-010 using the repository's standard filenames.
 - Established the non-normative learning area, learning map, and journal guidance.
 - Published the Foundation milestone and 15 issues with acceptance criteria, explicit non-goals, dependencies, and environment/ADR gates.
-- Completed the Issue #1 environment evidence and resolved its approved Go and Docker verification blockers without starting product implementation.
+- Completed, accepted, and closed Issue #1 after resolving its approved Go and Docker verification blockers without starting product implementation.
 
 ## In Progress
 
-The Foundation milestone remains open with all GitHub issues still open. Issue #1 satisfies its acceptance criteria and is ready for Product Owner review; it has not been closed. Final non-sensitive evidence is in [DEVELOPMENT_ENVIRONMENT.md](DEVELOPMENT_ENVIRONMENT.md). Issue #2 has not started, and implementation remains unauthorized.
+The Foundation milestone remains open with 1 of 15 GitHub issues complete. Issue #1 is closed; final non-sensitive evidence is in [DEVELOPMENT_ENVIRONMENT.md](DEVELOPMENT_ENVIRONMENT.md). Issue #2 has not started, and implementation remains unauthorized.
 
 ## Foundation Issue Plan
 
@@ -38,7 +38,7 @@ The recommended order is represented by the issue numbers. Issues #3 and #4 may 
 
 | Order | Issue | Depends on | Implementation gate |
 | --- | --- | --- | --- |
-| 1 | [Inspect the local development environment (read-only)](https://github.com/Faust217/LifeOS/issues/1) | Accepted repository baseline | Acceptance criteria satisfied; awaiting Product Owner review |
+| 1 | [Inspect the local development environment (read-only)](https://github.com/Faust217/LifeOS/issues/1) | Accepted repository baseline | Completed, accepted, and closed |
 | 2 | [Create the monorepo application skeleton](https://github.com/Faust217/LifeOS/issues/2) | #1 | Use the environment record; no additional ADR |
 | 3 | [ADR-011: Choose the database migration tool](https://github.com/Faust217/LifeOS/issues/3) | #1 and ADR-003 | Creates ADR-011; must be accepted before #8 and #12 |
 | 4 | [ADR-012: Choose the Go HTTP router](https://github.com/Faust217/LifeOS/issues/4) | #1, ADR-001, and ADR-002 | Creates ADR-012; must be accepted before #9 and #13 |
@@ -58,11 +58,10 @@ The recommended order is represented by the issue numbers. Issues #3 and #4 may 
 
 No implementation should begin without a new explicit task. The next useful sequence is:
 
-1. Review the final Issue #1 evidence and close the GitHub issue only when the Product Owner explicitly decides to do so.
-2. Do not begin Issue #2 without a separate explicit implementation task.
-3. Authorize later Foundation issues one focused implementation session at a time, following the dependency plan above.
-4. Accept ADR-011 and ADR-012 before work that depends on their tool choices.
-5. Obtain and anonymize a representative Bluecoins CSV sample only in a separately authorized task, before implementing an importer.
+1. Do not begin Issue #2 without a separate explicit implementation task.
+2. Authorize later Foundation issues one focused implementation session at a time, following the dependency plan above.
+3. Accept ADR-011 and ADR-012 before work that depends on their tool choices.
+4. Obtain and anonymize a representative Bluecoins CSV sample only in a separately authorized task, before implementing an importer.
 
 ## Known Risks
 
@@ -111,5 +110,5 @@ When work resumes:
 - Created and accepted ADR-001 through ADR-010 from that baseline.
 - Published the Foundation milestone and all 15 ordered issues to the private GitHub repository.
 - Recorded issue dependencies, acceptance criteria, explicit non-goals, and environment/ADR gates without implementing any issue or changing the local environment.
-- Completed the Issue #1 inspection and approved blocker resolution: verified Go 1.26.6, Docker Engine/CLI 29.2.1, Docker Desktop 4.61.0, Compose v5.0.2, Git, Node.js, and available package-manager tooling; left Issue #1 open for review.
+- Completed the Issue #1 inspection and approved blocker resolution: verified Go 1.26.6, Docker Engine/CLI 29.2.1, Docker Desktop 4.61.0, Compose v5.0.2, Git, Node.js, and available package-manager tooling; closed Issue #1 after Product Owner acceptance.
 - Kept all application implementation explicitly out of this task.
