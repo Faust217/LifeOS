@@ -18,7 +18,7 @@ See [Project State](docs/PROJECT_STATE.md) for the current handoff point.
 4. [V0.1 Scope](docs/V0.1_SCOPE.md) - the Finance Core milestone, explicit exclusions, and exit criteria.
 5. [Roadmap](docs/ROADMAP.md) - the capability sequence from Foundation to V1.0.
 6. [Project State](docs/PROJECT_STATE.md) - completed work, next steps, risks, and open decisions.
-7. [ADR Index](docs/adr/README.md) - architecture decision policy and the initial decision backlog.
+7. [ADR Index](docs/adr/README.md) - architecture decision policy and the accepted initial ADR set.
 8. [Learning Area](learning/README.md) - non-normative implementation and engineering notes.
 
 Agents must also read [AGENTS.md](AGENTS.md) before making changes.

@@ -10,7 +10,7 @@
 
 ## Current Status
 
-The repository documentation and governance foundation has been established from the English and Chinese v0.2 Master Project Blueprints. No product features, application skeleton, dependencies, migrations, or deployment configuration have been implemented.
+The Product Owner has reviewed and accepted the repository documentation baseline extracted from the English and Chinese v0.2 Master Project Blueprints. ADR-001 through ADR-010 now record the accepted initial architecture decisions. No product features, application skeleton, dependencies, migrations, or deployment configuration have been implemented.
 
 ## Completed
 
@@ -22,23 +22,22 @@ The repository documentation and governance foundation has been established from
 - Defined the conceptual domain vocabulary and invariants in `docs/DOMAIN_MODEL.md`.
 - Defined the Finance Core milestone in `docs/V0.1_SCOPE.md`.
 - Recorded the Foundation-to-V1.0 capability sequence in `docs/ROADMAP.md`.
-- Established ADR policy, naming, template, and the initial decision-record backlog in `docs/adr/README.md`.
+- Established ADR policy, naming, template, and the initial decision-record index in `docs/adr/README.md`.
+- Recorded and accepted ADR-001 through ADR-010 using the repository's standard filenames.
 - Established the non-normative learning area, learning map, and journal guidance.
 
 ## In Progress
 
-None. The current foundation task ends with documentation and governance only.
+None. The accepted baseline and initial ADR set are complete. This task ends before application implementation.
 
-## Next Authorized Work
+## Next Work Requiring Explicit Authorization
 
-No implementation should begin without a new explicit task. The next useful sequence from the blueprint is:
+No implementation should begin without a new explicit task. The next useful sequence from the accepted blueprint is:
 
-1. Review and accept this extracted documentation baseline.
-2. Record the accepted baseline decisions as dedicated ADR-001 through ADR-010 files.
-3. Create the Foundation milestone/issues with objective acceptance criteria.
-4. Inspect the existing development environment before proposing project setup changes.
-5. Obtain and anonymize a representative Bluecoins CSV sample, then analyze its fields before implementing an importer.
-6. In a separately authorized implementation task, initialize the Docker/PostgreSQL/Go/Web skeleton and migration path.
+1. Create the Foundation milestone/issues with objective acceptance criteria.
+2. Inspect the existing development environment before proposing project setup changes.
+3. Obtain and anonymize a representative Bluecoins CSV sample, then analyze its fields before implementing an importer.
+4. In a separately authorized implementation task, initialize the Docker/PostgreSQL/Go/Web skeleton and migration path.
 
 ## Known Risks
 
@@ -83,4 +82,6 @@ When work resumes:
 ### 2026-08-17
 
 - Established the documentation, governance, ADR, project-state, and learning foundation from Master Project Blueprint v0.2.
+- Recorded the Product Owner's acceptance of the documentation baseline.
+- Created and accepted ADR-001 through ADR-010 from that baseline.
 - Kept all application implementation explicitly out of this task.

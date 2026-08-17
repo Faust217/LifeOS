@@ -238,7 +238,7 @@ The relevant V0.x scale is years of personal data and growing modules, not a mil
 
 ## Change Gate and Deferred Decisions
 
-Important domain or technical changes require an ADR. The initial ADR backlog is recorded in [adr/README.md](adr/README.md).
+Important domain or technical changes require an ADR. The accepted initial ADR set is indexed in [adr/README.md](adr/README.md).
 
 The following remain intentionally open until their decision point:
 

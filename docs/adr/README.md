@@ -2,7 +2,7 @@
 
 This directory contains normative Architecture Decision Records (ADRs) for important LifeOS domain and technical decisions. ADRs preserve why a decision was made, its consequences, and how the project can migrate or exit later.
 
-The Master Project Blueprint v0.2 already establishes the initial decisions below as the accepted project baseline. Dedicated ADR files have not yet been authored in this documentation-foundation task; their recording is the next documentation step.
+The Master Project Blueprint v0.2 established the initial decisions below as the project baseline. The Product Owner reviewed and accepted the documentation baseline, and the dedicated ADR files were recorded on 2026-08-17.
 
 ## When an ADR Is Required
 
@@ -19,28 +19,28 @@ Create or update the ADR set before implementing a change that affects:
 
 Small implementation details that do not change these boundaries do not require an ADR.
 
-## Initial ADR Backlog
+## Initial ADR Set
 
-| ADR | Baseline decision | Record status |
+| ADR | Baseline decision | Status |
 | --- | --- | --- |
-| ADR-001 | Server-first, client-agnostic core; V0.x Web/PWA first | Baseline accepted; dedicated file pending |
-| ADR-002 | Go modular monolith rather than microservices | Baseline accepted; dedicated file pending |
-| ADR-003 | PostgreSQL with migrations; money stored as minor units plus currency | Baseline accepted; dedicated file pending |
-| ADR-004 | `FinancialEvent` + `AccountMovement` + `CategoryAllocation` lightweight ledger | Baseline accepted; dedicated file pending |
-| ADR-005 | AI is optional; Tool Gateway; no raw database access | Baseline accepted; dedicated file pending |
-| ADR-006 | AI provider abstraction; Ollama is the first experimental provider; cloud providers optional | Baseline accepted; dedicated file pending |
-| ADR-007 | MCP is an external adapter, not a core dependency | Baseline accepted; dedicated file pending |
-| ADR-008 | V0.x is single-user, but the schema is owner-scoped from day one | Baseline accepted; dedicated file pending |
-| ADR-009 | Import/export is first-class; Bluecoins is the first importer | Baseline accepted; dedicated file pending |
-| ADR-010 | Open-source license will be decided separately before public release | Decision to defer accepted; dedicated file pending |
+| [ADR-001](ADR-001-server-first.md) | Server-first, client-agnostic core; V0.x Web/PWA first | Accepted |
+| [ADR-002](ADR-002-modular-monolith.md) | Go modular monolith rather than microservices | Accepted |
+| [ADR-003](ADR-003-postgresql-migrations-and-money.md) | PostgreSQL with migrations; money stored as minor units plus currency | Accepted |
+| [ADR-004](ADR-004-lightweight-ledger.md) | `FinancialEvent` + `AccountMovement` + `CategoryAllocation` lightweight ledger | Accepted |
+| [ADR-005](ADR-005-ai-optional-tool-gateway.md) | AI is optional; Tool Gateway; no raw database access | Accepted |
+| [ADR-006](ADR-006-ai-provider-abstraction.md) | AI provider abstraction; Ollama is the first experimental provider; cloud providers optional | Accepted |
+| [ADR-007](ADR-007-mcp-external-adapter.md) | MCP is an external adapter, not a core dependency | Accepted |
+| [ADR-008](ADR-008-owner-scoped-single-user.md) | V0.x is single-user, but the schema is owner-scoped from day one | Accepted |
+| [ADR-009](ADR-009-import-export-bluecoins.md) | Import/export is first-class; Bluecoins is the first importer | Accepted |
+| [ADR-010](ADR-010-open-source-license-deferred.md) | Open-source license selection is deferred until before public release | Accepted deferral |
 
 ## Naming
 
-Use zero-padded files with a concise slug:
+Use the `ADR-` prefix, a zero-padded three-digit number, and a concise slug:
 
 ```text
-0001-server-first.md
-0002-modular-monolith.md
+ADR-001-server-first.md
+ADR-002-modular-monolith.md
 ```
 
 Use status values `Proposed`, `Accepted`, or `Superseded`. Do not erase an accepted record when direction changes; add a new ADR and mark the old record as superseded.

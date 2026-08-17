@@ -35,7 +35,7 @@ Suggested status values:
 | AI Tool Gateway | Provider abstraction, schemas, permission tiers, confirmation, audit | Not assessed | V0.3; no runtime implementation in V0.1 |
 | MCP integration | External adapter over shared tools | Not assessed | V0.6; preserve boundary only |
 | Docker and self-host operations | Repeatable local and later NAS/VPS deployment | Not assessed | FND-002, then V0.7 hardening |
-| ADR and change management | Record context, alternatives, consequences, and exit paths | Exploring | Author and review ADR-001 through ADR-010 |
+| ADR and change management | Record context, alternatives, consequences, and exit paths | Applied | ADR-001 through ADR-010 recorded and accepted; apply the ADR gate to future decision changes |
 
 ## Recommended Reading Path
 
@@ -55,7 +55,7 @@ For a future implementation task, add the relevant ADR, service, migration, quer
 
 ## Near-Term Learning Sequence
 
-1. Turn the accepted architecture baseline into focused ADRs.
+1. Use the accepted ADR set as the decision gate for Foundation and V0.1 work.
 2. Inspect the existing Go, Docker, Git, and database environment without modifying system configuration.
 3. Learn the shape and edge cases of an anonymized Bluecoins export.
 4. Establish one migration and prove both clean creation and upgrade behavior.
