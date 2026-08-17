@@ -10,7 +10,7 @@
 
 ## Current Status
 
-The Product Owner has reviewed and accepted the repository documentation baseline extracted from the English and Chinese v0.2 Master Project Blueprints. ADR-001 through ADR-010 now record the accepted initial architecture decisions. No product features, application skeleton, dependencies, migrations, or deployment configuration have been implemented.
+The Product Owner has reviewed and accepted the repository documentation baseline extracted from the English and Chinese v0.2 Master Project Blueprints. ADR-001 through ADR-010 record the accepted initial architecture decisions. The private GitHub repository has an open [Foundation milestone](https://github.com/Faust217/LifeOS/milestone/1) containing 15 ordered, independently reviewable issues. Issue #1 now satisfies its environment-inspection acceptance criteria and awaits Product Owner review. Go, Docker Engine/Compose/Desktop, Git, Node.js, and the available package-manager tooling are verified, with no remaining Foundation environment blocker. No application skeleton, project dependency, migration, or deployment configuration has been implemented.
 
 ## Completed
 
@@ -25,19 +25,44 @@ The Product Owner has reviewed and accepted the repository documentation baselin
 - Established ADR policy, naming, template, and the initial decision-record index in `docs/adr/README.md`.
 - Recorded and accepted ADR-001 through ADR-010 using the repository's standard filenames.
 - Established the non-normative learning area, learning map, and journal guidance.
+- Published the Foundation milestone and 15 issues with acceptance criteria, explicit non-goals, dependencies, and environment/ADR gates.
+- Completed the Issue #1 environment evidence and resolved its approved Go and Docker verification blockers without starting product implementation.
 
 ## In Progress
 
-None. The accepted baseline and initial ADR set are complete. This task ends before application implementation.
+The Foundation milestone remains open with all GitHub issues still open. Issue #1 satisfies its acceptance criteria and is ready for Product Owner review; it has not been closed. Final non-sensitive evidence is in [DEVELOPMENT_ENVIRONMENT.md](DEVELOPMENT_ENVIRONMENT.md). Issue #2 has not started, and implementation remains unauthorized.
+
+## Foundation Issue Plan
+
+The recommended order is represented by the issue numbers. Issues #3 and #4 may proceed in parallel after #1. Issues #6, #7, and #10 may proceed in parallel after their shared prerequisites are complete.
+
+| Order | Issue | Depends on | Implementation gate |
+| --- | --- | --- | --- |
+| 1 | [Inspect the local development environment (read-only)](https://github.com/Faust217/LifeOS/issues/1) | Accepted repository baseline | Acceptance criteria satisfied; awaiting Product Owner review |
+| 2 | [Create the monorepo application skeleton](https://github.com/Faust217/LifeOS/issues/2) | #1 | Use the environment record; no additional ADR |
+| 3 | [ADR-011: Choose the database migration tool](https://github.com/Faust217/LifeOS/issues/3) | #1 and ADR-003 | Creates ADR-011; must be accepted before #8 and #12 |
+| 4 | [ADR-012: Choose the Go HTTP router](https://github.com/Faust217/LifeOS/issues/4) | #1, ADR-001, and ADR-002 | Creates ADR-012; must be accepted before #9 and #13 |
+| 5 | [Define the project-local configuration contract](https://github.com/Faust217/LifeOS/issues/5) | #2 | No additional ADR unless the baseline architecture changes |
+| 6 | [Add the PostgreSQL Docker Compose service](https://github.com/Faust217/LifeOS/issues/6) | #1 and #5 | Requires the environment record; governed by ADR-003 |
+| 7 | [Implement Go configuration loading and validation](https://github.com/Faust217/LifeOS/issues/7) | #1, #2, and #5 | Requires the environment record |
+| 8 | [Add project-local database migration commands](https://github.com/Faust217/LifeOS/issues/8) | #2, #3, #6, and #7 | Requires the environment record and accepted ADR-011 |
+| 9 | [Bootstrap the Go API with health and readiness endpoints](https://github.com/Faust217/LifeOS/issues/9) | #2, #4, #6, #7, and #8 | Requires the environment record and accepted ADR-012 |
+| 10 | [Bootstrap the React/TypeScript/Vite web shell](https://github.com/Faust217/LifeOS/issues/10) | #1, #2, and #5 | Requires the environment record; no component-library decision |
+| 11 | [Compose the API and web services with PostgreSQL](https://github.com/Faust217/LifeOS/issues/11) | #6, #9, and #10 | Requires the environment record |
+| 12 | [Add CI migration-chain verification](https://github.com/Faust217/LifeOS/issues/12) | #3 and #8 | Requires accepted ADR-011 |
+| 13 | [Define the OpenAPI Foundation contract](https://github.com/Faust217/LifeOS/issues/13) | #4 and #9 | Requires accepted ADR-012 |
+| 14 | [Add the generated TypeScript client path](https://github.com/Faust217/LifeOS/issues/14) | #1, #10, and #13 | Requires the environment record and project-local tooling |
+| 15 | [Document and verify the clean Foundation startup flow](https://github.com/Faust217/LifeOS/issues/15) | #5 through #14 | Requires all blocking ADRs and Foundation work to be complete |
 
 ## Next Work Requiring Explicit Authorization
 
-No implementation should begin without a new explicit task. The next useful sequence from the accepted blueprint is:
+No implementation should begin without a new explicit task. The next useful sequence is:
 
-1. Create the Foundation milestone/issues with objective acceptance criteria.
-2. Inspect the existing development environment before proposing project setup changes.
-3. Obtain and anonymize a representative Bluecoins CSV sample, then analyze its fields before implementing an importer.
-4. In a separately authorized implementation task, initialize the Docker/PostgreSQL/Go/Web skeleton and migration path.
+1. Review the final Issue #1 evidence and close the GitHub issue only when the Product Owner explicitly decides to do so.
+2. Do not begin Issue #2 without a separate explicit implementation task.
+3. Authorize later Foundation issues one focused implementation session at a time, following the dependency plan above.
+4. Accept ADR-011 and ADR-012 before work that depends on their tool choices.
+5. Obtain and anonymize a representative Bluecoins CSV sample only in a separately authorized task, before implementing an importer.
 
 ## Known Risks
 
@@ -58,8 +83,8 @@ These decisions are intentionally deferred to their real decision points:
 
 | Decision | Latest decision point | Baseline direction |
 | --- | --- | --- |
-| Migration tool | Before the first real migration | Choose `golang-migrate` or `goose` and record an ADR |
-| Go HTTP router | Foundation implementation | Standard library or `chi`; keep handlers thin |
+| Migration tool | Issue #3, before issue #8 | Choose `golang-migrate` or `goose` and record ADR-011 |
+| Go HTTP router | Issue #4, before issue #9 | Choose the standard library or `chi` and record ADR-012; keep handlers thin |
 | Web UI component library | Before the first production UI screen | Choose an actively maintained, accessible library |
 | Authentication implementation | Before network/Internet exposure | Start local-owner-first; require secure login remotely |
 | First Ollama model | V0.3 | Evaluate against local hardware and tool-calling needs |
@@ -84,4 +109,7 @@ When work resumes:
 - Established the documentation, governance, ADR, project-state, and learning foundation from Master Project Blueprint v0.2.
 - Recorded the Product Owner's acceptance of the documentation baseline.
 - Created and accepted ADR-001 through ADR-010 from that baseline.
+- Published the Foundation milestone and all 15 ordered issues to the private GitHub repository.
+- Recorded issue dependencies, acceptance criteria, explicit non-goals, and environment/ADR gates without implementing any issue or changing the local environment.
+- Completed the Issue #1 inspection and approved blocker resolution: verified Go 1.26.6, Docker Engine/CLI 29.2.1, Docker Desktop 4.61.0, Compose v5.0.2, Git, Node.js, and available package-manager tooling; left Issue #1 open for review.
 - Kept all application implementation explicitly out of this task.
