@@ -1,6 +1,6 @@
 # LifeOS Learning Map
 
-**Last updated:** 2026-08-17
+**Last updated:** 2026-08-18
 
 **Purpose:** Track engineering topics exposed by real LifeOS work without inventing proficiency claims.
 
@@ -24,9 +24,9 @@ Suggested status values:
 | Go domain/application services | Business invariants and deterministic calculations | Not assessed | First Account and FinancialEvent use cases |
 | PostgreSQL relational modeling | Owner scoping, constraints, relations, indexes | Not assessed | First schema design and review |
 | SQL with `pgx`/`sqlc` | Explicit queries and typed access | Not assessed | First account and financial-event queries |
-| Database migrations | Forward migrations and upgrade tests | Not assessed | Choose migration tool, record ADR, run clean and upgrade paths |
+| Database migrations | Forward migrations and upgrade tests | Exploring | ADR-011 selects `golang-migrate` v4; no migration has run yet. Next: implement the pinned project-local workflow and verify clean and upgrade paths |
 | Money and currency | Minor units, sign conventions, transfers, credit cards, FX boundaries | Exploring | Domain baseline documented; verify with unit and integration tests |
-| REST and OpenAPI | Stable DTOs, validation, errors, generated-client path | Not assessed | FND-005 and first finance endpoints |
+| REST and OpenAPI | Stable DTOs, validation, errors, generated-client path | Exploring | ADR-012 selects `chi` v5; no API or OpenAPI implementation yet. Next: define the contract and test thin handlers using standard `net/http` concepts |
 | React/TypeScript/PWA | Replaceable responsive client | Not assessed | First production UI slice |
 | Import pipelines | Adapters, canonical input, dry-run, mapping, idempotency, error reports | Not assessed | Anonymized Bluecoins field analysis and fixture |
 | Testing strategy | Unit, PostgreSQL integration, contract, import fixture, and E2E tests | Not assessed | First clean migration and FinanceService integration test |
@@ -35,7 +35,7 @@ Suggested status values:
 | AI Tool Gateway | Provider abstraction, schemas, permission tiers, confirmation, audit | Not assessed | V0.3; no runtime implementation in V0.1 |
 | MCP integration | External adapter over shared tools | Not assessed | V0.6; preserve boundary only |
 | Docker and self-host operations | Repeatable local and later NAS/VPS deployment | Not assessed | FND-002, then V0.7 hardening |
-| ADR and change management | Record context, alternatives, consequences, and exit paths | Applied | ADR-001 through ADR-010 recorded and accepted; apply the ADR gate to future decision changes |
+| ADR and change management | Record context, alternatives, consequences, and exit paths | Applied | ADR-001 through ADR-012 recorded and accepted; ADR-011 and ADR-012 document Foundation alternatives, trade-offs, and exit paths |
 
 ## Recommended Reading Path
 
@@ -48,8 +48,9 @@ For the current foundation:
 5. `docs/V0.1_SCOPE.md`
 6. `docs/ROADMAP.md`
 7. `docs/adr/README.md`
-8. `docs/PROJECT_STATE.md`
-9. `AGENTS.md`
+8. `learning/FOUNDATION_DECISIONS.md`
+9. `docs/PROJECT_STATE.md`
+10. `AGENTS.md`
 
 For a future implementation task, add the relevant ADR, service, migration, query, API, test, and client files to that task's journal entry in the order that best explains the behavior.
 
@@ -66,8 +67,8 @@ For a future implementation task, add the relevant ADR, service, migration, quer
 
 ## Open Questions to Resolve Through Work
 
-- Which migration tool best fits the repository workflow: `golang-migrate` or `goose`?
-- Which Go HTTP router keeps handlers simple without unnecessary framework behavior?
+- Which exact pinned `golang-migrate` v4 release and project-local wrapper should the first migration workflow use?
+- What route groups and middleware order should the first `chi` API slice use while keeping handlers thin?
 - What fields and edge cases actually appear in the owner's Bluecoins export?
 - Which account and category reconciliation reports best prove import correctness?
 - What authentication boundary is sufficient for local-only use before remote access is introduced?
