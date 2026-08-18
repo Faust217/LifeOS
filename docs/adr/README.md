@@ -39,6 +39,7 @@ Small implementation details that do not change these boundaries do not require 
 | ADR | Decision | Status |
 | --- | --- | --- |
 | [ADR-011](ADR-011-golang-migrate.md) | Use `golang-migrate` v4 through an explicitly pinned, project-local invocation path | Accepted |
+| [ADR-012](ADR-012-chi.md) | Use `chi` v5 as a transport-only router with thin standard `net/http` handlers | Accepted; Issue #4 review pending |
 
 ## Naming
 
