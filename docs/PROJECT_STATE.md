@@ -10,7 +10,7 @@
 
 ## Current Status
 
-The Product Owner has reviewed and accepted the repository documentation baseline extracted from the English and Chinese v0.2 Master Project Blueprints. ADR-001 through ADR-010 record the accepted initial architecture decisions. The private GitHub repository has an open [Foundation milestone](https://github.com/Faust217/LifeOS/milestone/1) containing 15 ordered, independently reviewable issues. Issues #1 and #2 have been accepted and closed as completed. The minimal buildable monorepo skeleton establishes the agreed module boundaries and repository areas. Issue #3 is authorized and ADR-011 records the Product Owner's selected `golang-migrate` decision; the issue remains open pending review and its issue-level acceptance is not complete. No migration tool has been installed or executed. No product behavior, third-party project dependency, database schema, migration, API endpoint, UI screen, Docker Compose service, CI configuration, or deployment configuration has been implemented.
+The Product Owner has reviewed and accepted the repository documentation baseline extracted from the English and Chinese v0.2 Master Project Blueprints. ADR-001 through ADR-011 record accepted architecture decisions. The private GitHub repository has an open [Foundation milestone](https://github.com/Faust217/LifeOS/milestone/1) containing 15 ordered, independently reviewable issues. Issues #1 through #3 have been accepted and closed as completed. The minimal buildable monorepo skeleton establishes the agreed module boundaries and repository areas, and ADR-011 selects `golang-migrate` v4 for future project-local database migration tooling. No migration tool has been installed or executed. No product behavior, third-party project dependency, database schema, migration, API endpoint, UI screen, Docker Compose service, CI configuration, or deployment configuration has been implemented.
 
 ## Completed
 
@@ -28,10 +28,11 @@ The Product Owner has reviewed and accepted the repository documentation baselin
 - Published the Foundation milestone and 15 issues with acceptance criteria, explicit non-goals, dependencies, and environment/ADR gates.
 - Completed, accepted, and closed Issue #1 after resolving its approved Go and Docker verification blockers without starting product implementation.
 - Completed, accepted, and closed Issue #2 after creating and verifying the dependency-free monorepo skeleton and accepted module boundaries.
+- Completed, accepted, and closed Issue #3 after selecting `golang-migrate` v4 in ADR-011 with project-local pinning, ordered forward migrations, transaction guidance, and explicit dirty-state recovery.
 
 ## In Progress
 
-The Foundation milestone remains open with 2 of 15 GitHub issues accepted and closed. Issue #1 evidence is in [DEVELOPMENT_ENVIRONMENT.md](DEVELOPMENT_ENVIRONMENT.md), and Issue #2 established the verified monorepo skeleton. Issue #3 has created ADR-011 for Product Owner review while remaining open; its acceptance criterion and dependent Issues #8 and #12 remain blocked. Issue #4 and all other later issues remain not started and unauthorized.
+The Foundation milestone remains open with 3 of 15 GitHub issues accepted and closed. Issues #1 through #3 are complete. Issue #4 and all other later issues remain not started and unauthorized.
 
 ## Foundation Issue Plan
 
@@ -41,7 +42,7 @@ The recommended order is represented by the issue numbers. Issues #3 and #4 may 
 | --- | --- | --- | --- |
 | 1 | [Inspect the local development environment (read-only)](https://github.com/Faust217/LifeOS/issues/1) | Accepted repository baseline | Completed, accepted, and closed |
 | 2 | [Create the monorepo application skeleton](https://github.com/Faust217/LifeOS/issues/2) | #1 | Completed, accepted, and closed |
-| 3 | [ADR-011: Choose the database migration tool](https://github.com/Faust217/LifeOS/issues/3) | #1 and ADR-003 | ADR-011 created for review; Issue #3 remains open and acceptance is incomplete; #8 and #12 remain blocked |
+| 3 | [ADR-011: Choose the database migration tool](https://github.com/Faust217/LifeOS/issues/3) | #1 and ADR-003 | Completed, accepted, and closed; ADR-011 accepted |
 | 4 | [ADR-012: Choose the Go HTTP router](https://github.com/Faust217/LifeOS/issues/4) | #1, ADR-001, and ADR-002 | Creates ADR-012; must be accepted before #9 and #13 |
 | 5 | [Define the project-local configuration contract](https://github.com/Faust217/LifeOS/issues/5) | #2 | No additional ADR unless the baseline architecture changes |
 | 6 | [Add the PostgreSQL Docker Compose service](https://github.com/Faust217/LifeOS/issues/6) | #1 and #5 | Requires the environment record; governed by ADR-003 |
@@ -59,11 +60,10 @@ The recommended order is represented by the issue numbers. Issues #3 and #4 may 
 
 No implementation should begin without a new explicit task. The next useful sequence is:
 
-1. Review ADR-011 and Issue #3; do not close the issue or mark its Product Owner acceptance criterion complete without a separate explicit instruction.
-2. Do not begin Issue #4 or any other later Foundation issue without a separate explicit task.
-3. Keep Issues #8 and #12 blocked until Issue #3 and ADR-011 receive final acceptance.
-4. Accept ADR-012 before work that depends on the HTTP-router choice.
-5. Obtain and anonymize a representative Bluecoins CSV sample only in a separately authorized task, before implementing an importer.
+1. Do not begin Issue #4 or any other later Foundation issue without a separate explicit task.
+2. Keep later issues gated by the dependency plan above; ADR-011 is now accepted for Issues #8 and #12 when their other prerequisites are complete.
+3. Accept ADR-012 before work that depends on the HTTP-router choice.
+4. Obtain and anonymize a representative Bluecoins CSV sample only in a separately authorized task, before implementing an importer.
 
 ## Known Risks
 
@@ -106,8 +106,8 @@ When work resumes:
 
 ### 2026-08-18
 
-- Recorded ADR-011 with the Product Owner's selected `golang-migrate` decision, pinned project-local invocation requirement, ordered forward-chain policy, explicit transaction preference, and manual dirty-state recovery model.
-- Left Issue #3 open for Product Owner review with its issue-level acceptance incomplete; did not install or execute a migration tool and did not start migrations, schema, Docker, CI, application work, Issue #4, Issue #8, or any later issue.
+- Recorded and accepted ADR-011 with the Product Owner's `golang-migrate` v4 decision, pinned project-local invocation requirement, ordered forward-chain policy, explicit transaction preference, and manual dirty-state recovery model.
+- Completed, accepted, and closed Issue #3 after review; no migration tool was installed or executed, and no migrations, schema, Docker, CI, application work, Issue #4, Issue #8, or later issue was started.
 
 ### 2026-08-17
 
