@@ -38,7 +38,7 @@ Small implementation details that do not change these boundaries do not require 
 
 | ADR | Decision | Status |
 | --- | --- | --- |
-| [ADR-011](ADR-011-golang-migrate.md) | Use `golang-migrate` v4 through an explicitly pinned, project-local invocation path | Accepted; Issue #3 review pending |
+| [ADR-011](ADR-011-golang-migrate.md) | Use `golang-migrate` v4 through an explicitly pinned, project-local invocation path | Accepted |
 
 ## Naming
 
