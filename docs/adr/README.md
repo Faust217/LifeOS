@@ -34,6 +34,12 @@ Small implementation details that do not change these boundaries do not require 
 | [ADR-009](ADR-009-import-export-bluecoins.md) | Import/export is first-class; Bluecoins is the first importer | Accepted |
 | [ADR-010](ADR-010-open-source-license-deferred.md) | Open-source license selection is deferred until before public release | Accepted deferral |
 
+## Foundation ADRs
+
+| ADR | Decision | Status |
+| --- | --- | --- |
+| [ADR-011](ADR-011-golang-migrate.md) | Use `golang-migrate` v4 through an explicitly pinned, project-local invocation path | Accepted; Issue #3 review pending |
+
 ## Naming
 
 Use the `ADR-` prefix, a zero-padded three-digit number, and a concise slug:
