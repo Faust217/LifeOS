@@ -10,7 +10,7 @@
 
 ## Current Status
 
-The Product Owner has reviewed and accepted the repository documentation baseline extracted from the English and Chinese v0.2 Master Project Blueprints. ADR-001 through ADR-012 record accepted architecture decisions. The private GitHub repository has an open [Foundation milestone](https://github.com/Faust217/LifeOS/milestone/1) containing 15 ordered, independently reviewable issues. Issues #1 through #4 are accepted and closed. Issue #5 and its minimal Foundation configuration contract are completed and accepted; the issue is ready to close. The minimal buildable monorepo skeleton establishes the agreed module boundaries and repository areas, ADR-011 selects `golang-migrate` v4 for future project-local database migration tooling, and ADR-012 selects `chi` v5 for HTTP routing. `chi` has not been installed, and API implementation has not started. Issue #5 no longer blocks Issues #6, #7, and #10, but all their other dependencies and explicit-authorization gates remain.
+The Product Owner has reviewed and accepted the repository documentation baseline extracted from the English and Chinese v0.2 Master Project Blueprints. ADR-001 through ADR-012 record accepted architecture decisions. The private GitHub repository has an open [Foundation milestone](https://github.com/Faust217/LifeOS/milestone/1) containing 15 ordered, independently reviewable issues. Issues #1 through #5 are accepted and closed. Issue #6 and its verified local PostgreSQL 18 Compose service are completed and accepted; the issue is ready to close. The minimal buildable monorepo skeleton establishes the agreed module boundaries and repository areas, ADR-011 selects `golang-migrate` v4 for future project-local database migration tooling, and ADR-012 selects `chi` v5 for HTTP routing. `chi` has not been installed, and API implementation has not started. Issue #6 no longer blocks dependent issues, but all their other dependencies and explicit-authorization gates remain. No later issue has started.
 
 ## Completed
 
@@ -30,11 +30,12 @@ The Product Owner has reviewed and accepted the repository documentation baselin
 - Completed, accepted, and closed Issue #2 after creating and verifying the dependency-free monorepo skeleton and accepted module boundaries.
 - Completed, accepted, and closed Issue #3 after selecting `golang-migrate` v4 in ADR-011 with project-local pinning, ordered forward migrations, transaction guidance, and explicit dirty-state recovery.
 - Completed, accepted, and closed Issue #4 after selecting `chi` v5 in ADR-012; `chi` remains uninstalled and API implementation has not started.
-- Completed and accepted Issue #5 after defining the minimal Foundation configuration contract; the issue is ready to close.
+- Completed, accepted, and closed Issue #5 after defining the minimal Foundation configuration contract.
+- Completed and accepted Issue #6 after implementing and verifying the local PostgreSQL 18 Compose service; the issue is ready to close.
 
 ## In Progress
 
-The Foundation milestone remains open with 5 of 15 GitHub issues accepted as completed. Issues #1 through #4 are closed, and Issue #5 is ready to close. Issues #6, #7, and #10 are no longer blocked by Issue #5 itself, but no later issue has started or received implementation authorization.
+The Foundation milestone remains open with 6 of 15 GitHub issues accepted as completed. Issues #1 through #5 are closed, and Issue #6 is ready to close. Issue #7 and all other later issues remain not started and unauthorized.
 
 ## Foundation Issue Plan
 
@@ -46,13 +47,13 @@ The recommended order is represented by the issue numbers. Issues #3 and #4 may 
 | 2 | [Create the monorepo application skeleton](https://github.com/Faust217/LifeOS/issues/2) | #1 | Completed, accepted, and closed |
 | 3 | [ADR-011: Choose the database migration tool](https://github.com/Faust217/LifeOS/issues/3) | #1 and ADR-003 | Completed, accepted, and closed; ADR-011 accepted |
 | 4 | [ADR-012: Choose the Go HTTP router](https://github.com/Faust217/LifeOS/issues/4) | #1, ADR-001, and ADR-002 | Completed, accepted, and closed; ADR-012 accepted |
-| 5 | [Define the project-local configuration contract](https://github.com/Faust217/LifeOS/issues/5) | #2 | Completed and accepted; ready to close |
-| 6 | [Add the PostgreSQL Docker Compose service](https://github.com/Faust217/LifeOS/issues/6) | #1 and #5 | Issue #5 gate satisfied; requires the environment record and explicit authorization; governed by ADR-003 |
+| 5 | [Define the project-local configuration contract](https://github.com/Faust217/LifeOS/issues/5) | #2 | Completed, accepted, and closed |
+| 6 | [Add the PostgreSQL Docker Compose service](https://github.com/Faust217/LifeOS/issues/6) | #1 and #5 | Completed and accepted; ready to close |
 | 7 | [Implement Go configuration loading and validation](https://github.com/Faust217/LifeOS/issues/7) | #1, #2, and #5 | Issue #5 gate satisfied; requires the environment record and explicit authorization |
-| 8 | [Add project-local database migration commands](https://github.com/Faust217/LifeOS/issues/8) | #2, #3, #6, and #7 | Requires the environment record and accepted ADR-011 |
-| 9 | [Bootstrap the Go API with health and readiness endpoints](https://github.com/Faust217/LifeOS/issues/9) | #2, #4, #6, #7, and #8 | Issue #4 gate satisfied; requires the environment record and all other dependencies |
+| 8 | [Add project-local database migration commands](https://github.com/Faust217/LifeOS/issues/8) | #2, #3, #6, and #7 | Issue #6 gate satisfied; still requires Issue #7, the environment record, accepted ADR-011, and explicit authorization |
+| 9 | [Bootstrap the Go API with health and readiness endpoints](https://github.com/Faust217/LifeOS/issues/9) | #2, #4, #6, #7, and #8 | Issues #4 and #6 gates satisfied; requires all other dependencies and explicit authorization |
 | 10 | [Bootstrap the React/TypeScript/Vite web shell](https://github.com/Faust217/LifeOS/issues/10) | #1, #2, and #5 | Issue #5 gate satisfied; requires the environment record and explicit authorization; no component-library decision |
-| 11 | [Compose the API and web services with PostgreSQL](https://github.com/Faust217/LifeOS/issues/11) | #6, #9, and #10 | Requires the environment record |
+| 11 | [Compose the API and web services with PostgreSQL](https://github.com/Faust217/LifeOS/issues/11) | #6, #9, and #10 | Issue #6 gate satisfied; still requires Issues #9 and #10, the environment record, and explicit authorization |
 | 12 | [Add CI migration-chain verification](https://github.com/Faust217/LifeOS/issues/12) | #3 and #8 | Requires accepted ADR-011 |
 | 13 | [Define the OpenAPI Foundation contract](https://github.com/Faust217/LifeOS/issues/13) | #4 and #9 | Issue #4 gate satisfied; still requires Issue #9 |
 | 14 | [Add the generated TypeScript client path](https://github.com/Faust217/LifeOS/issues/14) | #1, #10, and #13 | Requires the environment record and project-local tooling |
@@ -62,11 +63,10 @@ The recommended order is represented by the issue numbers. Issues #3 and #4 may 
 
 No implementation should begin without a new explicit task. The next useful sequence is:
 
-1. Close accepted Issue #5 in GitHub only when explicitly instructed; its configuration contract is complete.
-2. Do not begin Issue #6, #7, #10, or any other later Foundation issue without a separate explicit task.
-3. Keep Issues #6, #7, and #10 subject to their remaining dependencies and explicit-authorization gates; Issue #5's gate is satisfied.
-4. Keep later issues gated by the dependency plan above; ADR-011 and ADR-012 are accepted where required.
-5. Obtain and anonymize a representative Bluecoins CSV sample only in a separately authorized task, before implementing an importer.
+1. Close accepted Issue #6 in GitHub only when explicitly instructed; its PostgreSQL Compose implementation is complete.
+2. Do not begin Issue #7, #8, #9, #11, or any other later Foundation issue without a separate explicit task.
+3. Keep later issues gated by all remaining dependencies and explicit authorization; Issue #6's gate is satisfied.
+4. Obtain and anonymize a representative Bluecoins CSV sample only in a separately authorized task, before implementing an importer.
 
 ## Known Risks
 
@@ -109,7 +109,8 @@ When work resumes:
 ### 2026-08-19
 
 - Confirmed Issue #4 as completed, accepted, and closed with ADR-012 remaining accepted.
-- Completed and accepted the minimal Foundation configuration contract and safe `.env.example` for Issue #5; the issue is ready to close, and no configuration loader or runtime service was implemented.
+- Completed, accepted, and closed Issue #5 after defining the minimal Foundation configuration contract and safe `.env.example`; no configuration loader was implemented.
+- Completed and accepted Issue #6 after implementing and verifying the PostgreSQL 18 Compose service with localhost-only publishing, `pg_isready` health checking, and PostgreSQL 18 volume placement. The issue is ready to close; the container and network remain stopped while the named volume is preserved.
 
 ### 2026-08-18
 

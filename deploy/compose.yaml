@@ -1,0 +1,22 @@
+name: lifeos
+
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: ${LIFEOS_DB_NAME:-lifeos}
+      POSTGRES_USER: ${LIFEOS_DB_USER:-lifeos}
+      POSTGRES_PASSWORD: ${LIFEOS_DB_PASSWORD:?LIFEOS_DB_PASSWORD is required}
+    ports:
+      - "127.0.0.1:${LIFEOS_DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  postgres_data:
