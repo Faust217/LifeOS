@@ -1,6 +1,11 @@
 # Repository-local command caches
 /.cache/
 
+# Project-local environment files
+.env
+.env.local
+.env.*.local
+
 # Web workspace generated files
 node_modules/
 dist/
