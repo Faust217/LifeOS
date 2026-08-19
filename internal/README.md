@@ -25,4 +25,4 @@ LifeOS is one Go modular monolith. Each directory below is a code-ownership boun
 - `ai` and `integrations/mcp` may invoke domain behavior only through the controlled application-service and Tool Gateway boundaries.
 - Sharing one process and one future PostgreSQL database does not erase these ownership boundaries.
 
-The current packages are documentation-only placeholders. They contain no product behavior or persistence implementation.
+The domain packages remain documentation-only placeholders. `platform/config` implements the accepted Foundation runtime configuration boundary; no domain behavior or persistence implementation exists yet.
