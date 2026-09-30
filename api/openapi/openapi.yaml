@@ -1,0 +1,121 @@
+openapi: 3.1.0
+info:
+  title: LifeOS Foundation API
+  version: 0.1.0
+  description: Operational liveness and readiness for the LifeOS Foundation stack.
+servers:
+  - url: http://127.0.0.1:8080
+    description: Default local API
+tags:
+  - name: Operations
+    description: Unversioned process and dependency health endpoints.
+security: []
+paths:
+  /healthz:
+    get:
+      tags: [Operations]
+      summary: Report process liveness
+      operationId: getHealth
+      responses:
+        "200":
+          description: The API process is alive.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /readyz:
+    get:
+      tags: [Operations]
+      summary: Report PostgreSQL and migration readiness
+      operationId: getReadiness
+      responses:
+        "200":
+          description: PostgreSQL is reachable and the migration version is clean and current.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadinessResponse"
+        "503":
+          description: PostgreSQL or the required migration state is not ready.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadinessResponse"
+components:
+  headers:
+    RequestId:
+      description: Identifier used to correlate a request with structured server logs.
+      schema:
+        type: string
+        minLength: 1
+  schemas:
+    HealthResponse:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          type: string
+          const: ok
+    ReadinessResponse:
+      type: object
+      additionalProperties: false
+      required: [status, database, migration]
+      properties:
+        status:
+          type: string
+          enum: [ready, not_ready]
+        database:
+          $ref: "#/components/schemas/ComponentStatus"
+        migration:
+          $ref: "#/components/schemas/MigrationStatus"
+        error:
+          $ref: "#/components/schemas/ErrorStatus"
+    ComponentStatus:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ready, unavailable]
+    MigrationStatus:
+      type: object
+      additionalProperties: false
+      required: [status, expected_version, dirty]
+      properties:
+        status:
+          type: string
+          enum: [ready, unavailable, unknown, missing, dirty, behind, ahead]
+        version:
+          type: integer
+          minimum: 0
+        expected_version:
+          type: integer
+          minimum: 1
+        dirty:
+          type: boolean
+    ErrorStatus:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum:
+            - database_unavailable
+            - migration_status_unavailable
+            - migration_not_ready
+            - migration_dirty
+        message:
+          type: string
+          minLength: 1

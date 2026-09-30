@@ -7,9 +7,13 @@
     "apps/web"
   ],
   "scripts": {
+    "openapi:lint": "redocly lint api/openapi/openapi.yaml",
     "web:dev": "npm run dev --workspace @lifeos/web",
     "web:build": "npm run build --workspace @lifeos/web",
     "web:typecheck": "npm run typecheck --workspace @lifeos/web",
     "web:test": "npm run test --workspace @lifeos/web"
+  },
+  "devDependencies": {
+    "@redocly/cli": "2.56.0"
   }
 }
