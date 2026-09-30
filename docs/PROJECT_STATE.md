@@ -10,7 +10,7 @@
 
 ## Current Status
 
-The Product Owner has reviewed and accepted the repository documentation baseline extracted from the English and Chinese v0.2 Master Project Blueprints. ADR-001 through ADR-012 record accepted architecture decisions. The private GitHub repository has an open [Foundation milestone](https://github.com/Faust217/LifeOS/milestone/1) containing 15 ordered, independently reviewable issues. Issues #1 through #7 are completed, accepted, and closed. Issues #8 through #13 are implemented and verified locally; their GitHub issues remain open for later review and closure. `api/openapi/openapi.yaml` is now the validated canonical contract for the existing Foundation operational endpoints only. Issue #14 is the next authorized sprint issue. No V0.1 Finance Core implementation has started.
+The Product Owner has reviewed and accepted the repository documentation baseline extracted from the English and Chinese v0.2 Master Project Blueprints. ADR-001 through ADR-012 record accepted architecture decisions. The private GitHub repository has an open [Foundation milestone](https://github.com/Faust217/LifeOS/milestone/1) containing 15 ordered, independently reviewable issues. Issues #1 through #7 are completed, accepted, and closed. Issues #8 through #14 are implemented and verified locally; their GitHub issues remain open for later review and closure. The web API boundary now compiles against deterministic TypeScript types generated from the canonical Foundation OpenAPI contract. Issue #15 is the final authorized sprint issue. No V0.1 Finance Core implementation has started.
 
 ## Completed
 
@@ -39,10 +39,11 @@ The Product Owner has reviewed and accepted the repository documentation baselin
 - Implemented and verified Issue #11 locally with reproducible API/migration/web images, explicit Compose health dependencies, same-origin operational proxying, localhost-only ports, and preserved PostgreSQL storage; remote review and closure remain pending.
 - Implemented and verified Issue #12 locally with a focused GitHub Actions migration workflow, a shared chain verifier, clean PostgreSQL 18 evidence, and `actionlint`; a GitHub-hosted run remains pending until the later authorized push.
 - Implemented and verified Issue #13 locally with a canonical OpenAPI 3.1 contract for `/healthz` and `/readyz`, stable status/error schemas, explicit versioning guidance, and clean pinned Redocly validation; remote review and closure remain pending.
+- Implemented and verified Issue #14 locally with pinned `openapi-typescript` 7.13.0, committed generated Foundation types, deterministic stale-output checking, and web compilation against generated DTOs; remote review and closure remain pending.
 
 ## In Progress
 
-The Foundation milestone remains open with 7 of 15 GitHub issues accepted and closed. Issues #8 through #13 are complete locally and pending remote review/closure. Issue #14 is authorized next under the Foundation Completion Sprint; Issue #15 remains queued in that authorized sequence.
+The Foundation milestone remains open with 7 of 15 GitHub issues accepted and closed. Issues #8 through #14 are complete locally and pending remote review/closure. Issue #15 is authorized as the final Foundation Completion Sprint issue.
 
 ## Foundation Issue Plan
 
@@ -63,15 +64,15 @@ The recommended order is represented by the issue numbers. Issues #3 and #4 may 
 | 11 | [Compose the API and web services with PostgreSQL](https://github.com/Faust217/LifeOS/issues/11) | #6, #9, and #10 | Implemented and verified locally; GitHub review and closure pending |
 | 12 | [Add CI migration-chain verification](https://github.com/Faust217/LifeOS/issues/12) | #3 and #8 | Implemented and verified locally; hosted run, GitHub review, and closure pending |
 | 13 | [Define the OpenAPI Foundation contract](https://github.com/Faust217/LifeOS/issues/13) | #4 and #9 | Implemented and verified locally; GitHub review and closure pending |
-| 14 | [Add the generated TypeScript client path](https://github.com/Faust217/LifeOS/issues/14) | #1, #10, and #13 | Dependencies satisfied; authorized next by the Foundation Completion Sprint |
-| 15 | [Document and verify the clean Foundation startup flow](https://github.com/Faust217/LifeOS/issues/15) | #5 through #14 | Requires all blocking ADRs and Foundation work to be complete |
+| 14 | [Add the generated TypeScript client path](https://github.com/Faust217/LifeOS/issues/14) | #1, #10, and #13 | Implemented and verified locally; GitHub review and closure pending |
+| 15 | [Document and verify the clean Foundation startup flow](https://github.com/Faust217/LifeOS/issues/15) | #5 through #14 | Dependencies satisfied; authorized as the final Foundation Completion Sprint issue |
 
 ## Next Work Requiring Explicit Authorization
 
 The Product Owner authorized the Foundation Completion Sprint through Issue #15 with strict issue boundaries and one local commit per issue. The next useful sequence is:
 
-1. Commit the completed Issue #13 OpenAPI contract without pushing or changing GitHub issue state.
-2. Implement Issue #14 only within reproducible generated TypeScript client tooling for the Foundation contract, then continue to Issue #15 if every prerequisite passes.
+1. Commit the completed Issue #14 generated TypeScript path without pushing or changing GitHub issue state.
+2. Implement and verify Issue #15 through the documented clean Foundation startup flow without entering V0.1 Finance Core.
 3. Obtain and anonymize a representative Bluecoins CSV sample only in a separately authorized V0.1 task, before implementing an importer.
 
 ## Known Risks
@@ -120,6 +121,7 @@ When work resumes:
 - Implemented and verified Issue #11 locally. Compose configuration and image builds passed; PostgreSQL, API, and web reached healthy state, the migration job exited successfully, direct and same-origin-proxied readiness reported clean version 1, and all host ports bound only to `127.0.0.1`. Normal shutdown removed containers/network and preserved the named volume.
 - Implemented and verified Issue #12 locally. The shared script passed from an empty disposable PostgreSQL 18 database, proving production apply/version/repeated-up and isolated fixture up/version/down behavior. Pinned `actionlint` validated the workflow; no hosted run exists because the sprint forbids pushing.
 - Implemented and verified Issue #13 locally. The canonical OpenAPI 3.1 contract describes only the implemented operational endpoints and validates cleanly with pinned Redocly CLI 2.56.0; licensing remains explicitly deferred under ADR-010.
+- Implemented and verified Issue #14 locally. Pinned `openapi-typescript` 7.13.0 generated committed Foundation API types; drift checking, OpenAPI lint, web type checking, tests, and the production build all passed.
 
 ### 2026-08-19
 

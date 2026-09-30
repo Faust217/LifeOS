@@ -1,6 +1,7 @@
-export interface HealthStatus {
-  status: string;
-}
+import type { components } from "./generated/schema";
+
+export type HealthStatus = components["schemas"]["HealthResponse"];
+export type ReadinessStatus = components["schemas"]["ReadinessResponse"];
 
 const defaultAPIBaseURL = "http://127.0.0.1:8080";
 

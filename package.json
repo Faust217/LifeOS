@@ -7,6 +7,8 @@
     "apps/web"
   ],
   "scripts": {
+    "openapi:check": "openapi-typescript api/openapi/openapi.yaml --output apps/web/src/api/generated/schema.ts --check",
+    "openapi:generate": "openapi-typescript api/openapi/openapi.yaml --output apps/web/src/api/generated/schema.ts",
     "openapi:lint": "redocly lint api/openapi/openapi.yaml",
     "web:dev": "npm run dev --workspace @lifeos/web",
     "web:build": "npm run build --workspace @lifeos/web",
@@ -14,6 +16,7 @@
     "web:test": "npm run test --workspace @lifeos/web"
   },
   "devDependencies": {
-    "@redocly/cli": "2.56.0"
+    "@redocly/cli": "2.56.0",
+    "openapi-typescript": "7.13.0"
   }
 }
