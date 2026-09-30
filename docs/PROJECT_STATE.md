@@ -10,7 +10,7 @@
 
 ## Current Status
 
-The Product Owner has reviewed and accepted the repository documentation baseline extracted from the English and Chinese v0.2 Master Project Blueprints. ADR-001 through ADR-012 record accepted architecture decisions. The private GitHub repository has an open [Foundation milestone](https://github.com/Faust217/LifeOS/milestone/1) containing 15 ordered, independently reviewable issues. Issues #1 through #7 are completed, accepted, and closed. Issues #8 and #9 are implemented and verified locally; their GitHub issues remain open for later review and closure. The Foundation API uses pinned `chi` v5 with thin operational handlers, PostgreSQL/migration-aware readiness, structured secret-safe logs, and no product endpoints. Issue #10 is the next authorized sprint issue. No V0.1 Finance Core implementation has started.
+The Product Owner has reviewed and accepted the repository documentation baseline extracted from the English and Chinese v0.2 Master Project Blueprints. ADR-001 through ADR-012 record accepted architecture decisions. The private GitHub repository has an open [Foundation milestone](https://github.com/Faust217/LifeOS/milestone/1) containing 15 ordered, independently reviewable issues. Issues #1 through #7 are completed, accepted, and closed. Issues #8 through #10 are implemented and verified locally; their GitHub issues remain open for later review and closure. The Foundation API exposes only operational health/readiness, and the accessible React/TypeScript/Vite shell contains no product screen or domain behavior. Issue #11 is the next authorized sprint issue. No V0.1 Finance Core implementation has started.
 
 ## Completed
 
@@ -35,10 +35,11 @@ The Product Owner has reviewed and accepted the repository documentation baselin
 - Completed, accepted, and closed Issue #7 after implementing and verifying typed Foundation configuration loading and validation.
 - Implemented and verified Issue #8 locally with `golang-migrate` v4.20.1, production and test-only migration boundaries, repeated-up safety, one-step rollback, version reporting, and documented recovery; remote review and closure remain pending.
 - Implemented and verified Issue #9 locally with `chi` v5.3.0, `pgx` v5.11.0, liveness/readiness endpoints, current migration visibility, request IDs, structured logs, graceful shutdown, and focused tests; remote review and closure remain pending.
+- Implemented and verified Issue #10 locally with pinned React 19.3.0, TypeScript 7.0.2, Vite 8.3.1, a minimal accessible shell, a replaceable API boundary, type checking, tests, and a production build; remote review and closure remain pending.
 
 ## In Progress
 
-The Foundation milestone remains open with 7 of 15 GitHub issues accepted and closed. Issues #8 and #9 are complete locally and pending remote review/closure. Issue #10 is authorized next under the Foundation Completion Sprint; Issues #11 through #15 remain queued in that authorized sequence.
+The Foundation milestone remains open with 7 of 15 GitHub issues accepted and closed. Issues #8 through #10 are complete locally and pending remote review/closure. Issue #11 is authorized next under the Foundation Completion Sprint; Issues #12 through #15 remain queued in that authorized sequence.
 
 ## Foundation Issue Plan
 
@@ -55,8 +56,8 @@ The recommended order is represented by the issue numbers. Issues #3 and #4 may 
 | 7 | [Implement Go configuration loading and validation](https://github.com/Faust217/LifeOS/issues/7) | #1, #2, and #5 | Completed, accepted, and closed |
 | 8 | [Add project-local database migration commands](https://github.com/Faust217/LifeOS/issues/8) | #2, #3, #6, and #7 | Implemented and verified locally; GitHub review and closure pending |
 | 9 | [Bootstrap the Go API with health and readiness endpoints](https://github.com/Faust217/LifeOS/issues/9) | #2, #4, #6, #7, and #8 | Implemented and verified locally; GitHub review and closure pending |
-| 10 | [Bootstrap the React/TypeScript/Vite web shell](https://github.com/Faust217/LifeOS/issues/10) | #1, #2, and #5 | Dependencies satisfied; authorized next by the Foundation Completion Sprint; no component-library decision |
-| 11 | [Compose the API and web services with PostgreSQL](https://github.com/Faust217/LifeOS/issues/11) | #6, #9, and #10 | Issue #6 gate satisfied; still requires Issues #9 and #10, the environment record, and explicit authorization |
+| 10 | [Bootstrap the React/TypeScript/Vite web shell](https://github.com/Faust217/LifeOS/issues/10) | #1, #2, and #5 | Implemented and verified locally; GitHub review and closure pending |
+| 11 | [Compose the API and web services with PostgreSQL](https://github.com/Faust217/LifeOS/issues/11) | #6, #9, and #10 | Dependencies satisfied; authorized next by the Foundation Completion Sprint |
 | 12 | [Add CI migration-chain verification](https://github.com/Faust217/LifeOS/issues/12) | #3 and #8 | Requires accepted ADR-011 |
 | 13 | [Define the OpenAPI Foundation contract](https://github.com/Faust217/LifeOS/issues/13) | #4 and #9 | Issue #4 gate satisfied; still requires Issue #9 |
 | 14 | [Add the generated TypeScript client path](https://github.com/Faust217/LifeOS/issues/14) | #1, #10, and #13 | Requires the environment record and project-local tooling |
@@ -66,8 +67,8 @@ The recommended order is represented by the issue numbers. Issues #3 and #4 may 
 
 The Product Owner authorized the Foundation Completion Sprint through Issue #15 with strict issue boundaries and one local commit per issue. The next useful sequence is:
 
-1. Commit the completed Issue #9 API bootstrap without pushing or changing GitHub issue state.
-2. Implement Issue #10 only within its minimal React/TypeScript/Vite shell scope, then continue sequentially through Issue #15 while every prerequisite passes.
+1. Commit the completed Issue #10 web shell without pushing or changing GitHub issue state.
+2. Implement Issue #11 only within its local three-service Compose scope, then continue sequentially through Issue #15 while every prerequisite passes.
 3. Obtain and anonymize a representative Bluecoins CSV sample only in a separately authorized V0.1 task, before implementing an importer.
 
 ## Known Risks
@@ -112,6 +113,7 @@ When work resumes:
 
 - Implemented and verified Issue #8 locally using pinned `golang-migrate` v4.20.1. A clean Compose PostgreSQL database reached production migration version 1 with no domain tables, repeated `up` reported no change, and the isolated smoke fixture proved clean apply/version/one-step rollback behavior. The GitHub issue remains open pending later review and closure.
 - Implemented and verified Issue #9 locally using pinned `chi` v5.3.0 and `pgx` v5.11.0. Focused and full Go tests passed; live `/healthz` and `/readyz` checks returned HTTP 200 with request IDs, healthy PostgreSQL, and clean migration version 1. No product endpoint or domain behavior was added.
+- Implemented and verified Issue #10 locally using pinned React 19.3.0, TypeScript 7.0.2, Vite 8.3.1, and Vitest 5.0.2. Type checking, focused tests, and the production build passed; the accessible shell contains no financial data, product screen, or component-library decision.
 
 ### 2026-08-19
 
