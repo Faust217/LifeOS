@@ -1,6 +1,6 @@
 # LifeOS Project State
 
-**Last updated:** 2026-08-19
+**Last updated:** 2026-09-30
 
 **Current milestone:** Foundation
 
@@ -10,7 +10,7 @@
 
 ## Current Status
 
-The Product Owner has reviewed and accepted the repository documentation baseline extracted from the English and Chinese v0.2 Master Project Blueprints. ADR-001 through ADR-012 record accepted architecture decisions. The private GitHub repository has an open [Foundation milestone](https://github.com/Faust217/LifeOS/milestone/1) containing 15 ordered, independently reviewable issues. Issues #1 through #7 are completed, accepted, and closed. The minimal buildable monorepo skeleton establishes the agreed module boundaries and repository areas, ADR-011 selects `golang-migrate` v4 for future project-local database migration tooling, and ADR-012 selects `chi` v5 for HTTP routing. Issue #7 provides the accepted typed and validated Foundation configuration package with isolated tests. `chi` has not been installed, and API implementation has not started. No later issue has started.
+The Product Owner has reviewed and accepted the repository documentation baseline extracted from the English and Chinese v0.2 Master Project Blueprints. ADR-001 through ADR-012 record accepted architecture decisions. The private GitHub repository has an open [Foundation milestone](https://github.com/Faust217/LifeOS/milestone/1) containing 15 ordered, independently reviewable issues. Issues #1 through #7 are completed, accepted, and closed. Issue #8 is implemented and verified locally with a pinned project-local migration command, an immutable no-domain production baseline, and an isolated smoke fixture; its GitHub issue remains open for later review and closure. Issue #9 is the next authorized sprint issue. No V0.1 Finance Core implementation has started.
 
 ## Completed
 
@@ -33,10 +33,11 @@ The Product Owner has reviewed and accepted the repository documentation baselin
 - Completed, accepted, and closed Issue #5 after defining the minimal Foundation configuration contract.
 - Completed, accepted, and closed Issue #6 after implementing and verifying the local PostgreSQL 18 Compose service.
 - Completed, accepted, and closed Issue #7 after implementing and verifying typed Foundation configuration loading and validation.
+- Implemented and verified Issue #8 locally with `golang-migrate` v4.20.1, production and test-only migration boundaries, repeated-up safety, one-step rollback, version reporting, and documented recovery; remote review and closure remain pending.
 
 ## In Progress
 
-The Foundation milestone remains open with 7 of 15 GitHub issues completed, accepted, and closed. Issue #8 and all other later issues remain not started and unauthorized.
+The Foundation milestone remains open with 7 of 15 GitHub issues accepted and closed. Issue #8 is complete locally and pending remote review/closure. Issue #9 is authorized next under the Foundation Completion Sprint; Issues #10 through #15 remain queued in that authorized sequence.
 
 ## Foundation Issue Plan
 
@@ -51,8 +52,8 @@ The recommended order is represented by the issue numbers. Issues #3 and #4 may 
 | 5 | [Define the project-local configuration contract](https://github.com/Faust217/LifeOS/issues/5) | #2 | Completed, accepted, and closed |
 | 6 | [Add the PostgreSQL Docker Compose service](https://github.com/Faust217/LifeOS/issues/6) | #1 and #5 | Completed, accepted, and closed |
 | 7 | [Implement Go configuration loading and validation](https://github.com/Faust217/LifeOS/issues/7) | #1, #2, and #5 | Completed, accepted, and closed |
-| 8 | [Add project-local database migration commands](https://github.com/Faust217/LifeOS/issues/8) | #2, #3, #6, and #7 | Dependencies satisfied; not started and requires separate explicit authorization |
-| 9 | [Bootstrap the Go API with health and readiness endpoints](https://github.com/Faust217/LifeOS/issues/9) | #2, #4, #6, #7, and #8 | Issue #7 gate satisfied; remains blocked by Issue #8 and requires all other dependencies and explicit authorization |
+| 8 | [Add project-local database migration commands](https://github.com/Faust217/LifeOS/issues/8) | #2, #3, #6, and #7 | Implemented and verified locally; GitHub review and closure pending |
+| 9 | [Bootstrap the Go API with health and readiness endpoints](https://github.com/Faust217/LifeOS/issues/9) | #2, #4, #6, #7, and #8 | Dependencies satisfied; authorized next by the Foundation Completion Sprint |
 | 10 | [Bootstrap the React/TypeScript/Vite web shell](https://github.com/Faust217/LifeOS/issues/10) | #1, #2, and #5 | Issue #5 gate satisfied; requires the environment record and explicit authorization; no component-library decision |
 | 11 | [Compose the API and web services with PostgreSQL](https://github.com/Faust217/LifeOS/issues/11) | #6, #9, and #10 | Issue #6 gate satisfied; still requires Issues #9 and #10, the environment record, and explicit authorization |
 | 12 | [Add CI migration-chain verification](https://github.com/Faust217/LifeOS/issues/12) | #3 and #8 | Requires accepted ADR-011 |
@@ -62,12 +63,11 @@ The recommended order is represented by the issue numbers. Issues #3 and #4 may 
 
 ## Next Work Requiring Explicit Authorization
 
-No implementation should begin without a new explicit task. The next useful sequence is:
+The Product Owner authorized the Foundation Completion Sprint through Issue #15 with strict issue boundaries and one local commit per issue. The next useful sequence is:
 
-1. Do not begin Issue #8 without a separate explicit task; its dependencies are satisfied, but it remains not started and unauthorized.
-2. Keep Issue #9 blocked by Issue #8 and all its other dependencies.
-3. Do not begin Issue #9 or any other later Foundation issue without a separate explicit task.
-4. Obtain and anonymize a representative Bluecoins CSV sample only in a separately authorized task, before implementing an importer.
+1. Commit the completed Issue #8 migration workflow without pushing or changing GitHub issue state.
+2. Implement Issue #9 only within its health/readiness API scope, then continue sequentially through Issue #15 while every prerequisite passes.
+3. Obtain and anonymize a representative Bluecoins CSV sample only in a separately authorized V0.1 task, before implementing an importer.
 
 ## Known Risks
 
@@ -106,6 +106,10 @@ When work resumes:
 6. Inspect the existing local environment before proposing setup or dependency changes.
 
 ## State History
+
+### 2026-09-30
+
+- Implemented and verified Issue #8 locally using pinned `golang-migrate` v4.20.1. A clean Compose PostgreSQL database reached production migration version 1 with no domain tables, repeated `up` reported no change, and the isolated smoke fixture proved clean apply/version/one-step rollback behavior. The GitHub issue remains open pending later review and closure.
 
 ### 2026-08-19
 
