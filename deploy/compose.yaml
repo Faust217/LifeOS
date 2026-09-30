@@ -17,6 +17,81 @@ services:
       timeout: 5s
       retries: 10
       start_period: 10s
+    networks:
+      - foundation
+
+  migrate:
+    build:
+      context: ..
+      dockerfile: deploy/api.Dockerfile
+      target: migrate
+    environment:
+      LIFEOS_DB_HOST: postgres
+      LIFEOS_DB_PORT: 5432
+      LIFEOS_DB_NAME: ${LIFEOS_DB_NAME:-lifeos}
+      LIFEOS_DB_USER: ${LIFEOS_DB_USER:-lifeos}
+      LIFEOS_DB_PASSWORD: ${LIFEOS_DB_PASSWORD:?LIFEOS_DB_PASSWORD is required}
+    command: ["up"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - foundation
+    restart: "no"
+
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/api.Dockerfile
+      target: api
+    environment:
+      LIFEOS_ENV: ${LIFEOS_ENV:-development}
+      LIFEOS_API_BIND: 0.0.0.0
+      LIFEOS_API_PORT: 8080
+      LIFEOS_DB_HOST: postgres
+      LIFEOS_DB_PORT: 5432
+      LIFEOS_DB_NAME: ${LIFEOS_DB_NAME:-lifeos}
+      LIFEOS_DB_USER: ${LIFEOS_DB_USER:-lifeos}
+      LIFEOS_DB_PASSWORD: ${LIFEOS_DB_PASSWORD:?LIFEOS_DB_PASSWORD is required}
+      LIFEOS_LOG_LEVEL: ${LIFEOS_LOG_LEVEL:-info}
+      VITE_API_BASE_URL: http://127.0.0.1:${LIFEOS_WEB_PORT:-4173}
+    ports:
+      - "127.0.0.1:${LIFEOS_API_PORT:-8080}:8080"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8080/readyz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    networks:
+      - foundation
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/web.Dockerfile
+      args:
+        VITE_API_BASE_URL: http://127.0.0.1:${LIFEOS_WEB_PORT:-4173}
+    ports:
+      - "127.0.0.1:${LIFEOS_WEB_PORT:-4173}:4173"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:4173/web-healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    networks:
+      - foundation
 
 volumes:
   postgres_data:
+
+networks:
+  foundation:
+    driver: bridge

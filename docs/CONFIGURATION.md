@@ -42,6 +42,7 @@ A higher-precedence value overrides a lower-precedence value. No CLI configurati
 | `LIFEOS_DB_PASSWORD` | PostgreSQL password | No default; required | Sensitive and non-empty; `CHANGE_ME` is always rejected as an unsafe placeholder |
 | `LIFEOS_LOG_LEVEL` | Application log level | `info` | One of `debug`, `info`, `warn`, or `error` |
 | `VITE_API_BASE_URL` | API location used by the web client | `http://127.0.0.1:8080` | Valid absolute `http` or `https` URL |
+| `LIFEOS_WEB_PORT` | Compose-published web shell port | `4173` | Integer from `1` through `65535`; consumed by local Compose, not the Go server |
 
 The PostgreSQL fields remain separate. LifeOS does not define a duplicate `DATABASE_URL` setting at this stage.
 
@@ -61,6 +62,8 @@ Configuration errors must identify the affected key and the problem without echo
 `LIFEOS_DB_PASSWORD` is sensitive. Errors and logs must never expose database passwords, secrets, tokens, or full sensitive connection strings.
 
 Every `VITE_*` value is compiled or delivered to browser code and is therefore browser-visible. `VITE_API_BASE_URL` must never contain credentials, tokens, or any other secret.
+
+`LIFEOS_WEB_PORT` is a Compose-only deployment value introduced when the web container became a real Foundation boundary. It does not belong to the Go runtime `Config` object.
 
 This contract selects only the allowed log-level values. It does not select or implement a logging library.
 
