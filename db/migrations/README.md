@@ -37,3 +37,15 @@ If a migration fails or `version` reports `dirty=true`:
 6. Re-run `up`, then verify version, readiness, and application checks.
 
 Do not automate `force`, unrestricted rollback, `drop`, or manual schema surgery. Database credentials are runtime secrets and must not be printed, committed, or sent to clients or AI systems.
+
+## Migration-Chain Verification
+
+After confirming a disposable PostgreSQL database is available and setting the normal `LIFEOS_DB_*` process values, run the same verification used by CI:
+
+```text
+pwsh -File scripts/verify-migrations.ps1
+```
+
+The script rejects missing production migrations, invalid or duplicate six-digit versions, and missing paired down files. It applies the complete production chain, checks the latest clean version, proves repeated `up` is a no-op, and exercises the isolated smoke fixture through up/version/down.
+
+GitHub Actions runs this script against a clean pinned PostgreSQL 18 service. Its credential is an isolated CI-only value and is never printed by the script. The workflow does not access a development or production database.

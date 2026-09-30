@@ -1,0 +1,68 @@
+name: Migration chain
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/migrations.yml"
+      - "cmd/lifeos-migrate/**"
+      - "db/migrations/**"
+      - "internal/platform/config/**"
+      - "internal/platform/migrations/**"
+      - "scripts/verify-migrations.ps1"
+      - "go.mod"
+      - "go.sum"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/migrations.yml"
+      - "cmd/lifeos-migrate/**"
+      - "db/migrations/**"
+      - "internal/platform/config/**"
+      - "internal/platform/migrations/**"
+      - "scripts/verify-migrations.ps1"
+      - "go.mod"
+      - "go.sum"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  migrations:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: lifeos_ci
+          POSTGRES_USER: lifeos_ci
+          POSTGRES_PASSWORD: ci-only-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U lifeos_ci -d lifeos_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      LIFEOS_ENV: test
+      LIFEOS_DB_HOST: 127.0.0.1
+      LIFEOS_DB_PORT: "5432"
+      LIFEOS_DB_NAME: lifeos_ci
+      LIFEOS_DB_USER: lifeos_ci
+      LIFEOS_DB_PASSWORD: ci-only-password
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Verify production and smoke migration chains
+        shell: pwsh
+        run: ./scripts/verify-migrations.ps1
