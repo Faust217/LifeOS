@@ -6,9 +6,9 @@ LifeOS is a self-hostable, AI-optional Personal Life Data & Decision System. It 
 
 ## Repository Status
 
-This repository is currently in the **Foundation** milestone. It contains the accepted documentation/governance baseline and a minimal buildable monorepo skeleton with explicit Go module boundaries and an empty private web workspace. No product or domain behavior has been implemented.
+The **Foundation** implementation is complete and verified locally. The repository now contains the accepted documentation/governance baseline, project-local configuration and migrations, operational Go API endpoints, a minimal React/Vite shell, an OpenAPI-to-TypeScript contract path, and a reproducible local Compose stack. No Finance Core product or domain behavior has been implemented.
 
-See [Project State](docs/PROJECT_STATE.md) for the current handoff point.
+See [Foundation Startup](docs/FOUNDATION_STARTUP.md) for the clean local workflow and [Project State](docs/PROJECT_STATE.md) for the current review and authorization boundary.
 
 ## Start Here
 
@@ -19,7 +19,8 @@ See [Project State](docs/PROJECT_STATE.md) for the current handoff point.
 5. [Roadmap](docs/ROADMAP.md) - the capability sequence from Foundation to V1.0.
 6. [Project State](docs/PROJECT_STATE.md) - completed work, next steps, risks, and open decisions.
 7. [ADR Index](docs/adr/README.md) - architecture decision policy and the accepted initial ADR set.
-8. [Learning Area](learning/README.md) - non-normative implementation and engineering notes.
+8. [Foundation Startup](docs/FOUNDATION_STARTUP.md) - clean configuration, verification, startup, and shutdown workflow.
+9. [Learning Area](learning/README.md) - non-normative implementation and engineering notes.
 
 Agents must also read [AGENTS.md](AGENTS.md) before making changes.
 
@@ -45,4 +46,4 @@ The Word files remain the original baseline. Maintained project state and future
 
 ## Current Boundary
 
-The skeleton intentionally has no dependency-install or application-start workflow yet. The API command is an empty build target, and the web workspace contains metadata only; setup and runtime behavior belong to later, separately authorized Foundation issues.
+Foundation provides operational health/readiness behavior and an intentionally empty web shell, not a product slice. Owner, Account, Category, FinancialEvent, Bluecoins import, Finance CRUD, authentication, AI, and MCP behavior remain unimplemented and require separately authorized milestone work.

@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-09-30
 
-**Current milestone:** Foundation
+**Current milestone:** Foundation implementation complete locally; Product Owner and GitHub review pending
 
 **Product milestone:** V0.1 Finance Core is scoped but not started
 
@@ -10,7 +10,7 @@
 
 ## Current Status
 
-The Product Owner has reviewed and accepted the repository documentation baseline extracted from the English and Chinese v0.2 Master Project Blueprints. ADR-001 through ADR-012 record accepted architecture decisions. The private GitHub repository has an open [Foundation milestone](https://github.com/Faust217/LifeOS/milestone/1) containing 15 ordered, independently reviewable issues. Issues #1 through #7 are completed, accepted, and closed. Issues #8 through #14 are implemented and verified locally; their GitHub issues remain open for later review and closure. The web API boundary now compiles against deterministic TypeScript types generated from the canonical Foundation OpenAPI contract. Issue #15 is the final authorized sprint issue. No V0.1 Finance Core implementation has started.
+The Product Owner has reviewed and accepted the repository documentation baseline extracted from the English and Chinese v0.2 Master Project Blueprints. ADR-001 through ADR-012 record accepted architecture decisions. The private GitHub repository has an open [Foundation milestone](https://github.com/Faust217/LifeOS/milestone/1) containing 15 ordered, independently reviewable issues. Issues #1 through #7 are completed, accepted, and closed. Issues #8 through #15 are implemented and verified locally in separate commits; their GitHub issues remain open for Product Owner review and later closure. The complete documented chain now covers configuration, PostgreSQL, migrations, operational API health/readiness, the OpenAPI-generated TypeScript boundary, the minimal web shell, and Compose startup. No V0.1 Finance Core implementation has started.
 
 ## Completed
 
@@ -29,7 +29,7 @@ The Product Owner has reviewed and accepted the repository documentation baselin
 - Completed, accepted, and closed Issue #1 after resolving its approved Go and Docker verification blockers without starting product implementation.
 - Completed, accepted, and closed Issue #2 after creating and verifying the dependency-free monorepo skeleton and accepted module boundaries.
 - Completed, accepted, and closed Issue #3 after selecting `golang-migrate` v4 in ADR-011 with project-local pinning, ordered forward migrations, transaction guidance, and explicit dirty-state recovery.
-- Completed, accepted, and closed Issue #4 after selecting `chi` v5 in ADR-012; `chi` remains uninstalled and API implementation has not started.
+- Completed, accepted, and closed Issue #4 after selecting `chi` v5 in ADR-012; at Issue #4 closure, `chi` had not yet been installed and API implementation had not started.
 - Completed, accepted, and closed Issue #5 after defining the minimal Foundation configuration contract.
 - Completed, accepted, and closed Issue #6 after implementing and verifying the local PostgreSQL 18 Compose service.
 - Completed, accepted, and closed Issue #7 after implementing and verifying typed Foundation configuration loading and validation.
@@ -40,10 +40,11 @@ The Product Owner has reviewed and accepted the repository documentation baselin
 - Implemented and verified Issue #12 locally with a focused GitHub Actions migration workflow, a shared chain verifier, clean PostgreSQL 18 evidence, and `actionlint`; a GitHub-hosted run remains pending until the later authorized push.
 - Implemented and verified Issue #13 locally with a canonical OpenAPI 3.1 contract for `/healthz` and `/readyz`, stable status/error schemas, explicit versioning guidance, and clean pinned Redocly validation; remote review and closure remain pending.
 - Implemented and verified Issue #14 locally with pinned `openapi-typescript` 7.13.0, committed generated Foundation types, deterministic stale-output checking, and web compilation against generated DTOs; remote review and closure remain pending.
+- Implemented and verified Issue #15 locally with a clean project-local startup guide and an isolated end-to-end Foundation check covering dependency bootstrap, tests, contracts, generated types, Compose, migrations, API readiness, and the web shell; remote review and closure remain pending.
 
 ## In Progress
 
-The Foundation milestone remains open with 7 of 15 GitHub issues accepted and closed. Issues #8 through #14 are complete locally and pending remote review/closure. Issue #15 is authorized as the final Foundation Completion Sprint issue.
+All 15 Foundation issues are implemented locally. Issues #1 through #7 are accepted and closed; Issues #8 through #15 await Product Owner review, an authorized push, and GitHub closure. The GitHub milestone therefore remains administratively open even though its technical implementation and local verification are complete.
 
 ## Foundation Issue Plan
 
@@ -65,15 +66,15 @@ The recommended order is represented by the issue numbers. Issues #3 and #4 may 
 | 12 | [Add CI migration-chain verification](https://github.com/Faust217/LifeOS/issues/12) | #3 and #8 | Implemented and verified locally; hosted run, GitHub review, and closure pending |
 | 13 | [Define the OpenAPI Foundation contract](https://github.com/Faust217/LifeOS/issues/13) | #4 and #9 | Implemented and verified locally; GitHub review and closure pending |
 | 14 | [Add the generated TypeScript client path](https://github.com/Faust217/LifeOS/issues/14) | #1, #10, and #13 | Implemented and verified locally; GitHub review and closure pending |
-| 15 | [Document and verify the clean Foundation startup flow](https://github.com/Faust217/LifeOS/issues/15) | #5 through #14 | Dependencies satisfied; authorized as the final Foundation Completion Sprint issue |
+| 15 | [Document and verify the clean Foundation startup flow](https://github.com/Faust217/LifeOS/issues/15) | #5 through #14 | Implemented and verified locally; GitHub review and closure pending |
 
 ## Next Work Requiring Explicit Authorization
 
 The Product Owner authorized the Foundation Completion Sprint through Issue #15 with strict issue boundaries and one local commit per issue. The next useful sequence is:
 
-1. Commit the completed Issue #14 generated TypeScript path without pushing or changing GitHub issue state.
-2. Implement and verify Issue #15 through the documented clean Foundation startup flow without entering V0.1 Finance Core.
-3. Obtain and anonymize a representative Bluecoins CSV sample only in a separately authorized V0.1 task, before implementing an importer.
+1. Review the eight local Issue #8 through #15 commits and the clean-start evidence.
+2. Separately authorize any push, GitHub issue closure, and Foundation milestone closure.
+3. Authorize V0.1 Finance Core separately before obtaining and anonymizing a representative Bluecoins CSV sample or implementing any product behavior.
 
 ## Known Risks
 
@@ -87,6 +88,7 @@ The Product Owner authorized the Foundation Completion Sprint through Issue #15 
 | Self-host security mistakes | Local-only default; require authentication, TLS, and backup before Internet exposure |
 | Project abandonment | Make V0.1 replace the real Bluecoins workflow and keep every milestone independently useful |
 | Agent drift | Required reading, module rules, ADR gate, tests, and completion reporting in `AGENTS.md` |
+| Hosted verification gap | Run the pinned migration workflow on GitHub after an authorized push; only local workflow validation exists today |
 
 ## Pending Decisions
 
@@ -110,6 +112,7 @@ When work resumes:
 4. Read the relevant ADRs.
 5. Confirm the task's acceptance criteria and non-goals.
 6. Inspect the existing local environment before proposing setup or dependency changes.
+7. Use `docs/FOUNDATION_STARTUP.md` for the verified local Foundation workflow.
 
 ## State History
 
@@ -122,6 +125,7 @@ When work resumes:
 - Implemented and verified Issue #12 locally. The shared script passed from an empty disposable PostgreSQL 18 database, proving production apply/version/repeated-up and isolated fixture up/version/down behavior. Pinned `actionlint` validated the workflow; no hosted run exists because the sprint forbids pushing.
 - Implemented and verified Issue #13 locally. The canonical OpenAPI 3.1 contract describes only the implemented operational endpoints and validates cleanly with pinned Redocly CLI 2.56.0; licensing remains explicitly deferred under ADR-010.
 - Implemented and verified Issue #14 locally. Pinned `openapi-typescript` 7.13.0 generated committed Foundation API types; drift checking, OpenAPI lint, web type checking, tests, and the production build all passed.
+- Implemented and verified Issue #15 locally from an isolated committed snapshot. Project-local dependency bootstrap, full Go checks, OpenAPI validation and deterministic generation, web checks, Compose startup, migration status, direct and proxied health/readiness, and isolated cleanup passed. The documented flow requires no Finance/domain behavior or private data. The hosted GitHub Actions run remains pending because no push was authorized.
 
 ### 2026-08-19
 
