@@ -10,6 +10,7 @@ The `learning/` directory records the owner's engineering learning while LifeOS 
 - a recommended order for reading the changed files;
 - commands or experiments that are safe and useful to repeat;
 - unresolved questions and topics to revisit.
+- for every implementation issue, a Function-level Data Flow using the actual code path required by `AGENTS.md`.
 
 ## What Does Not Belong Here
 
@@ -59,9 +60,15 @@ Related ADRs:
 
 ## Recommended Reading Order
 
+## Function-level Data Flow
+
+User Input → Frontend function → API request → Backend handler → Service → Repository → Database → Response → UI update.
+
+For each step: exact file path and function name; input and output; main processing; next function; error handling; relevant tests. Label not-yet-implemented names **proposed** and explain **N/A** steps. Replace proposed names with actual names before issue closure.
+
 ## Checks Performed
 
 ## Questions and Follow-Up
 ```
 
-Only create an entry when there is something concrete to learn from. The journal is not a mandatory paperwork step for trivial edits.
+Every implementation issue needs a learning entry and the same concise flow in its completion report. Documentation-only or trivial non-implementation edits need an entry only when there is something concrete to learn from.

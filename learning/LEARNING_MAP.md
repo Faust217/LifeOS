@@ -1,6 +1,6 @@
 # LifeOS Learning Map
 
-**Last updated:** 2026-08-18
+**Last updated:** 2026-10-09
 
 **Purpose:** Track engineering topics exposed by real LifeOS work without inventing proficiency claims.
 
@@ -24,22 +24,22 @@ Suggested status values:
 | Go domain/application services | Business invariants and deterministic calculations | Not assessed | First Account and FinancialEvent use cases |
 | PostgreSQL relational modeling | Owner scoping, constraints, relations, indexes | Not assessed | First schema design and review |
 | SQL with `pgx`/`sqlc` | Explicit queries and typed access | Not assessed | First account and financial-event queries |
-| Database migrations | Forward migrations and upgrade tests | Exploring | ADR-011 selects `golang-migrate` v4; no migration has run yet. Next: implement the pinned project-local workflow and verify clean and upgrade paths |
+| Database migrations | Forward migrations and upgrade tests | Applied | Foundation #8/#12 used pinned `golang-migrate` v4 and local chain checks; next: first user-data migration and upgrade test |
 | Money and currency | Minor units, sign conventions, transfers, credit cards, FX boundaries | Exploring | Domain baseline documented; verify with unit and integration tests |
-| REST and OpenAPI | Stable DTOs, validation, errors, generated-client path | Exploring | ADR-012 selects `chi` v5; no API or OpenAPI implementation yet. Next: define the contract and test thin handlers using standard `net/http` concepts |
-| React/TypeScript/PWA | Replaceable responsive client | Not assessed | First production UI slice |
-| Import pipelines | Adapters, canonical input, dry-run, mapping, idempotency, error reports | Not assessed | Anonymized Bluecoins field analysis and fixture |
+| REST and OpenAPI | Stable DTOs, validation, errors, generated-client path | Applied | Foundation operational endpoints and generated types exist; next: first protected product contract |
+| React/TypeScript/PWA | Replaceable responsive client | Exploring | Foundation shell exists; next: mobile-first Alpha workflows |
+| Import pipelines | Adapters, canonical input, dry-run, mapping, idempotency, error reports | Not assessed | Bluecoins import is V0.3 or later; preserve ADR-009 safety rules |
 | Testing strategy | Unit, PostgreSQL integration, contract, import fixture, and E2E tests | Not assessed | First clean migration and FinanceService integration test |
-| Backup and restore | PostgreSQL dump, restore, and upgrade safety | Not assessed | Restore rehearsal before first real import |
-| Security and privacy | Owner isolation, secrets, authentication, safe logging | Exploring | Architecture baseline documented; test owner isolation in first API slice |
-| AI Tool Gateway | Provider abstraction, schemas, permission tiers, confirmation, audit | Not assessed | V0.3; no runtime implementation in V0.1 |
-| MCP integration | External adapter over shared tools | Not assessed | V0.6; preserve boundary only |
-| Docker and self-host operations | Repeatable local and later NAS/VPS deployment | Not assessed | FND-002, then V0.7 hardening |
+| Backup and restore | PostgreSQL dump, restore, and upgrade safety | Not assessed | Restore rehearsal before invited Alpha users rely on data |
+| Security and privacy | Invitation gate, Google identity, sessions, owner isolation, safe logging | Exploring | Issue #16 direction and ADR-014 accepted; cross-user tests needed before Alpha |
+| AI Tool Gateway | Provider abstraction, schemas, permission tiers, confirmation, audit | Not assessed | Deferred beyond initial Alpha; preserve optional boundary |
+| MCP integration | External adapter over shared tools | Not assessed | Deferred; preserve boundary only |
+| Docker and self-host operations | Repeatable local and later hosted testing | Applied | Foundation Compose stack verified locally; private Alpha deployment needs separate review |
 | ADR and change management | Record context, alternatives, consequences, and exit paths | Applied | ADR-001 through ADR-012 recorded and accepted; ADR-011 and ADR-012 document Foundation alternatives, trade-offs, and exit paths |
 
 ## Recommended Reading Path
 
-For the current foundation:
+For the current documentation rebaseline:
 
 1. `README.md`
 2. `docs/VISION.md`
@@ -52,25 +52,25 @@ For the current foundation:
 9. `docs/PROJECT_STATE.md`
 10. `AGENTS.md`
 
-For a future implementation task, add the relevant ADR, service, migration, query, API, test, and client files to that task's journal entry in the order that best explains the behavior.
+For a future implementation task, add the relevant ADR, service, migration, query, API, test, and client files to that task's journal entry in the order that best explains the behavior. Include the Function-level Data Flow required by `AGENTS.md`.
 
 ## Near-Term Learning Sequence
 
-1. Use the accepted ADR set as the decision gate for Foundation and V0.1 work.
-2. Inspect the existing Go, Docker, Git, and database environment without modifying system configuration.
-3. Learn the shape and edge cases of an anonymized Bluecoins export.
-4. Establish one migration and prove both clean creation and upgrade behavior.
-5. Implement Account and money primitives with deterministic tests.
-6. Implement FinancialEvent movements and category allocations against real PostgreSQL.
-7. Add OpenAPI contracts and a thin vertical UI slice.
-8. Prove import dry-run, reconciliation, export, backup, and restore before relying on real data.
+1. Read accepted ADR-013 and ADR-014 before separately authorized dependent implementation.
+2. Inspect the current local environment without modifying system configuration.
+3. Implement invitation-gated identity and user isolation with negative security tests.
+4. Add user-data migrations and test clean creation and upgrades.
+5. Implement Money services and transfer invariants with deterministic tests.
+6. Add protected OpenAPI contracts and mobile-first Today/Money/Plans/Me slices.
+7. Verify user export and backup/restore before Alpha users rely on real data.
+8. Design offline synchronization through an accepted ADR before V0.2 implementation; study Bluecoins import for V0.3 or later.
 
 ## Open Questions to Resolve Through Work
 
-- Which exact pinned `golang-migrate` v4 release and project-local wrapper should the first migration workflow use?
-- What route groups and middleware order should the first `chi` API slice use while keeping handlers thin?
+- Which invitation provisioning, session storage, and owner-admin bootstrapping details should implement accepted ADR-014?
+- What protected route groups and middleware order should the first product `chi` API slice use?
 - What fields and edge cases actually appear in the owner's Bluecoins export?
 - Which account and category reconciliation reports best prove import correctness?
-- What authentication boundary is sufficient for local-only use before remote access is introduced?
+- Which offline failure and conflict cases need the V0.2 sync ADR after the transaction API exists?
 
 Answers that change architecture or domain rules must be recorded in ADRs, not only here.

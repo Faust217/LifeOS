@@ -1,16 +1,18 @@
 # LifeOS Project State
 
-**Last updated:** 2026-09-30
+**Last updated:** 2026-10-09
 
-**Current milestone:** Foundation implementation complete locally; Product Owner and GitHub review pending
+**Current milestone:** Issue #17 documentation/ADR rebaseline approved; Foundation implementation retained
 
-**Product milestone:** V0.1 Finance Core is scoped but not started
+**Product milestone:** Invite-only online V0.1 Alpha approved in Issue #16; implementation not started
 
-**Blueprint:** Master Project Blueprint v0.2
+**Blueprint:** Master Project Blueprint v0.2 is the historical baseline; Issue #16 is the approved current product direction
 
 ## Current Status
 
-The Product Owner has reviewed and accepted the repository documentation baseline extracted from the English and Chinese v0.2 Master Project Blueprints. ADR-001 through ADR-012 record accepted architecture decisions. The private GitHub repository has an open [Foundation milestone](https://github.com/Faust217/LifeOS/milestone/1) containing 15 ordered, independently reviewable issues. Issues #1 through #7 are completed, accepted, and closed. Issues #8 through #15 are implemented and verified locally in separate commits; their GitHub issues remain open for Product Owner review and later closure. The complete documented chain now covers configuration, PostgreSQL, migrations, operational API health/readiness, the OpenAPI-generated TypeScript boundary, the minimal web shell, and Compose startup. No V0.1 Finance Core implementation has started.
+The Product Owner approved the [Issue #16 Product & Architecture Rebaseline](https://github.com/Faust217/LifeOS/issues/16): LifeOS becomes a Life-first, mobile-first platform whose V0.1 is an invite-only, online Alpha for the owner and a few testers. The Product Owner also approved ADR-013 and ADR-014 in [Issue #17](https://github.com/Faust217/LifeOS/issues/17). ADR-013 supersedes ADR-008's single-user V0.x scope and ADR-009's Bluecoins-in-V0.1 timing; owner scoping and safe import/export remain in force. Historical ADR-008/009 files remain untouched. No product implementation has started.
+
+Foundation #1–#15 remains the technical baseline. Issues #1–#7 were accepted and closed. Issues #8–#15 were implemented and verified locally in separate commits; their GitHub review and closure remain pending. The chain covers configuration, PostgreSQL, migrations, operational API health/readiness, OpenAPI-generated TypeScript types, the minimal web shell, and Compose startup. It contains no user, identity, Money, or Goal product behavior.
 
 ## Completed
 
@@ -20,7 +22,7 @@ The Product Owner has reviewed and accepted the repository documentation baselin
 - Extracted the product vision into `docs/VISION.md`.
 - Extracted the architecture baseline into `docs/ARCHITECTURE.md`.
 - Defined the conceptual domain vocabulary and invariants in `docs/DOMAIN_MODEL.md`.
-- Defined the Finance Core milestone in `docs/V0.1_SCOPE.md`.
+- Originally defined the Bluecoins-first Finance Core milestone; Issue #16 intentionally changes its V0.1 timing and scope.
 - Recorded the Foundation-to-V1.0 capability sequence in `docs/ROADMAP.md`.
 - Established ADR policy, naming, template, and the initial decision-record index in `docs/adr/README.md`.
 - Recorded and accepted ADR-001 through ADR-010 using the repository's standard filenames.
@@ -44,7 +46,9 @@ The Product Owner has reviewed and accepted the repository documentation baselin
 
 ## In Progress
 
-All 15 Foundation issues are implemented locally. Issues #1 through #7 are accepted and closed; Issues #8 through #15 await Product Owner review, an authorized push, and GitHub closure. The GitHub milestone therefore remains administratively open even though its technical implementation and local verification are complete.
+Issue #17 documentation and ADR-013/014 are approved. The Product Owner authorized committing, pushing, and closing Issue #17 after verification. Issue #16 remains the product decision record; no Issue #18 implementation has started.
+
+All 15 Foundation issues are implemented locally. Issues #1–#7 are accepted and closed; Issues #8–#15 await Product Owner review and GitHub closure. The Foundation milestone remains administratively open even though its technical implementation and local verification are complete.
 
 ## Foundation Issue Plan
 
@@ -70,23 +74,23 @@ The recommended order is represented by the issue numbers. Issues #3 and #4 may 
 
 ## Next Work Requiring Explicit Authorization
 
-The Product Owner authorized the Foundation Completion Sprint through Issue #15 with strict issue boundaries and one local commit per issue. The next useful sequence is:
-
-1. Review the eight local Issue #8 through #15 commits and the clean-start evidence.
-2. Separately authorize any push, GitHub issue closure, and Foundation milestone closure.
-3. Authorize V0.1 Finance Core separately before obtaining and anonymizing a representative Bluecoins CSV sample or implementing any product behavior.
+1. Separately authorize Issue #18 or another scoped implementation issue before writing product code, schema, APIs, or deployments. Foundation #8–#15 GitHub review/closure remains a separate administrative decision.
+2. Scope the first implementation issues in dependency order: users/invitations, Google sessions, owner isolation, Money domain and API, mobile navigation/workflows, checklist Goals, Today/Me/export, and Alpha restore/security/cost verification.
+3. Before V0.2 offline transaction synchronization, accept a focused ADR for reliability, idempotency, recovery, conflicts, and account/device boundaries. Bluecoins import remains V0.3 or later under ADR-009's safety rules.
 
 ## Known Risks
 
 | Risk | Current mitigation |
 | --- | --- |
-| Scope creep | Keep V0.1 limited to the published scope; put new ideas in a backlog |
+| Scope creep | Keep V0.1 to the approved invite-only online Alpha; defer offline sync, Bluecoins, and other modules |
 | Over-engineering | Preserve boundaries but implement one database, provider path, and deployment path only when needed |
-| Financial correctness | Integer money, deterministic calculations, service/integration tests, and import dry-runs |
+| Financial correctness | Integer money, correct transfer semantics, deterministic calculations, and service/integration tests |
 | Database redesign and data loss | Stable meanings, forward migrations, upgrade tests, export, and restore-tested backups |
 | AI vendor churn or unsafe writes | Provider abstraction, Tool Gateway, explicit capability tiers, confirmation, and audit |
-| Self-host security mistakes | Local-only default; require authentication, TLS, and backup before Internet exposure |
-| Project abandonment | Make V0.1 replace the real Bluecoins workflow and keep every milestone independently useful |
+| Identity or cross-user data exposure | Require both Google identity and invitation, revocable sessions, owner-scoped services/repositories, and negative isolation tests |
+| Internet exposure and recovery | Review TLS, secrets, database transport, operational endpoints, and restore-tested backups before Alpha testing |
+| Offline data loss or duplication | Keep V0.1 online; require accepted sync ADR and idempotency/recovery tests before V0.2 |
+| Hosting cost drift | Treat USD $10 as a test target with spending visibility and shutdown controls, not a production guarantee |
 | Agent drift | Required reading, module rules, ADR gate, tests, and completion reporting in `AGENTS.md` |
 | Hosted verification gap | Run the pinned migration workflow on GitHub after an authorized push; only local workflow validation exists today |
 
@@ -97,10 +101,12 @@ These decisions are intentionally deferred to their real decision points:
 | Decision | Latest decision point | Baseline direction |
 | --- | --- | --- |
 | Web UI component library | Before the first production UI screen | Choose an actively maintained, accessible library |
-| Authentication implementation | Before network/Internet exposure | Start local-owner-first; require secure login remotely |
-| First Ollama model | V0.3 | Evaluate against local hardware and tool-calling needs |
+| Invitation bootstrap/revocation and session details | First identity implementation issue | Follow accepted ADR-014; document and test the concrete flow |
+| Offline sync architecture | Before V0.2 implementation | Accept a focused ADR; do not prebuild a protocol in V0.1 |
+| Cloud test provider and spending controls | Before paid or Internet-facing testing | Review concrete cost, TLS, secrets, backup, and shutdown plan |
+| First Ollama model | Only if a later AI milestone is authorized | Evaluate against actual hardware and tool needs |
 | Open-source license | Before the first public release | Decide through a separate ADR |
-| Native Flutter client | After real Web/PWA use | Begin only if a native requirement is proven |
+| Native client | After real Web/PWA use | Capacitor is a candidate, not a commitment |
 
 ## Resume Checklist
 
@@ -115,6 +121,12 @@ When work resumes:
 7. Use `docs/FOUNDATION_STARTUP.md` for the verified local Foundation workflow.
 
 ## State History
+
+### 2026-10-09
+
+- Product Owner approved Issue #16's Life-first, mobile-first, invite-only multi-user rebaseline. The original single-user scope and Bluecoins-first V0.1 timing are intentionally replaced as product direction; ADR-008/009 historical files remain preserved.
+- Created Issue #17 for documentation and ADR rebaseline. The Product Owner reviewed and accepted ADR-013/014, then authorized documentation-only commit, push, and Issue #17 closure after verification. No code, API, schema, migration, deployment, or Issue #18 work was authorized.
+- V0.1 is an online Alpha with Today/Money/Plans/Me, invitation-gated Google identity, user isolation, suitable export, security tests, and tested backup/restore. V0.2 adds offline capture/sync and Wishlist after an accepted sync ADR; Bluecoins import is V0.3 or later.
 
 ### 2026-09-30
 

@@ -1,10 +1,10 @@
 # LifeOS Architecture
 
-**Status:** Architectural baseline v0.2
+**Status:** Foundation architecture retained; Issue #16 product direction and ADR-013/014 accepted
 
 **Baseline date:** 2026-08-17
 
-**Source:** Master Project Blueprint v0.2
+**Sources:** Master Project Blueprint v0.2 (historical baseline); Product Owner-approved [Issue #16](https://github.com/Faust217/LifeOS/issues/16) (current product direction)
 
 ## Architectural Goal
 
@@ -18,7 +18,9 @@ The baseline is:
 - REST and OpenAPI for external application contracts;
 - a responsive React/TypeScript Web/PWA for V0.x;
 - optional AI behind a controlled gateway;
-- Docker Compose as the initial self-host packaging path.
+- Docker Compose as the reproducible local Foundation path; private cloud testing needs its own security and cost review.
+
+V0.1 is an invite-only, online Alpha for the Product Owner and a few testers. The navigation is Today, Money, Plans, and Me. These are client presentation areas, not new storage authorities: Today is a projection, Money uses Finance services, Plans begins with checklist Goals, and Me exposes identity/profile and data-management workflows. Authentication and user isolation apply through shared server services. Offline transaction capture is V0.2 and requires an accepted ADR before implementation.
 
 ## System Context
 
@@ -41,15 +43,15 @@ Clients may present different layouts, but all business behavior flows through t
 | Concern | Baseline | Constraint |
 | --- | --- | --- |
 | Web client | React, TypeScript, Vite, responsive/PWA | Replaceable client; business rules remain server-side |
-| Native client | Flutter, only as a future option | Start only after a proven native requirement |
+| Native client | Deferred; Capacitor is a candidate, not a commitment | Evaluate after real Web/PWA use proves a native need |
 | Backend | Go modular monolith | Explicit modules and services; no microservices by default |
 | HTTP/API | REST and OpenAPI | Thin handlers and generated typed-client path; no initial GraphQL requirement |
 | Database | PostgreSQL | Pin a supported major version and preserve upgradeability |
 | SQL access | `pgx` and `sqlc` | Explicit SQL and compile-time types; avoid excessive ORM magic |
-| Migrations | `golang-migrate` or `goose` | Deferred choice requiring an ADR before the first real migration |
+| Migrations | `golang-migrate` v4 | Selected by accepted ADR-011; pinned project-locally |
 | Runtime AI | Provider-neutral AI Gateway; Ollama is the first experimental path | `None` is always a valid provider |
 | External AI | MCP adapter over the shared Tool Registry | Optional adapter, never a core dependency |
-| Packaging | Docker Compose | Initial local, NAS, and VPS self-host path |
+| Packaging | Docker Compose for local Foundation | Cloud Alpha deployment requires a separate reviewed design |
 
 Specific versions, models, prices, and provider quotas are configuration and release concerns, not permanent architectural facts.
 
@@ -84,7 +86,7 @@ api/openapi/
 deploy/
 ```
 
-This layout is directional, not implemented in this foundation task.
+The listed areas exist as Foundation structure. Domain packages are placeholders; there are no product tables or workflows yet.
 
 ### Boundary Rules
 
@@ -111,7 +113,7 @@ Database rows are not API DTOs. Client contracts are defined through OpenAPI. AI
 ## Data and Migration Invariants
 
 - Use application-generated UUIDs, preferably UUIDv7, for externally visible identities.
-- Include `owner_id` on all core records even while V0.x remains a single-user product.
+- Include `owner_id` on all user-owned core records. A verified, invited LifeOS user determines that scope; a client-supplied owner ID never grants access.
 - Store `created_at` and `updated_at`; audited entities also use void/delete metadata or audit events.
 - Store timestamps in UTC and retain user timezone separately; use calendar dates for date-only plan/travel concepts.
 - Store money as `amount_minor` integer plus ISO 4217 currency, never float or double.
@@ -205,8 +207,10 @@ Exports must include complete structured JSON for core data and useful CSV finan
 
 ## Security and Privacy
 
-- Scope every query to the authenticated owner; never trust an arbitrary client-supplied owner ID.
-- Localhost mode may start simply, but any network-exposed installation requires secure authentication, HTTPS, and backup.
+- Google authentication alone is insufficient: an invitation and an authorized LifeOS session are required for V0.1.
+- Scope every user-owned read, write, summary, and export to the authenticated owner; never trust an arbitrary client-supplied owner ID. Test cross-user denial.
+- Protected and owner-admin paths have separate authorization boundaries. Future aggregate admin metrics must not expose raw private financial records unnecessarily.
+- Any network-exposed installation requires secure authentication, HTTPS, database transport security, backup, and reviewed operational endpoint exposure.
 - Keep provider secrets in environment or secret files and never return them to clients or models.
 - Remote MCP requires independent authentication and conservative write permissions.
 - Never log API keys, database passwords, or full sensitive prompts by default.
@@ -218,16 +222,15 @@ Exports must include complete structured JSON for core data and useful CSV finan
 Deployment grows only as real needs appear:
 
 1. Development: PostgreSQL, API, and web through Docker Compose; Ollama external or optional.
-2. Local personal: one repeatable startup path on localhost or trusted LAN.
-3. Home server/NAS: persistent volumes, backup, and secure access.
-4. VPS self-host: reverse proxy, TLS, authentication, backup, and upgrade guide.
-5. Hosted SaaS: deferred; no billing or AI-quota architecture now.
+2. Invite-only online Alpha: a small, cost-controlled environment with Google identity, invitations, TLS, secrets, backup/restore, and user isolation.
+3. Local/self-hosted personal: preserve a portable path; harden installation and upgrades when separately scoped.
+4. Wider hosted use: evaluate only from observed demand; no billing, organizations, or AI-quota architecture now.
 
 Backups must be documented, run before upgrades, and periodically restore-tested. Health endpoints should expose liveness, readiness, and migration version. Logs should be structured and privacy-safe.
 
 ## Reliability and Scale
 
-The relevant V0.x scale is years of personal data and growing modules, not a million concurrent users.
+The relevant V0.x scale is a few invited users and years of personal data, not a million concurrent users.
 
 - Start with indexes, pagination, SQL aggregation, and measurable query behavior.
 - Add materialized views only after demonstrated slow queries.
@@ -238,14 +241,13 @@ The relevant V0.x scale is years of personal data and growing modules, not a mil
 
 ## Change Gate and Deferred Decisions
 
-Important domain or technical changes require an ADR. The accepted initial ADR set is indexed in [adr/README.md](adr/README.md).
+Important domain or technical changes require an ADR. The accepted initial ADR set is indexed in [adr/README.md](adr/README.md). ADR-011 selected `golang-migrate` and ADR-012 selected `chi`; those Foundation decisions remain accepted.
 
 The following remain intentionally open until their decision point:
 
 - Web UI component library: before the first production UI screen.
-- `golang-migrate` versus `goose`: before the first real migration.
-- Go HTTP router: during Foundation implementation; standard library or `chi` are acceptable if handlers stay thin.
-- Remote authentication approach: before Internet exposure.
-- First Ollama model: during V0.3 based on hardware and tool-calling evaluation.
+- Google identity, invitation, session, and owner-isolation boundaries: accepted ADR-014; concrete implementation details need a separately authorized issue before Internet exposure.
+- Offline transaction synchronization: accepted ADR required before V0.2 implementation.
+- First Ollama model: if optional AI receives a later authorized milestone, based on hardware and tool-calling evaluation.
 - Open-source license: before the first public release.
-- Flutter client: only after real Web/PWA usage proves a native need.
+- Native client: Capacitor is a candidate only after real Web/PWA usage proves a native need.

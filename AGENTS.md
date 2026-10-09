@@ -6,8 +6,18 @@ This file is the durable entry point for coding agents working in this repositor
 
 - The Master Project Blueprint v0.2 in `docs/reference/` is the original product and architecture baseline.
 - The maintained repository documents under `docs/` are the working source of truth derived from that blueprint.
-- If repository documents disagree with the blueprint or with each other, stop, identify the conflict, and ask for a decision. Do not silently choose a new product meaning.
+- The Product Owner approved the Life-first, invite-only multi-user rebaseline in GitHub Issue #16 and accepted ADR-013 and ADR-014. Preserve the historical ADRs and follow `docs/PROJECT_STATE.md` for the current boundary.
+- If repository documents disagree with the blueprint or with each other, identify the conflict and follow an explicit Product Owner decision and accepted ADR when one exists; otherwise stop and ask. Issue #16 explicitly changes the single-user and Bluecoins-first V0.1 direction. Do not silently choose a new product meaning.
 - The Product Owner decides real needs, priorities, and acceptance. Agents implement scoped work; they do not redefine LifeOS semantics on their own.
+
+## Current Product Boundary
+
+- Issue #16 approves a Life-first, mobile-first platform and an invite-only, online V0.1 Alpha for the Product Owner and a few testers.
+- Google sign-in does not grant access without an invitation. Each admitted user has independent data.
+- V0.1 navigation is Today, Money, Plans, and Me. Money includes manual income/expense, accounts, categories, history, correct transfers, and deterministic balances; Plans begins with checklist Goals.
+- V0.1 includes suitable export, security and isolation tests, and tested backup/restore. Offline transaction capture and Wishlist are V0.2; Bluecoins import is V0.3 or later.
+- Trips, Assets, Split, AI runtime, a native app, and a full Admin Dashboard are deferred. Capacitor is a candidate, not a commitment.
+- ADR-013 and ADR-014 are accepted. Preserve historical ADR-008 and ADR-009 files; see `docs/adr/README.md` for the superseded and retained portions. Implement product behavior only in a separately authorized issue.
 
 ## Required Reading Before Work
 
@@ -76,6 +86,14 @@ At the end of a task, report:
 - Record what was implemented, why the design was chosen, relevant Go/SQL/architecture concepts, a useful reading order, and unresolved questions.
 - Keep durable product rules in `docs/`, not only in learning notes.
 - Never put secrets, raw private financial data, or sensitive prompts in learning entries.
+
+### Function-level Data Flow for Implementation Issues
+
+Every future implementation issue must include a concise explanation of the implemented path:
+
+`User Input → Frontend function → API request → Backend handler → Service → Repository → Database → Response → UI update`.
+
+For each step, record the exact file path and function name, input and output, main processing logic, the next function called, error handling, and relevant tests. Label names as **proposed** before code exists. Mark a genuinely non-applicable step **N/A** with a reason. Update the explanation to actual implementation names before closing the issue. Keep it understandable to a developer learning the codebase; include it in the implementation issue's completion report and corresponding learning entry.
 
 ## Local Machine Safety
 

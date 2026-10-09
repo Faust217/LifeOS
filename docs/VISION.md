@@ -1,22 +1,22 @@
 # LifeOS Vision
 
-**Status:** Baseline v0.2 extraction
+**Status:** Issue #16 product direction approved; ADR-013 and ADR-014 accepted
 
 **Baseline date:** 2026-08-17
 
-**Source:** Master Project Blueprint v0.2
+**Sources:** Master Project Blueprint v0.2 (historical baseline); Product Owner-approved [Issue #16](https://github.com/Faust217/LifeOS/issues/16) (current direction)
 
 ## North Star
 
-LifeOS is a self-hostable, AI-optional Personal Life Data & Decision System. It connects real money movements, future plans, desired purchases, owned assets, travel, shared expenses, and future life-data modules.
+LifeOS is a Life-first, mobile-first personal life management platform. It starts with useful everyday Money and Plans workflows and can grow into other life domains without losing stable meanings or user data.
 
-AI is an intelligent layer for understanding, querying, recommending, and initiating controlled actions. It is never the source of truth.
+If later introduced, AI may help users understand, query, and act through controlled tools. It is never the source of truth and is not part of the V0.1 Alpha.
 
 > AI is optional. Data is durable. The core remains useful without a model.
 
 LifeOS is not trying to become an everything app in one release. It is building a stable personal core that can grow for years. Every release must be independently useful, preserve existing data, and retain a clear path for later modules.
 
-The first measure of success is not user count. It is whether the owner uses LifeOS over time, can replace the existing expense tracker, and can extend the system without restarting it.
+The first measure of success is whether the Product Owner and invited Alpha testers can use the initial workflows safely and repeatedly. A later Bluecoins import remains important, but it is no longer a V0.1 release gate.
 
 ## Problems to Solve
 
@@ -38,17 +38,17 @@ LifeOS will provide complete manual workflows for every implemented core module.
 | People and split expenses | Participants, shared costs, payers, rules, balances, and settlements | Parsing a conversation into a reviewable split draft |
 | Analytics | Dashboards, trends, category comparisons, and actual-versus-plan views | Explanations and decision support based on deterministic summaries |
 
-## Intended User and Modes
+## Intended Users and Modes
 
-The real V0.x user is the project owner. The data model is owner-scoped from day one, but LifeOS will not pre-build organizations, billing, subscriptions, or complex role systems for hypothetical SaaS users.
+V0.1 serves the Product Owner and a small group of invited testers. Each person has independent data. Google sign-in verifies identity but does not grant access without a valid invitation. This is a limited Alpha, not public signup or a commitment to organizations, billing, subscriptions, or collaboration.
 
 | Mode | Direction |
 | --- | --- |
-| Local personal | V0.x baseline: Web/PWA, Go API, and PostgreSQL on the owner's computer; AI may be disabled or use a local provider |
-| Self-hosted personal | Progressively hardened for a home server, NAS, or VPS and use from desktop and phone |
-| External AI client | Later V0.x adapter through controlled tools such as MCP |
-| Hosted SaaS | Explicitly deferred until real demand exists |
-| Native mobile | Future option using the same server and business rules when native requirements are proven |
+| Invite-only online Alpha | V0.1: mobile-first React Web/PWA, Go API, and PostgreSQL for the Product Owner and a few testers |
+| Local/self-hosted | Keep Foundation Compose and a portable path; production-grade self-host packaging is later work |
+| Offline capture | V0.2: reliable transaction capture/synchronization after an accepted sync ADR |
+| External AI client | Optional later adapter through controlled tools such as MCP |
+| Native mobile | Future candidate; Capacitor is not yet an architectural commitment |
 
 ## What LifeOS Is Not
 
@@ -57,7 +57,8 @@ The real V0.x user is the project owner. The data model is owner-scoped from day
 - It is not a full accounting ERP; finance semantics are reliable, but the experience remains personal-life oriented.
 - It is not an AI chat wrapper.
 - It is not an immediate health, career, documents, journaling, or general super-app.
-- It is not committed to hosted SaaS, subscriptions, organizations, or collaboration in current releases.
+- It is not a public-signup SaaS, subscription, organization, or collaboration product in V0.1.
+- It is not an AI-dependent product; AI runtime is excluded from the initial Alpha.
 
 New life domains require separate evaluation after the core is stable. They must own their data model, migrations, permissions, and UI and connect through explicit relationships instead of expanding an everything-shaped table.
 
@@ -65,11 +66,12 @@ New life domains require separate evaluation after the core is stable. They must
 
 | Dimension | Success criterion |
 | --- | --- |
-| Personal utility | Real transactions, plans, assets, and split expenses are managed continuously |
+| Personal utility | Invited users can manage real money and checklist Goals repeatedly; later modules remain coherent |
+| Privacy | Users cannot read or change each other's data; administrative metrics avoid unnecessary private financial detail |
 | Stability | Normal upgrades use migrations and never require deleting the database or re-importing all history |
 | Extensibility | New modules enter through explicit domain boundaries and contracts |
 | AI independence | Disabling or replacing an AI provider does not break implemented core modules or alter their schemas |
-| Portability | Users can export structured data and move a self-hosted installation to another machine |
+| Portability | Users can export structured data and move their data between suitable deployments |
 | Maintainability | Important architecture changes require ADRs, and agents cannot silently bypass module boundaries |
 
 ## Product Principles
@@ -87,17 +89,8 @@ New life domains require separate evaluation after the core is stable. They must
 
 Changing one of these principles requires an accepted ADR before implementation.
 
-## Definition of V1.0
+## Longer-Term Success
 
-V1.0 means LifeOS has become a reliable long-term personal system, not that every possible feature exists.
-
-- Finance, Plans/Wishlist, Assets, and Split have stable daily-use core workflows.
-- Imported Bluecoins history and later real data remain consistent across multiple migrations.
-- AI can be disabled; at least one runtime provider works; write actions are confirmed and audited.
-- At least one external integration has a clean boundary and can be disconnected without breaking the core.
-- Self-host installation, upgrade, backup, and restore documentation has been rehearsed.
-- Complete JSON/CSV export allows the user to leave LifeOS.
-- Critical business rules, migrations, and imports are covered by automated tests.
-- No normal user workflow requires manual database surgery.
+Future release criteria will be set after V0.1 use. Long-term success includes reliable Money and Plans workflows, correct user isolation, portable exports, tested upgrades and restores, and later modules added without duplicating financial facts. AI and external integrations remain optional. No normal workflow should require manual database surgery.
 
 See [ROADMAP.md](ROADMAP.md) for the sequence of capabilities and [V0.1_SCOPE.md](V0.1_SCOPE.md) for the current product milestone.

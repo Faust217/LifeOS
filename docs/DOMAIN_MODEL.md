@@ -1,10 +1,10 @@
 # LifeOS Domain Model
 
-**Status:** Conceptual baseline, not final SQL
+**Status:** Conceptual model updated for Issue #16; not final SQL
 
 **Baseline date:** 2026-08-17
 
-**Source:** Master Project Blueprint v0.2
+**Sources:** Master Project Blueprint v0.2 (historical); Product Owner-approved [Issue #16](https://github.com/Faust217/LifeOS/issues/16) (current scope)
 
 ## Modeling Principle
 
@@ -19,10 +19,13 @@ Model the real world rather than UI shortcuts:
 
 Distinct meanings are linked, not collapsed into one generic transaction or everything-shaped record.
 
+V0.1 adds independent invited users and simple checklist Goals. A LifeOS account holder is not the same concept as a `Person` in a later shared-expense record. Today, Money, Plans, and Me are navigation labels, not database entities.
+
 ## Domain Map
 
 ```text
-Owner
+LifeOS user / Owner (one independent data boundary per admitted user)
+├─ Identity (invitation, Google identity binding, session; conceptual only)
 ├─ Finance
 │  ├─ Account
 │  ├─ FinancialEvent
@@ -31,7 +34,8 @@ Owner
 │  └─ ImportBatch
 ├─ Planning
 │  ├─ Plan
-│  ├─ PlanItem
+│  ├─ Goal (V0.1 checklist-based future intent; exact persistence shape deferred)
+│  ├─ PlanItem (later)
 │  └─ ChecklistItem
 ├─ Wishlist
 │  └─ WishlistItem
@@ -51,12 +55,13 @@ Owner
 ## Shared Record Baseline
 
 - Core records use UUID identities, preferably application-generated UUIDv7.
-- Every core record is scoped by `owner_id` from day one.
+- Every user-owned core record is scoped by `owner_id` from day one. The owner is determined from the verified, invited LifeOS identity and protected session, not a client-provided ID.
 - Records carry `created_at` and `updated_at`; audited entities also use void/delete metadata or an audit event.
 - Timestamps are stored in UTC; the owner's timezone is stored separately.
 - Plan and travel calendar dates may use date-only types where time-of-day is not meaningful.
 - Money uses integer minor units plus currency.
 - State fields use controlled values, constraints, or lookup tables rather than arbitrary text.
+- Identity, invitations, and sessions are access-control records, not financial or planning facts. Accepted ADR-014 governs their boundary; their final schema requires dedicated migrations in an authorized implementation issue.
 
 ## Finance
 
@@ -114,7 +119,7 @@ Important financial events support edit/void or soft-delete behavior with audit 
 
 ### Plan
 
-A `Plan` is a generic container for future intent, with types such as travel, purchase, moving, event, and custom. Common fields include name, date range, budget, status, and notes.
+A `Plan` is a generic container for future intent. V0.1 Goals are simple checklist-based intent with no balance effect. Whether a Goal is stored as a Plan type or as a separate planning record remains an implementation-level schema decision to review before the first migration; do not collapse it into a FinancialEvent. Later Plan types may include travel, purchase, moving, event, and custom.
 
 Type-specific details should use explicit extensions rather than continuously expanding the base Plan table.
 
@@ -124,19 +129,20 @@ A `PlanItem` is an estimated future item such as a hotel budget. It does not aff
 
 ### ChecklistItem
 
-A `ChecklistItem` is a non-financial task within a plan and never affects account balances.
+A `ChecklistItem` is a non-financial task within a Goal or later Plan and never affects account balances.
 
 ### Planning Invariants
 
 | Object | Meaning | Affects real balance? |
 | --- | --- | --- |
 | Plan | A future activity or project | No |
+| Goal | V0.1 checklist-based future intent | No |
 | PlanItem | An estimated future item | No |
 | FinancialEvent linked to a Plan | Money that actually happened | Yes |
 | ChecklistItem | A non-financial task | No |
 | WishlistItem linked to a Plan | Something desired within the plan | No, until purchased through a real event |
 
-Travel is a Plan type, not an independent financial universe.
+Travel remains a later Plan type, not an independent financial universe. Wishlist is a separate later domain even if presented within Plans navigation.
 
 ## Wishlist
 
@@ -168,7 +174,7 @@ The split domain separates cash flow from economic share. If the owner pays RM90
 
 ### Person
 
-A `Person` is a local participant or contact. That person does not need a LifeOS account.
+A `Person` is a local participant or contact. That person does not need a LifeOS account and is not the authenticated user/owner boundary.
 
 ### SplitExpense
 
@@ -205,10 +211,10 @@ External client/session metadata supports adapters such as MCP without making th
 
 ## Conceptual Storage Sketch
 
-The following is a vocabulary and ownership sketch, not final SQL:
+The following is a vocabulary and ownership sketch, not final SQL. Identity support records and the exact Goal persistence shape are deliberately unnamed until accepted ADRs and scoped schema work:
 
 ```text
-owners
+owners (one independent owner per admitted LifeOS user)
 accounts
 categories
 financial_events

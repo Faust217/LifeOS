@@ -1,12 +1,12 @@
 # LifeOS
 
-LifeOS is a self-hostable, AI-optional Personal Life Data & Decision System. It is intended to connect real money movements, future plans, desired purchases, owned assets, travel, shared expenses, and later life-data modules without making an AI model the source of truth.
+LifeOS is a Life-first, mobile-first personal life management platform. It connects everyday money and plans through durable structured data, while leaving room for later life domains. The core remains useful without AI.
 
 > AI is optional. Data is durable. The core remains useful without a model.
 
 ## Repository Status
 
-The **Foundation** implementation is complete and verified locally. The repository now contains the accepted documentation/governance baseline, project-local configuration and migrations, operational Go API endpoints, a minimal React/Vite shell, an OpenAPI-to-TypeScript contract path, and a reproducible local Compose stack. No Finance Core product or domain behavior has been implemented.
+The **Foundation** implementation is complete and was verified locally. It contains project-local configuration and migrations, operational Go API endpoints, a minimal React/Vite shell, an OpenAPI-to-TypeScript contract path, and a reproducible local Compose stack. No authentication, user data, Money, Goals, or other product behavior has been implemented. The Product Owner approved the new direction in [Issue #16](https://github.com/Faust217/LifeOS/issues/16) and accepted ADR-013 and ADR-014 for the [Issue #17](https://github.com/Faust217/LifeOS/issues/17) documentation rebaseline.
 
 See [Foundation Startup](docs/FOUNDATION_STARTUP.md) for the clean local workflow and [Project State](docs/PROJECT_STATE.md) for the current review and authorization boundary.
 
@@ -15,7 +15,7 @@ See [Foundation Startup](docs/FOUNDATION_STARTUP.md) for the clean local workflo
 1. [Vision](docs/VISION.md) - what LifeOS is, the problems it solves, and what it is not.
 2. [Architecture](docs/ARCHITECTURE.md) - the system shape, module boundaries, invariants, and technical baseline.
 3. [Domain Model](docs/DOMAIN_MODEL.md) - the meaning and relationships of the core LifeOS concepts.
-4. [V0.1 Scope](docs/V0.1_SCOPE.md) - the Finance Core milestone, explicit exclusions, and exit criteria.
+4. [V0.1 Scope](docs/V0.1_SCOPE.md) - the invite-only online Alpha, explicit exclusions, and exit criteria.
 5. [Roadmap](docs/ROADMAP.md) - the capability sequence from Foundation to V1.0.
 6. [Project State](docs/PROJECT_STATE.md) - completed work, next steps, risks, and open decisions.
 7. [ADR Index](docs/adr/README.md) - architecture decision policy and the accepted initial ADR set.
@@ -26,14 +26,16 @@ Agents must also read [AGENTS.md](AGENTS.md) before making changes.
 
 ## Product Baseline
 
-- Personal and self-hosted first; hosted SaaS is not a near-term goal.
+- V0.1 is an invite-only, online Alpha for the Product Owner and a small group of testers. Google sign-in alone does not grant access without an invitation.
+- Each user's data is isolated. Organizations, billing, and public signup are not V0.1 work.
 - The complete implemented core must remain usable with AI disabled.
 - Structured LifeOS data is authoritative; AI is an optional interpretation and controlled-action layer.
-- The server is client-agnostic, with a responsive Web/PWA recommended for V0.x.
+- Today, Money, Plans, and Me are the V0.1 navigation. React Web/PWA comes first; Capacitor is only a future candidate.
+- The server remains client-agnostic while the first client is mobile-first.
 - The backend baseline is a Go modular monolith backed by PostgreSQL and forward migrations.
 - Money is stored as integer minor units plus currency, never as floating-point values.
 - Import/export, backup/restore, and safe upgrades are product capabilities rather than afterthoughts.
-- Bluecoins history import and reconciliation is a real-world V0.1 acceptance point.
+- V0.1 includes manual Money workflows, simple checklist Goals, suitable export, isolation tests, and tested backup/restore. Offline transaction capture and Wishlist follow in V0.2; Bluecoins import is V0.3 or later.
 
 ## Source Blueprint
 
@@ -42,8 +44,8 @@ The repository documents were extracted from the preserved Master Project Bluepr
 - [English blueprint](docs/reference/LifeOS_Master_Project_Blueprint_EN_v0.2.docx)
 - [Chinese blueprint](docs/reference/LifeOS_Master_Project_Blueprint_ZH_v0.2.docx)
 
-The Word files remain the original baseline. Maintained project state and future accepted changes belong in the repository documents and ADRs.
+The Word files remain the historical source baseline. The Product Owner-approved Issue #16 rebaseline takes precedence for current product scope; maintained documents and accepted ADRs carry the durable implementation rules.
 
 ## Current Boundary
 
-Foundation provides operational health/readiness behavior and an intentionally empty web shell, not a product slice. Owner, Account, Category, FinancialEvent, Bluecoins import, Finance CRUD, authentication, AI, and MCP behavior remain unimplemented and require separately authorized milestone work.
+Foundation provides operational health/readiness behavior and an intentionally empty web shell, not a product slice. Issue #17 changes documentation only. User identity, invitations, sessions, Accounts, Categories, FinancialEvents, Goals, export, Bluecoins import, AI, and MCP remain unimplemented and require separately authorized work.

@@ -1,8 +1,8 @@
 # LifeOS Roadmap
 
-**Status:** Baseline v0.2
+**Status:** Issue #16 direction approved; ADR-013 and ADR-014 accepted
 
-**Baseline date:** 2026-08-17
+**Updated:** 2026-10-09
 
 ## Roadmap Rule
 
@@ -15,18 +15,15 @@ Unplanned ideas go to a backlog unless they change core semantics. They should n
 | Release | Goal | Major capability |
 | --- | --- | --- |
 | Foundation | Build the base | Repository, governance, Docker, PostgreSQL, migrations, Go module boundaries, OpenAPI, CI, and ADRs |
-| V0.1 Finance Core | Become a real starting replacement for Bluecoins | Accounts, categories, financial events, transfers, dashboard, Bluecoins CSV import, CSV/JSON export, and backup |
-| V0.2 Plans and Wishlist | Connect current money to future intent | Plans, plan items, budgets, transaction links, and wishlist |
-| V0.3 AI Foundation | Make optional AI real | AI Gateway, Ollama adapter, structured extraction, read analytics, confirmation, and audit |
-| V0.4 Assets | Know what is owned | Asset lifecycle, purchase-event links, and replacement wishlist relationships |
-| V0.5 People and Split | Support travel and daily shared expenses | People, split expenses, shares, settlements, and plan participants |
-| V0.6 MCP Integration | Use LifeOS from compatible AI clients | Remote MCP, read tools, controlled writes, and authentication |
-| V0.7 Self-host Hardening | Let another person follow a reliable tutorial | Compose/release packaging, upgrades, backups, and security guidance |
-| V1.0 Personal Stable | Become a reliable long-term personal system | Real data survives upgrades; critical modules have backup, restore, tests, and documentation; SaaS remains optional |
+| V0.1 Invite-only online Alpha | Prove a useful, private mobile-first life workflow | Google sign-in plus invitations; Today, Money, Plans checklist Goals, Me; user isolation, export, tested backup/restore |
+| V0.2 Offline capture and Wishlist | Enter transactions during disconnection and connect desired purchases to plans | Reliable transaction outbox/sync after an accepted ADR; Wishlist without double-counted spending |
+| V0.3 or later | Extend real-data continuity and Plans | Bluecoins import with the accepted safe pipeline; additional Plans functionality |
+| Later milestones | Expand only after use proves the need | Trips, Assets, People/Split, privacy-conscious Admin Dashboard, optional AI/MCP, self-host hardening, and possible native client |
+| V1.0 | Define from sustained use | Reliability, privacy, migrations, export, backup/restore, and complete workflows across the modules actually shipped |
 
 ## Foundation
 
-Foundation establishes durable project memory and the technical base. The documentation/governance portion is now present; implementation portions require separate authorization.
+Foundation #1–#15 establishes the documented and locally verified technical base. Issue #16 changes product direction without discarding compatible Foundation work. The GitHub review/closure state remains separate from this documentation rebaseline.
 
 Expected capability:
 
@@ -36,50 +33,29 @@ Expected capability:
 - PostgreSQL migration discipline;
 - OpenAPI and CI baselines.
 
-## V0.1 Finance Core
+## V0.1 Invite-only Online Alpha
 
-The current product milestone is defined in [V0.1_SCOPE.md](V0.1_SCOPE.md). Its real-world acceptance path is safe Bluecoins import, reconciliation, correct finance behavior, export, and restored backup.
+The current product milestone is defined in [V0.1_SCOPE.md](V0.1_SCOPE.md). Its acceptance path is invited Google access, strict independent user data, usable Today/Money/Plans/Me workflows, correct transfer and balance behavior, suitable export, security tests, and a restored backup.
 
-No AI runtime, plans, wishlist, assets, split expenses, native client, or SaaS work belongs in V0.1.
+Plans includes only simple checklist Goals. Offline sync, Wishlist, Bluecoins import, Trips, Assets, Split, AI, native apps, public signup, and a full Admin Dashboard are outside V0.1.
 
 ## Later Milestone Boundaries
 
-### V0.2 - Plans and Wishlist
+### V0.2 - Offline Transaction Capture and Wishlist
 
-Introduce future intent without changing the meaning of real money. Plans and estimated items never affect balances until linked to actual FinancialEvents.
+Add a reliable offline create-transaction workflow and Wishlist. An accepted offline-sync ADR must define idempotency, pending/error states, recovery, conflict handling, and account/device boundaries before implementation. Wishlist remains desired intent and does not affect balances until linked to an actual FinancialEvent.
 
-### V0.3 - AI Foundation
+### V0.3 or Later - Bluecoins and Additional Plans
 
-Add an optional provider-neutral AI Gateway. `None` remains a complete mode. Start with an Ollama experiment, task-specific context, deterministic calculations, permission tiers, confirmation, and auditing.
+Import Bluecoins through the accepted canonical, previewed, mapped, traceable, idempotent, and reconcilable pipeline in ADR-009. Add further Plans functionality only through its own scoped issue. The former Bluecoins-first V0.1 schedule is intentionally replaced by Issue #16; its import safety rules remain.
 
-### V0.4 - Assets
+### Later Capabilities
 
-Track ownership and lifecycle, link assets to purchase events, and connect replacement candidates through Wishlist relationships without duplicating expenses.
-
-### V0.5 - People and Split
-
-Separate cash flow from economic share through People, SplitExpenses, SplitShares, and Settlements. Arithmetic remains deterministic.
-
-### V0.6 - MCP Integration
-
-Expose the shared Tool Registry through a separately authenticated external adapter. External AI remains optional and destructive capabilities remain disabled by default.
-
-### V0.7 - Self-host Hardening
-
-Rehearse repeatable install, upgrade, backup, restore, and security paths for local, NAS/home-server, and VPS use.
+Trips, Assets, People/Split, AI, MCP, self-host hardening, and native mobile applications remain deferred until separately scoped and approved. Optional AI retains the accepted Tool Gateway and no-AI core. Capacitor is a candidate to evaluate after Web/PWA use, not a current commitment. A future owner-only Admin Dashboard should use aggregate operational metrics without unnecessary private financial data.
 
 ## V1.0 Outcome
 
-V1.0 is reached when:
-
-- core Finance, Plans/Wishlist, Assets, and Split workflows are stable for daily use;
-- real history survives multiple migrations;
-- AI can be disabled and at least one provider works safely when enabled;
-- an external integration can disconnect without breaking the core;
-- self-host operations have been rehearsed;
-- complete export preserves the user's exit path;
-- critical rules, migrations, and imports are tested;
-- normal workflows never require manual database surgery.
+V1.0 criteria will be set from observed use rather than assuming every deferred module is required. Data isolation, correct financial behavior, tested upgrades and restores, complete export for implemented domains, and no-AI operation remain durable quality gates. No normal workflow should require manual database surgery.
 
 ## Future Domains
 
