@@ -1,0 +1,313 @@
+package finance
+
+import (
+	"context"
+	"crypto/rand"
+	"errors"
+	"fmt"
+	"math"
+	"strings"
+	"time"
+
+	"github.com/Faust217/LifeOS/internal/identity"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"golang.org/x/text/currency"
+)
+
+var (
+	ErrUnauthorized     = errors.New("verified owner required")
+	ErrInvalidInput     = errors.New("invalid finance input")
+	ErrNotFound         = errors.New("finance record not found")
+	ErrArchived         = errors.New("account or category is archived")
+	ErrCurrencyMismatch = errors.New("account currency mismatch")
+	ErrOverflow         = errors.New("money arithmetic overflow")
+	ErrConflict         = errors.New("finance event cannot be changed")
+)
+
+type Account struct {
+	ID                  string
+	Name                string
+	Type                string
+	Currency            string
+	OpeningBalanceMinor int64
+	ArchivedAt          *time.Time
+}
+
+type Category struct {
+	ID         string
+	Name       string
+	Kind       string
+	ArchivedAt *time.Time
+}
+
+type Balance struct {
+	AccountID   string
+	Currency    string
+	AmountMinor int64
+}
+
+type Movement struct {
+	ID          string
+	AccountID   string
+	AmountMinor int64
+	Currency    string
+}
+
+type Allocation struct {
+	ID          string
+	CategoryID  string
+	AmountMinor int64
+	Currency    string
+}
+
+type Event struct {
+	ID          string
+	Kind        string
+	AmountMinor int64
+	Currency    string
+	OccurredAt  time.Time
+	Note        string
+	Status      string
+	VoidedAt    *time.Time
+	VoidReason  string
+	Movements   []Movement
+	Allocations []Allocation
+}
+
+type AccountInput struct {
+	Name                string
+	Type                string
+	Currency            string
+	OpeningBalanceMinor int64
+}
+
+type CategoryInput struct {
+	Name string
+	Kind string
+}
+
+type AllocationInput struct {
+	CategoryID  string
+	AmountMinor int64
+}
+
+type EventInput struct {
+	AccountID   string
+	AmountMinor int64
+	Currency    string
+	OccurredAt  time.Time
+	Note        string
+	Allocations []AllocationInput
+}
+
+type TransferInput struct {
+	FromAccountID string
+	ToAccountID   string
+	AmountMinor   int64
+	Currency      string
+	OccurredAt    time.Time
+	Note          string
+}
+
+type Service struct{ repo *repository }
+
+func NewService(pool *pgxpool.Pool) *Service { return &Service{repo: &repository{pool: pool}} }
+
+func (s *Service) CreateAccount(ctx context.Context, owner identity.OwnerID, input AccountInput) (Account, error) {
+	if !owner.Valid() {
+		return Account{}, ErrUnauthorized
+	}
+	input.Name = strings.TrimSpace(input.Name)
+	if input.Name == "" || len(input.Name) > 120 || !validCurrency(input.Currency) || !validAccountType(input.Type) {
+		return Account{}, ErrInvalidInput
+	}
+	return s.repo.createAccount(ctx, owner, input)
+}
+
+func (s *Service) CreateCategory(ctx context.Context, owner identity.OwnerID, input CategoryInput) (Category, error) {
+	if !owner.Valid() {
+		return Category{}, ErrUnauthorized
+	}
+	input.Name = strings.TrimSpace(input.Name)
+	if input.Name == "" || len(input.Name) > 120 || (input.Kind != "expense" && input.Kind != "income") {
+		return Category{}, ErrInvalidInput
+	}
+	return s.repo.createCategory(ctx, owner, input)
+}
+
+func (s *Service) PostExpense(ctx context.Context, owner identity.OwnerID, input EventInput) (Event, error) {
+	return s.postSingleAccountEvent(ctx, owner, "expense", input)
+}
+
+func (s *Service) PostIncome(ctx context.Context, owner identity.OwnerID, input EventInput) (Event, error) {
+	return s.postSingleAccountEvent(ctx, owner, "income", input)
+}
+
+func (s *Service) postSingleAccountEvent(ctx context.Context, owner identity.OwnerID, kind string, input EventInput) (Event, error) {
+	if !owner.Valid() {
+		return Event{}, ErrUnauthorized
+	}
+	if !validID(input.AccountID) || !validEventInput(input.AmountMinor, input.Currency, input.OccurredAt, input.Note) || len(input.Allocations) == 0 {
+		return Event{}, ErrInvalidInput
+	}
+	var total int64
+	seen := make(map[string]bool, len(input.Allocations))
+	for _, allocation := range input.Allocations {
+		if !validID(allocation.CategoryID) || allocation.AmountMinor <= 0 || seen[allocation.CategoryID] {
+			return Event{}, ErrInvalidInput
+		}
+		seen[allocation.CategoryID] = true
+		if allocation.AmountMinor > math.MaxInt64-total {
+			return Event{}, ErrOverflow
+		}
+		total += allocation.AmountMinor
+	}
+	if total != input.AmountMinor {
+		return Event{}, ErrInvalidInput
+	}
+	amount := input.AmountMinor
+	if kind == "expense" {
+		amount = -amount
+	}
+	return s.repo.post(ctx, owner, postSpec{
+		kind: kind, amount: input.AmountMinor, currency: input.Currency,
+		occurredAt: input.OccurredAt.UTC(), note: input.Note,
+		movements:   []movementSpec{{accountID: input.AccountID, amount: amount}},
+		allocations: input.Allocations,
+	})
+}
+
+func (s *Service) Transfer(ctx context.Context, owner identity.OwnerID, input TransferInput) (Event, error) {
+	if !owner.Valid() {
+		return Event{}, ErrUnauthorized
+	}
+	if !validID(input.FromAccountID) || !validID(input.ToAccountID) || input.FromAccountID == input.ToAccountID ||
+		!validEventInput(input.AmountMinor, input.Currency, input.OccurredAt, input.Note) {
+		return Event{}, ErrInvalidInput
+	}
+	return s.repo.post(ctx, owner, postSpec{
+		kind: "transfer", amount: input.AmountMinor, currency: input.Currency,
+		occurredAt: input.OccurredAt.UTC(), note: input.Note,
+		movements: []movementSpec{{accountID: input.FromAccountID, amount: -input.AmountMinor}, {accountID: input.ToAccountID, amount: input.AmountMinor}},
+	})
+}
+
+func (s *Service) Balance(ctx context.Context, owner identity.OwnerID, accountID string) (Balance, error) {
+	if !owner.Valid() {
+		return Balance{}, ErrUnauthorized
+	}
+	if !validID(accountID) {
+		return Balance{}, ErrInvalidInput
+	}
+	return s.repo.balance(ctx, owner, accountID)
+}
+
+func (s *Service) ListAccounts(ctx context.Context, owner identity.OwnerID) ([]Account, error) {
+	if !owner.Valid() {
+		return nil, ErrUnauthorized
+	}
+	return s.repo.listAccounts(ctx, owner)
+}
+
+func (s *Service) ListCategories(ctx context.Context, owner identity.OwnerID) ([]Category, error) {
+	if !owner.Valid() {
+		return nil, ErrUnauthorized
+	}
+	return s.repo.listCategories(ctx, owner)
+}
+
+func (s *Service) History(ctx context.Context, owner identity.OwnerID, limit, offset int) ([]Event, error) {
+	if !owner.Valid() {
+		return nil, ErrUnauthorized
+	}
+	if limit < 1 || limit > 100 || offset < 0 {
+		return nil, ErrInvalidInput
+	}
+	return s.repo.history(ctx, owner, limit, offset)
+}
+
+// CategorySpending requires a currency so that unlike units are never summed.
+func (s *Service) CategorySpending(ctx context.Context, owner identity.OwnerID, categoryID, currencyCode string) (int64, error) {
+	if !owner.Valid() {
+		return 0, ErrUnauthorized
+	}
+	if !validID(categoryID) || !validCurrency(currencyCode) {
+		return 0, ErrInvalidInput
+	}
+	return s.repo.categorySpending(ctx, owner, categoryID, currencyCode)
+}
+
+func (s *Service) ArchiveAccount(ctx context.Context, owner identity.OwnerID, accountID string) error {
+	if !owner.Valid() {
+		return ErrUnauthorized
+	}
+	if !validID(accountID) {
+		return ErrInvalidInput
+	}
+	return s.repo.archiveAccount(ctx, owner, accountID)
+}
+
+// VoidEvent keeps the original event, movements, and allocations for audit.
+// A corrected event is posted separately after the void succeeds.
+func (s *Service) VoidEvent(ctx context.Context, owner identity.OwnerID, eventID, reason string) error {
+	if !owner.Valid() {
+		return ErrUnauthorized
+	}
+	reason = strings.TrimSpace(reason)
+	if !validID(eventID) || reason == "" || len(reason) > 500 {
+		return ErrInvalidInput
+	}
+	return s.repo.voidEvent(ctx, owner, eventID, reason)
+}
+
+func validAccountType(value string) bool {
+	switch value {
+	case "cash", "bank", "ewallet", "savings", "credit_card", "other":
+		return true
+	default:
+		return false
+	}
+}
+
+func validCurrency(code string) bool {
+	if len(code) != 3 {
+		return false
+	}
+	for _, letter := range code {
+		if letter < 'A' || letter > 'Z' {
+			return false
+		}
+	}
+	_, err := currency.ParseISO(code)
+	return err == nil
+}
+
+func validEventInput(amount int64, currencyCode string, occurredAt time.Time, note string) bool {
+	return amount > 0 && validCurrency(currencyCode) && !occurredAt.IsZero() && len(note) <= 1000
+}
+
+func validID(id string) bool {
+	if len(id) != 36 {
+		return false
+	}
+	for i, ch := range id {
+		if i == 8 || i == 13 || i == 18 || i == 23 {
+			if ch != '-' {
+				return false
+			}
+		} else if !((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F')) {
+			return false
+		}
+	}
+	return true
+}
+
+func newUUID() (string, error) {
+	var id [16]byte
+	if _, err := rand.Read(id[:]); err != nil {
+		return "", fmt.Errorf("generate finance ID: %w", err)
+	}
+	id[6] = (id[6] & 0x0f) | 0x40
+	id[8] = (id[8] & 0x3f) | 0x80
+	return fmt.Sprintf("%x-%x-%x-%x-%x", id[:4], id[4:6], id[6:8], id[8:10], id[10:]), nil
+}

@@ -25,7 +25,7 @@ V0.1 adds independent invited users and simple checklist Goals. A LifeOS account
 
 ```text
 LifeOS user / Owner (one independent data boundary per admitted user)
-├─ Identity (user, invitation, Google identity binding in Issue #18; session later)
+├─ Identity (user, invitation, Google identity binding in Issue #18; sessions in Issue #19)
 ├─ Finance
 │  ├─ Account
 │  ├─ FinancialEvent
@@ -61,7 +61,7 @@ LifeOS user / Owner (one independent data boundary per admitted user)
 - Plan and travel calendar dates may use date-only types where time-of-day is not meaningful.
 - Money uses integer minor units plus currency.
 - State fields use controlled values, constraints, or lookup tables rather than arbitrary text.
-- Identity, invitations, and sessions are access-control records, not financial or planning facts. Accepted ADR-014 governs their boundary. Issue #18 adds user, Google identity binding, and invitation tables; persisted sessions remain for a later issue.
+- Identity, invitations, and sessions are access-control records, not financial or planning facts. Accepted ADR-014 governs their boundary. Issues #18–#20 add user identity, invitation, session, and owner-authorization foundations; Issue #21 introduces the separate Finance schema.
 
 ## Finance
 
@@ -76,7 +76,7 @@ An `Account` represents a place or instrument that holds an asset or liability p
 | `account_type` | `cash`, `bank`, `ewallet`, `credit_card`, `savings`, future optional `receivable`, or `other` |
 | `currency` | Primary ISO 4217 currency for the account |
 | `opening_balance` | Starting net position when the account is introduced or imported |
-| sign convention | Assets are positive; credit-card debt and other liabilities are negative net positions |
+| sign convention | Positive is an asset position; credit-card debt is a negative liability position. An ordinary account can also be negative when recorded activity exceeds its balance; LifeOS records the fact rather than authorizing an overdraft. |
 | archive behavior | Historical accounts are archived rather than hard-deleted |
 
 ### FinancialEvent

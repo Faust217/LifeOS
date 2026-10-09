@@ -1,0 +1,430 @@
+package finance
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+	"math"
+	"math/big"
+	"sort"
+	"time"
+
+	"github.com/Faust217/LifeOS/internal/identity"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+type repository struct{ pool *pgxpool.Pool }
+
+type movementSpec struct {
+	accountID string
+	amount    int64
+}
+
+type postSpec struct {
+	kind        string
+	amount      int64
+	currency    string
+	occurredAt  time.Time
+	note        string
+	movements   []movementSpec
+	allocations []AllocationInput
+}
+
+type accountState struct {
+	currency string
+	archived sql.NullTime
+}
+
+func (r *repository) createAccount(ctx context.Context, owner identity.OwnerID, input AccountInput) (Account, error) {
+	id, err := newUUID()
+	if err != nil {
+		return Account{}, err
+	}
+	_, err = r.pool.Exec(ctx, `INSERT INTO finance_accounts
+		(id, owner_id, name, account_type, currency, opening_balance_minor)
+		VALUES ($1, $2, $3, $4, $5, $6)`, id, owner.String(), input.Name, input.Type, input.Currency, input.OpeningBalanceMinor)
+	if err != nil {
+		return Account{}, fmt.Errorf("create account: %w", err)
+	}
+	return Account{ID: id, Name: input.Name, Type: input.Type, Currency: input.Currency, OpeningBalanceMinor: input.OpeningBalanceMinor}, nil
+}
+
+func (r *repository) createCategory(ctx context.Context, owner identity.OwnerID, input CategoryInput) (Category, error) {
+	id, err := newUUID()
+	if err != nil {
+		return Category{}, err
+	}
+	_, err = r.pool.Exec(ctx, `INSERT INTO finance_categories (id, owner_id, name, kind)
+		VALUES ($1, $2, $3, $4)`, id, owner.String(), input.Name, input.Kind)
+	if err != nil {
+		return Category{}, fmt.Errorf("create category: %w", err)
+	}
+	return Category{ID: id, Name: input.Name, Kind: input.Kind}, nil
+}
+
+func (r *repository) listAccounts(ctx context.Context, owner identity.OwnerID) ([]Account, error) {
+	rows, err := r.pool.Query(ctx, `SELECT id, name, account_type, currency, opening_balance_minor, archived_at
+		FROM finance_accounts WHERE owner_id = $1 ORDER BY created_at, id`, owner.String())
+	if err != nil {
+		return nil, fmt.Errorf("list accounts: %w", err)
+	}
+	defer rows.Close()
+	accounts := make([]Account, 0)
+	for rows.Next() {
+		var account Account
+		var archived sql.NullTime
+		if err := rows.Scan(&account.ID, &account.Name, &account.Type, &account.Currency, &account.OpeningBalanceMinor, &archived); err != nil {
+			return nil, fmt.Errorf("scan account: %w", err)
+		}
+		if archived.Valid {
+			account.ArchivedAt = &archived.Time
+		}
+		accounts = append(accounts, account)
+	}
+	return accounts, rows.Err()
+}
+
+func (r *repository) listCategories(ctx context.Context, owner identity.OwnerID) ([]Category, error) {
+	rows, err := r.pool.Query(ctx, `SELECT id, name, kind, archived_at FROM finance_categories
+		WHERE owner_id = $1 ORDER BY created_at, id`, owner.String())
+	if err != nil {
+		return nil, fmt.Errorf("list categories: %w", err)
+	}
+	defer rows.Close()
+	categories := make([]Category, 0)
+	for rows.Next() {
+		var category Category
+		var archived sql.NullTime
+		if err := rows.Scan(&category.ID, &category.Name, &category.Kind, &archived); err != nil {
+			return nil, fmt.Errorf("scan category: %w", err)
+		}
+		if archived.Valid {
+			category.ArchivedAt = &archived.Time
+		}
+		categories = append(categories, category)
+	}
+	return categories, rows.Err()
+}
+
+func (r *repository) archiveAccount(ctx context.Context, owner identity.OwnerID, accountID string) error {
+	var id string
+	err := r.pool.QueryRow(ctx, `UPDATE finance_accounts SET archived_at = now(), updated_at = now()
+		WHERE owner_id = $1 AND id = $2 AND archived_at IS NULL RETURNING id`, owner.String(), accountID).Scan(&id)
+	return notFoundOr("archive account", err)
+}
+
+func (r *repository) balance(ctx context.Context, owner identity.OwnerID, accountID string) (Balance, error) {
+	var result Balance
+	var amountText string
+	err := r.pool.QueryRow(ctx, balanceSQL, owner.String(), accountID).Scan(&result.AccountID, &result.Currency, &amountText)
+	if err != nil {
+		return Balance{}, notFoundOr("read balance", err)
+	}
+	result.AmountMinor, err = parseMoney(amountText)
+	return result, err
+}
+
+const balanceSQL = `SELECT a.id, a.currency,
+    (a.opening_balance_minor::numeric + COALESCE((
+        SELECT SUM(m.amount_minor) FROM account_movements m
+        JOIN financial_events e ON e.owner_id = m.owner_id AND e.id = m.event_id
+        WHERE m.owner_id = a.owner_id AND m.account_id = a.id AND e.status = 'posted'
+    ), 0))::text
+    FROM finance_accounts a WHERE a.owner_id = $1 AND a.id = $2`
+
+func (r *repository) categorySpending(ctx context.Context, owner identity.OwnerID, categoryID, currencyCode string) (int64, error) {
+	var amountText string
+	err := r.pool.QueryRow(ctx, `SELECT COALESCE((
+		SELECT SUM(ca.amount_minor) FROM category_allocations ca
+		JOIN financial_events e ON e.owner_id = ca.owner_id AND e.id = ca.event_id
+		WHERE ca.owner_id = c.owner_id AND ca.category_id = c.id
+		AND e.kind = 'expense' AND e.status = 'posted' AND e.currency = $3
+	), 0)::text FROM finance_categories c WHERE c.owner_id = $1 AND c.id = $2 AND c.kind = 'expense'`, owner.String(), categoryID, currencyCode).Scan(&amountText)
+	if err != nil {
+		return 0, notFoundOr("category spending", err)
+	}
+	return parseMoney(amountText)
+}
+
+func (r *repository) history(ctx context.Context, owner identity.OwnerID, limit, offset int) ([]Event, error) {
+	rows, err := r.pool.Query(ctx, `SELECT id, kind, amount_minor, currency, occurred_at, note, status, voided_at, void_reason
+		FROM financial_events WHERE owner_id = $1
+		ORDER BY occurred_at DESC, id DESC LIMIT $2 OFFSET $3`, owner.String(), limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("read history: %w", err)
+	}
+	events := make([]Event, 0)
+	for rows.Next() {
+		var event Event
+		var voided sql.NullTime
+		var reason sql.NullString
+		if err := rows.Scan(&event.ID, &event.Kind, &event.AmountMinor, &event.Currency, &event.OccurredAt,
+			&event.Note, &event.Status, &voided, &reason); err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("scan event: %w", err)
+		}
+		if voided.Valid {
+			event.VoidedAt = &voided.Time
+		}
+		if reason.Valid {
+			event.VoidReason = reason.String
+		}
+		events = append(events, event)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return nil, fmt.Errorf("read history rows: %w", err)
+	}
+	for i := range events {
+		events[i].Movements, err = r.eventMovements(ctx, owner, events[i].ID)
+		if err != nil {
+			return nil, err
+		}
+		events[i].Allocations, err = r.eventAllocations(ctx, owner, events[i].ID)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return events, nil
+}
+
+func (r *repository) eventMovements(ctx context.Context, owner identity.OwnerID, eventID string) ([]Movement, error) {
+	rows, err := r.pool.Query(ctx, `SELECT id, account_id, amount_minor, currency FROM account_movements
+		WHERE owner_id = $1 AND event_id = $2 ORDER BY created_at, id`, owner.String(), eventID)
+	if err != nil {
+		return nil, fmt.Errorf("read movements: %w", err)
+	}
+	defer rows.Close()
+	movements := make([]Movement, 0)
+	for rows.Next() {
+		var movement Movement
+		if err := rows.Scan(&movement.ID, &movement.AccountID, &movement.AmountMinor, &movement.Currency); err != nil {
+			return nil, fmt.Errorf("scan movement: %w", err)
+		}
+		movements = append(movements, movement)
+	}
+	return movements, rows.Err()
+}
+
+func (r *repository) eventAllocations(ctx context.Context, owner identity.OwnerID, eventID string) ([]Allocation, error) {
+	rows, err := r.pool.Query(ctx, `SELECT id, category_id, amount_minor, currency FROM category_allocations
+		WHERE owner_id = $1 AND event_id = $2 ORDER BY created_at, id`, owner.String(), eventID)
+	if err != nil {
+		return nil, fmt.Errorf("read allocations: %w", err)
+	}
+	defer rows.Close()
+	allocations := make([]Allocation, 0)
+	for rows.Next() {
+		var allocation Allocation
+		if err := rows.Scan(&allocation.ID, &allocation.CategoryID, &allocation.AmountMinor, &allocation.Currency); err != nil {
+			return nil, fmt.Errorf("scan allocation: %w", err)
+		}
+		allocations = append(allocations, allocation)
+	}
+	return allocations, rows.Err()
+}
+
+func (r *repository) post(ctx context.Context, owner identity.OwnerID, spec postSpec) (Event, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return Event{}, fmt.Errorf("begin financial event: %w", err)
+	}
+	defer tx.Rollback(ctx)
+	states, err := lockAccounts(ctx, tx, owner, spec.movements, false)
+	if err != nil {
+		return Event{}, err
+	}
+	for _, movement := range spec.movements {
+		state := states[movement.accountID]
+		if state.currency != spec.currency {
+			return Event{}, ErrCurrencyMismatch
+		}
+		current, err := balanceInTx(ctx, tx, owner, movement.accountID)
+		if err != nil {
+			return Event{}, err
+		}
+		if _, err := addMoney(current, movement.amount); err != nil {
+			return Event{}, err
+		}
+	}
+	for _, allocation := range spec.allocations {
+		var kind string
+		var archived sql.NullTime
+		err := tx.QueryRow(ctx, `SELECT kind, archived_at FROM finance_categories
+			WHERE owner_id = $1 AND id = $2 FOR SHARE`, owner.String(), allocation.CategoryID).Scan(&kind, &archived)
+		if err != nil {
+			return Event{}, notFoundOr("find category", err)
+		}
+		if archived.Valid {
+			return Event{}, ErrArchived
+		}
+		if kind != spec.kind {
+			return Event{}, ErrInvalidInput
+		}
+	}
+	id, err := newUUID()
+	if err != nil {
+		return Event{}, err
+	}
+	_, err = tx.Exec(ctx, `INSERT INTO financial_events
+		(id, owner_id, kind, amount_minor, currency, occurred_at, note)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)`, id, owner.String(), spec.kind,
+		spec.amount, spec.currency, spec.occurredAt, spec.note)
+	if err != nil {
+		return Event{}, fmt.Errorf("insert financial event: %w", err)
+	}
+	event := Event{ID: id, Kind: spec.kind, AmountMinor: spec.amount, Currency: spec.currency,
+		OccurredAt: spec.occurredAt, Note: spec.note, Status: "posted"}
+	for _, planned := range spec.movements {
+		movementID, err := newUUID()
+		if err != nil {
+			return Event{}, err
+		}
+		_, err = tx.Exec(ctx, `INSERT INTO account_movements
+			(id, owner_id, event_id, account_id, amount_minor, currency)
+			VALUES ($1, $2, $3, $4, $5, $6)`, movementID, owner.String(), id,
+			planned.accountID, planned.amount, spec.currency)
+		if err != nil {
+			return Event{}, fmt.Errorf("insert account movement: %w", err)
+		}
+		event.Movements = append(event.Movements, Movement{ID: movementID, AccountID: planned.accountID,
+			AmountMinor: planned.amount, Currency: spec.currency})
+	}
+	for _, planned := range spec.allocations {
+		allocationID, err := newUUID()
+		if err != nil {
+			return Event{}, err
+		}
+		_, err = tx.Exec(ctx, `INSERT INTO category_allocations
+			(id, owner_id, event_id, category_id, kind, amount_minor, currency)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)`, allocationID, owner.String(), id,
+			planned.CategoryID, spec.kind, planned.AmountMinor, spec.currency)
+		if err != nil {
+			return Event{}, fmt.Errorf("insert category allocation: %w", err)
+		}
+		event.Allocations = append(event.Allocations, Allocation{ID: allocationID, CategoryID: planned.CategoryID,
+			AmountMinor: planned.AmountMinor, Currency: spec.currency})
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Event{}, fmt.Errorf("commit financial event: %w", err)
+	}
+	return event, nil
+}
+
+func (r *repository) voidEvent(ctx context.Context, owner identity.OwnerID, eventID, reason string) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin void: %w", err)
+	}
+	defer tx.Rollback(ctx)
+	var status string
+	err = tx.QueryRow(ctx, `SELECT status FROM financial_events WHERE owner_id = $1 AND id = $2 FOR UPDATE`, owner.String(), eventID).Scan(&status)
+	if err != nil {
+		return notFoundOr("find event", err)
+	}
+	if status != "posted" {
+		return ErrConflict
+	}
+	rows, err := tx.Query(ctx, `SELECT account_id, amount_minor FROM account_movements
+		WHERE owner_id = $1 AND event_id = $2`, owner.String(), eventID)
+	if err != nil {
+		return fmt.Errorf("read void movements: %w", err)
+	}
+	var movements []movementSpec
+	for rows.Next() {
+		var movement movementSpec
+		if err := rows.Scan(&movement.accountID, &movement.amount); err != nil {
+			rows.Close()
+			return fmt.Errorf("scan void movement: %w", err)
+		}
+		movements = append(movements, movement)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return fmt.Errorf("read void movements: %w", err)
+	}
+	if len(movements) == 0 {
+		return ErrConflict
+	}
+	if _, err := lockAccounts(ctx, tx, owner, movements, true); err != nil {
+		return err
+	}
+	for _, movement := range movements {
+		current, err := balanceInTx(ctx, tx, owner, movement.accountID)
+		if err != nil {
+			return err
+		}
+		if _, err := addMoney(current, -movement.amount); err != nil {
+			return err
+		}
+	}
+	_, err = tx.Exec(ctx, `UPDATE financial_events SET status = 'voided', voided_at = now(), void_reason = $3
+		WHERE owner_id = $1 AND id = $2 AND status = 'posted'`, owner.String(), eventID, reason)
+	if err != nil {
+		return fmt.Errorf("void event: %w", err)
+	}
+	return tx.Commit(ctx)
+}
+
+func lockAccounts(ctx context.Context, tx pgx.Tx, owner identity.OwnerID, movements []movementSpec, allowArchived bool) (map[string]accountState, error) {
+	ids := make([]string, 0, len(movements))
+	for _, movement := range movements {
+		ids = append(ids, movement.accountID)
+	}
+	sort.Strings(ids)
+	states := make(map[string]accountState, len(ids))
+	for _, id := range ids {
+		if _, seen := states[id]; seen {
+			return nil, ErrInvalidInput
+		}
+		var state accountState
+		err := tx.QueryRow(ctx, `SELECT currency, archived_at FROM finance_accounts
+			WHERE owner_id = $1 AND id = $2 FOR UPDATE`, owner.String(), id).Scan(&state.currency, &state.archived)
+		if err != nil {
+			return nil, notFoundOr("find account", err)
+		}
+		if state.archived.Valid && !allowArchived {
+			return nil, ErrArchived
+		}
+		states[id] = state
+	}
+	return states, nil
+}
+
+func balanceInTx(ctx context.Context, tx pgx.Tx, owner identity.OwnerID, accountID string) (int64, error) {
+	var id, currency, amountText string
+	err := tx.QueryRow(ctx, balanceSQL, owner.String(), accountID).Scan(&id, &currency, &amountText)
+	if err != nil {
+		return 0, notFoundOr("read locked balance", err)
+	}
+	return parseMoney(amountText)
+}
+
+func addMoney(a, b int64) (int64, error) {
+	if (b > 0 && a > math.MaxInt64-b) || (b < 0 && a < math.MinInt64-b) {
+		return 0, ErrOverflow
+	}
+	return a + b, nil
+}
+
+func parseMoney(value string) (int64, error) {
+	parsed, ok := new(big.Int).SetString(value, 10)
+	if !ok || !parsed.IsInt64() {
+		return 0, ErrOverflow
+	}
+	return parsed.Int64(), nil
+}
+
+func notFoundOr(action string, err error) error {
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("%s: %w", action, err)
+	}
+	return nil
+}

@@ -2,9 +2,9 @@
 
 **Last updated:** 2026-10-09
 
-**Current milestone:** Issue #20 owner-scoped authorization boundary completed; Issue #21 awaits separate authorization
+**Current milestone:** Issue #21 Money domain and lightweight ledger accepted after final verification; next implementation requires separate authorization
 
-**Product milestone:** Invite-only online V0.1 Alpha approved in Issue #16; identity, sign-in, and owner-scoped module boundary completed
+**Product milestone:** Invite-only online V0.1 Alpha approved in Issue #16; identity, owner boundary, and Money domain completed
 
 **Blueprint:** Master Project Blueprint v0.2 is the historical baseline; Issue #16 is the approved current product direction
 
@@ -12,7 +12,7 @@
 
 The Product Owner approved the [Issue #16 Product & Architecture Rebaseline](https://github.com/Faust217/LifeOS/issues/16): LifeOS becomes a Life-first, mobile-first platform whose V0.1 is an invite-only, online Alpha for the owner and a few testers. The Product Owner also approved ADR-013 and ADR-014 in [Issue #17](https://github.com/Faust217/LifeOS/issues/17). ADR-013 supersedes ADR-008's single-user V0.x scope and ADR-009's Bluecoins-in-V0.1 timing; owner scoping and safe import/export remain in force. Historical ADR-008/009 files remain untouched. Issues #18 and #19 establish identity persistence and the local OIDC/session flow. The Product Owner manually verified the live Google flow on local Compose on 2026-10-09; Internet-facing Alpha readiness remains a separate gate.
 
-Foundation #1–#15 remains the technical baseline. Issues #1–#7 were accepted and closed. Issues #8–#15 were implemented and verified locally in separate commits; their GitHub review and closure remain pending. The chain covers configuration, PostgreSQL, migrations, operational API health/readiness, OpenAPI-generated TypeScript types, the minimal web shell, and Compose startup. Issue #18 supplies identity persistence. Issue #19 supplied OAuth verification, invitation-gated admission, sessions, and a minimal sign-in page; Money and Goals remain unimplemented.
+Foundation #1–#15 remains the technical baseline. Issues #1–#7 were accepted and closed. Issues #8–#15 were implemented and verified locally in separate commits; their GitHub review and closure remain pending. The chain covers configuration, PostgreSQL, migrations, operational API health/readiness, OpenAPI-generated TypeScript types, the minimal web shell, and Compose startup. Issues #18–#20 supply identity, sign-in, and owner authorization. Issue #21 adds the Money domain; no Money API/UI or Goals workflow exists yet.
 
 ## Completed
 
@@ -46,10 +46,13 @@ Foundation #1–#15 remains the technical baseline. Issues #1–#7 were accepted
 - Completed and pushed the Issue #18 identity persistence foundation: migration version 2, internal user IDs, unique Google `sub` bindings, invitations, package-private admission/operator boundaries, and PostgreSQL security and upgrade tests.
 - Completed and pushed Issue #19: server-verified Google OIDC, invitation-gated admission, revocable sessions, CSRF-protected logout, minimal web sign-in, and Product Owner live local Google verification. Issue #19 is closed.
 - Completed Issue #20: reusable read and CSRF-protected mutation guards pass a server-validated owner ID; PostgreSQL integration tests cover cross-user isolation and invalid sessions. No domain schema or public product route was added.
+- Completed Issue #21 after Product Owner review: owner-scoped Finance migration version 4 and lightweight ledger services implement accounts, categories, events, movements, allocations, deterministic balances, history, archive, and audited void. Ordinary accounts may be negative because LifeOS records financial activity rather than authorizing bank overdrafts. PostgreSQL integration and full Go tests passed without touching personal data.
 
 ## In Progress
 
-No new implementation issue is in progress. [Issue #20](https://github.com/Faust217/LifeOS/issues/20) was completed after Product Owner review. It adds reusable protected-read and protected-mutation handlers that pass a server-derived `OwnerID` to future modules; a disposable PostgreSQL test fixture demonstrates owner-filtered reads and writes, cross-user denial, rejected client owner overrides, and session/CSRF failures. No product table, public API route, migration, frontend feature, or deployment was added.
+No product implementation issue is currently in progress. Issue #21 completed the Finance domain without a public Money API or UI. The existing personal LifeOS database remains untouched. Local source expects migration version 4, while the running Compose stack remains on its earlier image/schema until a separately authorized rollout.
+
+Issue #21 final verification passed: the full Go suite ran with Finance, OIDC/session, and identity PostgreSQL integration tests enabled; the populated version 3→4 upgrade and clean version-4 migration chain passed; `go vet ./...`, `go mod tidy -diff`, formatting, and `git diff --check` passed. The disposable test databases remain intact pending separate cleanup authorization.
 
 All 15 Foundation issues are implemented locally. Issues #1–#7 are accepted and closed; Issues #8–#15 await Product Owner review and GitHub closure. The Foundation milestone remains administratively open even though its technical implementation and local verification are complete.
 
@@ -77,7 +80,7 @@ The recommended order is represented by the issue numbers. Issues #3 and #4 may 
 
 ## Next Work Requiring Explicit Authorization
 
-1. Issue #21 needs separate Product Owner authorization. Foundation #8–#15 GitHub review/closure remains a separate administrative decision.
+1. Start Issue #22 only with separate authorization. Do not deploy or migrate the existing personal LifeOS database as part of Issue #21 completion. Foundation #8–#15 GitHub review/closure remains separate.
 2. Before any Internet-facing Alpha use, review TLS, secrets, database transport, operational limits, and tested backup/restore.
 3. Before V0.2 offline transaction synchronization, accept a focused ADR for reliability, idempotency, recovery, conflicts, and account/device boundaries. Bluecoins import remains V0.3 or later under ADR-009's safety rules.
 
@@ -87,7 +90,7 @@ The recommended order is represented by the issue numbers. Issues #3 and #4 may 
 | --- | --- |
 | Scope creep | Keep V0.1 to the approved invite-only online Alpha; defer offline sync, Bluecoins, and other modules |
 | Over-engineering | Preserve boundaries but implement one database, provider path, and deployment path only when needed |
-| Financial correctness | Integer money, correct transfer semantics, deterministic calculations, and service/integration tests |
+| Financial correctness | Issue #21 stores integer money, calculates balances from posted movements, keeps transfer allocations empty, rejects currency mismatch/overflow, and tests atomicity/concurrency; ordinary negative balances are explicitly allowed |
 | Database redesign and data loss | Stable meanings, forward migrations, upgrade tests, export, and restore-tested backups |
 | AI vendor churn or unsafe writes | Provider abstraction, Tool Gateway, explicit capability tiers, confirmation, and audit |
 | Identity or cross-user data exposure | Require both Google identity and invitation, revocable sessions, owner-scoped services/repositories, and negative isolation tests |
@@ -128,6 +131,7 @@ When work resumes:
 
 ### 2026-10-09
 
+- Created Issue #21 after checking for an equivalent issue. Migration 000004 and Finance service/repository work implement the ADR-004 lightweight ledger with owner-scoped composite foreign keys, currency and category-kind integrity, atomic writes, account locking, archival, and void metadata. The Product Owner approved negative ordinary-account balances in final review; regression tests cover expenses, transfers, concurrent posting, and income voids across zero. The full Go suite with PostgreSQL integration tests, populated version 3→4 upgrade, clean version-4 migration chain, `go vet`, `go mod tidy -diff`, formatting, and diff checks passed. No personal financial data, public Money route, UI, or deployment was changed.
 - Issue #19 was pushed and closed after Product Owner approval and live local Google verification. Issue #20 was created after checking for an equivalent issue and completed after Product Owner final review. Its owner-isolation integration subtest and full Go suite passed against disposable PostgreSQL databases; `go vet`, the clean migration chain at version 3, and `git diff --check` passed. The disposable test databases remain intact pending separate cleanup authorization.
 - On 2026-10-09 the Product Owner completed the local live Google OIDC gate: the invited owner signed in through Google, `/api/v1/admin/status` returned 204 without a redirect, a Google test user without a LifeOS invitation reached LifeOS and was denied, the owner session survived a page reload, and sign-out remained effective after reload. The API initially failed Google discovery because its BusyBox runtime lacked a CA bundle; the local Dockerfile now copies standard CA certificates from the build stage, and the rebuilt API became healthy without disabling TLS verification. Issue #19 was subsequently pushed and closed.
 - Product Owner authorized final Issue #19 review and completion. The full Go suite ran with both PostgreSQL integration tests enabled; the populated v2→v3 upgrade, guarded down migration, and clean version-3 chain passed. Invalid OIDC proofs, state/replay, PKCE, invitation/concurrent admission, fixed redirect, Secure/HttpOnly/SameSite cookies, CSRF, disabled users, expired/revoked sessions, and absent operator HTTP routes were checked. OpenAPI's two redirect-only 2xx warnings are documented and non-blocking. The live Google gate was completed later as recorded above.

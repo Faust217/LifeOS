@@ -21,7 +21,7 @@ go run ./cmd/lifeos-migrate down
 - Production migrations belong only in this directory. Test-only fixtures belong under `internal/platform/migrations/testdata` and must use isolated metadata tables.
 - Never use database reset or re-import as the normal upgrade path.
 
-The initial Foundation baseline intentionally creates no LifeOS domain table. It establishes a real, testable production chain while Finance schema remains out of scope.
+The initial Foundation baseline intentionally creates no LifeOS domain table. Migration 000004 introduces the first owner-scoped Finance tables. Its down migration refuses to remove populated financial history; use a reviewed forward correction or verified backup instead of dropping data.
 
 ## Failure and Dirty-State Recovery
 
