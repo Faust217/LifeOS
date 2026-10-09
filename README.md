@@ -6,7 +6,7 @@ LifeOS is a Life-first, mobile-first personal life management platform. It conne
 
 ## Repository Status
 
-The **Foundation** implementation is complete and was verified locally. It contains project-local configuration and migrations, operational Go API endpoints, a minimal React/Vite shell, an OpenAPI-to-TypeScript contract path, and a reproducible local Compose stack. [Issue #18](https://github.com/Faust217/LifeOS/issues/18) establishes identity persistence; authentication, sessions, Money, Goals, and product APIs remain unimplemented. The Product Owner approved the new direction in [Issue #16](https://github.com/Faust217/LifeOS/issues/16) and accepted ADR-013 and ADR-014 for the [Issue #17](https://github.com/Faust217/LifeOS/issues/17) documentation rebaseline.
+The **Foundation** implementation is complete and was verified locally. Issues #18–#22 added invitation-gated Google sign-in, secure sessions, owner-scoped authorization, the Money domain, and authenticated Money APIs. [Issue #23](https://github.com/Faust217/LifeOS/issues/23) added the mobile-first Today, Money, Plans, and Me shell. Money forms, Goals workflows, export, and backup/restore are still V0.1 work. The Product Owner approved the new direction in [Issue #16](https://github.com/Faust217/LifeOS/issues/16) and accepted ADR-013 and ADR-014 for the [Issue #17](https://github.com/Faust217/LifeOS/issues/17) documentation rebaseline.
 
 See [Foundation Startup](docs/FOUNDATION_STARTUP.md) for the clean local workflow and [Project State](docs/PROJECT_STATE.md) for the current review and authorization boundary.
 
@@ -48,4 +48,4 @@ The Word files remain the historical source baseline. The Product Owner-approved
 
 ## Current Boundary
 
-Foundation provides operational health/readiness behavior and an intentionally empty web shell, not a product slice. Issue #17 changed documentation only. Issue #18 adds local user, Google binding, and invitation persistence; sessions, authentication endpoints, Accounts, Categories, FinancialEvents, Goals, export, Bluecoins import, AI, and MCP remain unimplemented and require separately authorized work.
+The current web shell presents four real destinations, confirms the authenticated session before revealing personal pages, and offers working sign-out. Money and Plans screens intentionally contain no invented records or premature workflows. The Money APIs and ledger exist on the server; connecting them to a usable React Money screen requires a later issue. Goals, export, backup/restore, Bluecoins import, AI, and MCP require separately authorized work. See [web preview instructions](apps/web/README.md) for a local UI preview that does not change the personal database.

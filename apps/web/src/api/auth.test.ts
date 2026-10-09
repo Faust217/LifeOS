@@ -10,6 +10,11 @@ describe("auth API", () => {
     await expect(fetchCurrentUser()).resolves.toBeNull();
   });
 
+  it("does not treat a missing Auth API as a signed-out session", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ status: 404, ok: false }));
+    await expect(fetchCurrentUser()).rejects.toThrow("Unable to check sign-in status");
+  });
+
   it("sends the session CSRF token on sign-out", async () => {
     const request = vi.fn().mockResolvedValue({ ok: true });
     vi.stubGlobal("fetch", request);
@@ -19,5 +24,10 @@ describe("auth API", () => {
       credentials: "same-origin",
       headers: { "X-CSRF-Token": "test-csrf-token" },
     });
+  });
+
+  it("treats an already expired session as signed out", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ status: 401, ok: false }));
+    await expect(signOut("expired-session-csrf")).resolves.toBeUndefined();
   });
 });
