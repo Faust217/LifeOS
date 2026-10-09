@@ -209,6 +209,7 @@ Exports must include complete structured JSON for core data and useful CSV finan
 
 - Google authentication alone is insufficient: an invitation and an authorized LifeOS session are required for V0.1.
 - Scope every user-owned read, write, summary, and export to the authenticated owner; never trust an arbitrary client-supplied owner ID. Test cross-user denial.
+- For future owner-owned records, `Auth.RequireRead` and `Auth.RequireMutation` pass an `identity.OwnerID` obtained from the active server-side session and reject known client owner query/header fields. Application services accept that value, and repositories reject an empty owner and bind both `owner_id` and record ID in read and mutation predicates. Treat a cross-user record as absent; validate request bodies so client owner fields cannot override the session owner. These guards do not replace each module's domain validation or isolation tests.
 - Protected and owner-admin paths have separate authorization boundaries. Future aggregate admin metrics must not expose raw private financial records unnecessarily.
 - Any network-exposed installation requires secure authentication, HTTPS, database transport security, backup, and reviewed operational endpoint exposure.
 - Keep provider secrets in environment or secret files and never return them to clients or models.

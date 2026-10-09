@@ -274,8 +274,8 @@ func TestOIDCAndSessionIntegration(t *testing.T) {
 	if ownerCookie.HttpOnly != true || ownerCookie.SameSite != http.SameSiteLaxMode {
 		t.Fatal("session cookie lacks protections")
 	}
-	protected := auth.RequireMutation(func(w http.ResponseWriter, _ *http.Request, user User) {
-		w.Header().Set("X-LifeOS-Owner", user.ID)
+	protected := auth.RequireMutation(func(w http.ResponseWriter, _ *http.Request, owner OwnerID) {
+		w.Header().Set("X-LifeOS-Owner", owner.String())
 		w.WriteHeader(http.StatusNoContent)
 	})
 	protectedRequest := httptest.NewRequest(http.MethodPost, "/future-write", nil)
@@ -337,6 +337,9 @@ func TestOIDCAndSessionIntegration(t *testing.T) {
 	if got := withCookie(router, "/api/v1/admin/status", testerCookie).Code; got != http.StatusForbidden {
 		t.Fatalf("non-admin access status=%d", got)
 	}
+	t.Run("owner-scoped authorization", func(t *testing.T) {
+		testOwnerScope(t, pool, auth, owner, ownerCookie, testerCookie)
+	})
 
 	var wg sync.WaitGroup
 	results := make(chan int, 2)

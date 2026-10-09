@@ -261,17 +261,52 @@ func (a *Auth) authorizeMutation(w http.ResponseWriter, r *http.Request) (User, 
 	return user, secret, true
 }
 
-// RequireMutation lets future modules receive a server-verified owner without
-// exposing the session secret. Route handlers wrapped here must still validate
-// their domain inputs and scope repository access to user.ID.
-func (a *Auth) RequireMutation(next func(http.ResponseWriter, *http.Request, User)) http.HandlerFunc {
+// RequireRead lets future modules receive a server-verified owner for GET or
+// HEAD handlers. It validates the current session and user on every request.
+func (a *Auth) RequireRead(next func(http.ResponseWriter, *http.Request, OwnerID)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		user, _, err := a.currentUser(r)
+		if err != nil {
+			http.Error(w, "Authentication required", http.StatusUnauthorized)
+			return
+		}
+		if clientOwnerOverride(r) {
+			http.Error(w, "Owner override is not accepted", http.StatusBadRequest)
+			return
+		}
+		next(w, r, OwnerID{value: user.ID})
+	}
+}
+
+// RequireMutation reuses the existing Origin/session/CSRF guard and passes
+// only the server-verified owner ID. Handlers must validate their domain inputs
+// and repositories must include both owner_id and record ID in SQL predicates.
+func (a *Auth) RequireMutation(next func(http.ResponseWriter, *http.Request, OwnerID)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		if r.Method != http.MethodPost && r.Method != http.MethodPut && r.Method != http.MethodPatch && r.Method != http.MethodDelete {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
 		user, _, ok := a.authorizeMutation(w, r)
 		if !ok {
 			return
 		}
-		next(w, r, user)
+		if clientOwnerOverride(r) {
+			http.Error(w, "Owner override is not accepted", http.StatusBadRequest)
+			return
+		}
+		next(w, r, OwnerID{value: user.ID})
 	}
+}
+
+func clientOwnerOverride(r *http.Request) bool {
+	return r.URL.Query().Has("owner_id") || r.Header.Get("X-LifeOS-Owner") != ""
 }
 
 func (a *Auth) createSession(ctx context.Context, userID string) (string, error) {

@@ -96,6 +96,8 @@ Every future implementation issue must include a concise explanation of the impl
 
 For each step, record the exact file path and function name, input and output, main processing logic, the next function called, error handling, and relevant tests. Label names as **proposed** before code exists. Mark a genuinely non-applicable step **N/A** with a reason. Update the explanation to actual implementation names before closing the issue. Keep it understandable to a developer learning the codebase; include it in the implementation issue's completion report and corresponding learning entry.
 
+Present future learning notes in mobile-friendly Markdown: a Mermaid diagram of the actual function call chain, then short tables using **Input → Function → Process → Output → Next Function**. Use exact source paths and real function names, explain errors and tests concisely, and avoid wide tables or long code blocks. This is documentation for later self-study; continue the DEVELOPMENT-FIRST workflow without interactive teaching pauses.
+
 ## Local Machine Safety
 
 - Treat files outside the LifeOS repository as read-only by default.

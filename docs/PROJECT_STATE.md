@@ -2,9 +2,9 @@
 
 **Last updated:** 2026-10-09
 
-**Current milestone:** Issue #19 OIDC sign-in and sessions verified locally; push and closure await Product Owner approval
+**Current milestone:** Issue #20 owner-scoped authorization boundary completed; Issue #21 awaits separate authorization
 
-**Product milestone:** Invite-only online V0.1 Alpha approved in Issue #16; identity and sign-in foundation in progress
+**Product milestone:** Invite-only online V0.1 Alpha approved in Issue #16; identity, sign-in, and owner-scoped module boundary completed
 
 **Blueprint:** Master Project Blueprint v0.2 is the historical baseline; Issue #16 is the approved current product direction
 
@@ -12,7 +12,7 @@
 
 The Product Owner approved the [Issue #16 Product & Architecture Rebaseline](https://github.com/Faust217/LifeOS/issues/16): LifeOS becomes a Life-first, mobile-first platform whose V0.1 is an invite-only, online Alpha for the owner and a few testers. The Product Owner also approved ADR-013 and ADR-014 in [Issue #17](https://github.com/Faust217/LifeOS/issues/17). ADR-013 supersedes ADR-008's single-user V0.x scope and ADR-009's Bluecoins-in-V0.1 timing; owner scoping and safe import/export remain in force. Historical ADR-008/009 files remain untouched. Issues #18 and #19 establish identity persistence and the local OIDC/session flow. The Product Owner manually verified the live Google flow on local Compose on 2026-10-09; Internet-facing Alpha readiness remains a separate gate.
 
-Foundation #1–#15 remains the technical baseline. Issues #1–#7 were accepted and closed. Issues #8–#15 were implemented and verified locally in separate commits; their GitHub review and closure remain pending. The chain covers configuration, PostgreSQL, migrations, operational API health/readiness, OpenAPI-generated TypeScript types, the minimal web shell, and Compose startup. Issue #18 supplies identity persistence. Issue #19 implements OAuth verification, invitation-gated admission, sessions, and a minimal sign-in page locally; Money and Goals remain unimplemented.
+Foundation #1–#15 remains the technical baseline. Issues #1–#7 were accepted and closed. Issues #8–#15 were implemented and verified locally in separate commits; their GitHub review and closure remain pending. The chain covers configuration, PostgreSQL, migrations, operational API health/readiness, OpenAPI-generated TypeScript types, the minimal web shell, and Compose startup. Issue #18 supplies identity persistence. Issue #19 supplied OAuth verification, invitation-gated admission, sessions, and a minimal sign-in page; Money and Goals remain unimplemented.
 
 ## Completed
 
@@ -44,10 +44,12 @@ Foundation #1–#15 remains the technical baseline. Issues #1–#7 were accepted
 - Implemented and verified Issue #14 locally with pinned `openapi-typescript` 7.13.0, committed generated Foundation types, deterministic stale-output checking, and web compilation against generated DTOs; remote review and closure remain pending.
 - Implemented and verified Issue #15 locally with a clean project-local startup guide and an isolated end-to-end Foundation check covering dependency bootstrap, tests, contracts, generated types, Compose, migrations, API readiness, and the web shell; remote review and closure remain pending.
 - Completed and pushed the Issue #18 identity persistence foundation: migration version 2, internal user IDs, unique Google `sub` bindings, invitations, package-private admission/operator boundaries, and PostgreSQL security and upgrade tests.
+- Completed and pushed Issue #19: server-verified Google OIDC, invitation-gated admission, revocable sessions, CSRF-protected logout, minimal web sign-in, and Product Owner live local Google verification. Issue #19 is closed.
+- Completed Issue #20: reusable read and CSRF-protected mutation guards pass a server-validated owner ID; PostgreSQL integration tests cover cross-user isolation and invalid sessions. No domain schema or public product route was added.
 
 ## In Progress
 
-Issue #17 and [Issue #18](https://github.com/Faust217/LifeOS/issues/18) are completed. [Issue #19](https://github.com/Faust217/LifeOS/issues/19) has passed final local security review and Product Owner live Google verification. It adds server-verified Google OIDC with state, nonce, and PKCE; invitation-gated admission; revocable PostgreSQL sessions; a reusable Origin/session/CSRF guard for writes; protected current-user and owner-admin checks; a local-only invitation operator; and a minimal web sign-in page. The Issue #18 identity trust boundary stays package-private. No Finance, Goals, Admin Dashboard, offline sync, or cloud deployment is added. The local API image now includes a standard CA certificate bundle so OIDC provider discovery retains TLS verification. Final push and Issue #19 closure await Product Owner approval.
+No new implementation issue is in progress. [Issue #20](https://github.com/Faust217/LifeOS/issues/20) was completed after Product Owner review. It adds reusable protected-read and protected-mutation handlers that pass a server-derived `OwnerID` to future modules; a disposable PostgreSQL test fixture demonstrates owner-filtered reads and writes, cross-user denial, rejected client owner overrides, and session/CSRF failures. No product table, public API route, migration, frontend feature, or deployment was added.
 
 All 15 Foundation issues are implemented locally. Issues #1–#7 are accepted and closed; Issues #8–#15 await Product Owner review and GitHub closure. The Foundation milestone remains administratively open even though its technical implementation and local verification are complete.
 
@@ -75,8 +77,8 @@ The recommended order is represented by the issue numbers. Issues #3 and #4 may 
 
 ## Next Work Requiring Explicit Authorization
 
-1. After final local checks, obtain Product Owner approval before pushing the verified Issue #19 work and closing its GitHub issue. Foundation #8–#15 GitHub review/closure remains a separate administrative decision.
-2. Before any Internet-facing Alpha use, review TLS, secrets, database transport, operational limits, and tested backup/restore. Do not begin Issue #20 without authorization.
+1. Issue #21 needs separate Product Owner authorization. Foundation #8–#15 GitHub review/closure remains a separate administrative decision.
+2. Before any Internet-facing Alpha use, review TLS, secrets, database transport, operational limits, and tested backup/restore.
 3. Before V0.2 offline transaction synchronization, accept a focused ADR for reliability, idempotency, recovery, conflicts, and account/device boundaries. Bluecoins import remains V0.3 or later under ADR-009's safety rules.
 
 ## Known Risks
@@ -126,7 +128,8 @@ When work resumes:
 
 ### 2026-10-09
 
-- On 2026-10-09 the Product Owner completed the local live Google OIDC gate: the invited owner signed in through Google, `/api/v1/admin/status` returned 204 without a redirect, a Google test user without a LifeOS invitation reached LifeOS and was denied, the owner session survived a page reload, and sign-out remained effective after reload. The API initially failed Google discovery because its BusyBox runtime lacked a CA bundle; the local Dockerfile now copies standard CA certificates from the build stage, and the rebuilt API became healthy without disabling TLS verification. Final push and Issue #19 closure remain unapproved.
+- Issue #19 was pushed and closed after Product Owner approval and live local Google verification. Issue #20 was created after checking for an equivalent issue and completed after Product Owner final review. Its owner-isolation integration subtest and full Go suite passed against disposable PostgreSQL databases; `go vet`, the clean migration chain at version 3, and `git diff --check` passed. The disposable test databases remain intact pending separate cleanup authorization.
+- On 2026-10-09 the Product Owner completed the local live Google OIDC gate: the invited owner signed in through Google, `/api/v1/admin/status` returned 204 without a redirect, a Google test user without a LifeOS invitation reached LifeOS and was denied, the owner session survived a page reload, and sign-out remained effective after reload. The API initially failed Google discovery because its BusyBox runtime lacked a CA bundle; the local Dockerfile now copies standard CA certificates from the build stage, and the rebuilt API became healthy without disabling TLS verification. Issue #19 was subsequently pushed and closed.
 - Product Owner authorized final Issue #19 review and completion. The full Go suite ran with both PostgreSQL integration tests enabled; the populated v2→v3 upgrade, guarded down migration, and clean version-3 chain passed. Invalid OIDC proofs, state/replay, PKCE, invitation/concurrent admission, fixed redirect, Secure/HttpOnly/SameSite cookies, CSRF, disabled users, expired/revoked sessions, and absent operator HTTP routes were checked. OpenAPI's two redirect-only 2xx warnings are documented and non-blocking. The live Google gate was completed later as recorded above.
 - Created Issue #19 after checking for an equivalent issue. Local work adds Google OIDC verification, anti-forgery/replay checks, invitation admission, revocable sessions, a protected current-user API, local operator command, OpenAPI contract, and web sign-in UI. Automated local-provider tests are distinct from a live Google test.
 - Created Issue #18 after checking for an equivalent issue. Local work adds migration version 2 and minimal identity persistence under ADR-014. Package-private bootstrap/revocation methods require explicit internal operator authorization; no production issuer or network path exists yet. The designated bootstrap invitation alone grants the owner-admin flag, while ordinary invitations never do so, including under concurrent acceptance. Admission takes a package-private verified-identity value; a later OIDC service must construct it only after server-side validation. Later services must derive the admin ID from a verified session. An explicit PostgreSQL integration run passed the version 1→2 upgrade, security/integrity checks, and data-preserving down-migration refusal. The full Go suite, `go vet`, and clean migration-chain verifier also passed locally.
