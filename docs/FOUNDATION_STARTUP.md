@@ -6,7 +6,7 @@
 
 This is the clean, project-local workflow for validating and starting the LifeOS Foundation stack. It covers configuration, PostgreSQL, migrations, the operational Go API, the OpenAPI-generated TypeScript boundary, and the minimal React/Vite web shell.
 
-The workflow needs no LifeOS Finance data or private personal data. It does not create Owner, Account, Category, FinancialEvent, Bluecoins import, or other product behavior.
+The workflow needs no LifeOS Finance data or private personal data. The current migration chain includes Issue #18's identity tables, while Account, Category, FinancialEvent, Bluecoins import, and product endpoints remain absent.
 
 Run all commands from the repository root. The expected tool versions and read-only environment record are in `docs/DEVELOPMENT_ENVIRONMENT.md`.
 
@@ -67,7 +67,7 @@ Invoke-RestMethod http://127.0.0.1:8080/readyz
 Invoke-RestMethod http://127.0.0.1:4173/healthz
 ```
 
-The migration command should report version `1` with `dirty=false`. Liveness should report `ok`; readiness should report `ready`, a healthy database, and current clean migration version `1`. The web-origin health request proves the web server can reach the API through its same-origin proxy.
+The migration command should report the current version `2` with `dirty=false` after Issue #18's migration. Liveness should report `ok`; readiness should report `ready`, a healthy database, and current clean migration version `2`. The web-origin health request proves the web server can reach the API through its same-origin proxy.
 
 Open `http://127.0.0.1:4173` to inspect the Foundation shell. It intentionally contains no product screen or private data.
 

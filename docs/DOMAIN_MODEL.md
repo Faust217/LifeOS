@@ -25,7 +25,7 @@ V0.1 adds independent invited users and simple checklist Goals. A LifeOS account
 
 ```text
 LifeOS user / Owner (one independent data boundary per admitted user)
-├─ Identity (invitation, Google identity binding, session; conceptual only)
+├─ Identity (user, invitation, Google identity binding in Issue #18; session later)
 ├─ Finance
 │  ├─ Account
 │  ├─ FinancialEvent
@@ -61,7 +61,7 @@ LifeOS user / Owner (one independent data boundary per admitted user)
 - Plan and travel calendar dates may use date-only types where time-of-day is not meaningful.
 - Money uses integer minor units plus currency.
 - State fields use controlled values, constraints, or lookup tables rather than arbitrary text.
-- Identity, invitations, and sessions are access-control records, not financial or planning facts. Accepted ADR-014 governs their boundary; their final schema requires dedicated migrations in an authorized implementation issue.
+- Identity, invitations, and sessions are access-control records, not financial or planning facts. Accepted ADR-014 governs their boundary. Issue #18 adds user, Google identity binding, and invitation tables; persisted sessions remain for a later issue.
 
 ## Finance
 
@@ -211,10 +211,12 @@ External client/session metadata supports adapters such as MCP without making th
 
 ## Conceptual Storage Sketch
 
-The following is a vocabulary and ownership sketch, not final SQL. Identity support records and the exact Goal persistence shape are deliberately unnamed until accepted ADRs and scoped schema work:
+The following is a vocabulary and ownership sketch, not final SQL. Issue #18 defines identity persistence in its own migration; the exact Goal persistence shape remains deferred to scoped planning work:
 
 ```text
-owners (one independent owner per admitted LifeOS user)
+lifeos_users (one independent owner per admitted LifeOS user; migration 000002)
+google_identities (unique Google sub binding; migration 000002)
+invitations (admission record; migration 000002)
 accounts
 categories
 financial_events

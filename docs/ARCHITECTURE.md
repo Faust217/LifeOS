@@ -86,7 +86,7 @@ api/openapi/
 deploy/
 ```
 
-The listed areas exist as Foundation structure. Domain packages are placeholders; there are no product tables or workflows yet.
+The listed areas exist as Foundation structure. Issue #18 adds identity persistence tables and repository methods; OAuth, sessions, user-owned domain tables, and product workflows remain unimplemented.
 
 ### Boundary Rules
 

@@ -2,17 +2,17 @@
 
 **Last updated:** 2026-10-09
 
-**Current milestone:** Issue #17 documentation/ADR rebaseline approved; Foundation implementation retained
+**Current milestone:** Issue #18 identity persistence foundation completed; Foundation implementation retained
 
-**Product milestone:** Invite-only online V0.1 Alpha approved in Issue #16; implementation not started
+**Product milestone:** Invite-only online V0.1 Alpha approved in Issue #16; identity schema work has begun locally
 
 **Blueprint:** Master Project Blueprint v0.2 is the historical baseline; Issue #16 is the approved current product direction
 
 ## Current Status
 
-The Product Owner approved the [Issue #16 Product & Architecture Rebaseline](https://github.com/Faust217/LifeOS/issues/16): LifeOS becomes a Life-first, mobile-first platform whose V0.1 is an invite-only, online Alpha for the owner and a few testers. The Product Owner also approved ADR-013 and ADR-014 in [Issue #17](https://github.com/Faust217/LifeOS/issues/17). ADR-013 supersedes ADR-008's single-user V0.x scope and ADR-009's Bluecoins-in-V0.1 timing; owner scoping and safe import/export remain in force. Historical ADR-008/009 files remain untouched. No product implementation has started.
+The Product Owner approved the [Issue #16 Product & Architecture Rebaseline](https://github.com/Faust217/LifeOS/issues/16): LifeOS becomes a Life-first, mobile-first platform whose V0.1 is an invite-only, online Alpha for the owner and a few testers. The Product Owner also approved ADR-013 and ADR-014 in [Issue #17](https://github.com/Faust217/LifeOS/issues/17). ADR-013 supersedes ADR-008's single-user V0.x scope and ADR-009's Bluecoins-in-V0.1 timing; owner scoping and safe import/export remain in force. Historical ADR-008/009 files remain untouched. Issue #18 identity persistence has started locally, but product access and workflows are unimplemented.
 
-Foundation #1–#15 remains the technical baseline. Issues #1–#7 were accepted and closed. Issues #8–#15 were implemented and verified locally in separate commits; their GitHub review and closure remain pending. The chain covers configuration, PostgreSQL, migrations, operational API health/readiness, OpenAPI-generated TypeScript types, the minimal web shell, and Compose startup. It contains no user, identity, Money, or Goal product behavior.
+Foundation #1–#15 remains the technical baseline. Issues #1–#7 were accepted and closed. Issues #8–#15 were implemented and verified locally in separate commits; their GitHub review and closure remain pending. The chain covers configuration, PostgreSQL, migrations, operational API health/readiness, OpenAPI-generated TypeScript types, the minimal web shell, and Compose startup. Issue #18 adds local identity persistence work; OAuth, sessions, Money, and Goals remain unimplemented.
 
 ## Completed
 
@@ -43,10 +43,11 @@ Foundation #1–#15 remains the technical baseline. Issues #1–#7 were accepted
 - Implemented and verified Issue #13 locally with a canonical OpenAPI 3.1 contract for `/healthz` and `/readyz`, stable status/error schemas, explicit versioning guidance, and clean pinned Redocly validation; remote review and closure remain pending.
 - Implemented and verified Issue #14 locally with pinned `openapi-typescript` 7.13.0, committed generated Foundation types, deterministic stale-output checking, and web compilation against generated DTOs; remote review and closure remain pending.
 - Implemented and verified Issue #15 locally with a clean project-local startup guide and an isolated end-to-end Foundation check covering dependency bootstrap, tests, contracts, generated types, Compose, migrations, API readiness, and the web shell; remote review and closure remain pending.
+- Completed the Issue #18 identity persistence foundation locally: migration version 2, internal user IDs, unique Google `sub` bindings, invitations, package-private admission/operator boundaries, and PostgreSQL security and upgrade tests. OAuth and sessions remain later work.
 
 ## In Progress
 
-Issue #17 documentation and ADR-013/014 are approved. The Product Owner authorized committing, pushing, and closing Issue #17 after verification. Issue #16 remains the product decision record; no Issue #18 implementation has started.
+Issue #17 is completed and closed; ADR-013/014 are accepted. [Issue #18](https://github.com/Faust217/LifeOS/issues/18) implements migration version 2 for LifeOS users, separate unique Google `sub` bindings, and invitations, plus package-private repository operations and tests. Bootstrap requires an internal trusted-operator authorization with no production issuer or network route yet; admission accepts only a package-private verified-identity value that a later server-side OIDC verifier must construct. No OAuth, session, API, frontend, finance, or deployment behavior is present. Issue #18's GitHub disposition is tracked in its issue.
 
 All 15 Foundation issues are implemented locally. Issues #1–#7 are accepted and closed; Issues #8–#15 await Product Owner review and GitHub closure. The Foundation milestone remains administratively open even though its technical implementation and local verification are complete.
 
@@ -74,8 +75,8 @@ The recommended order is represented by the issue numbers. Issues #3 and #4 may 
 
 ## Next Work Requiring Explicit Authorization
 
-1. Separately authorize Issue #18 or another scoped implementation issue before writing product code, schema, APIs, or deployments. Foundation #8–#15 GitHub review/closure remains a separate administrative decision.
-2. Scope the first implementation issues in dependency order: users/invitations, Google sessions, owner isolation, Money domain and API, mobile navigation/workflows, checklist Goals, Today/Me/export, and Alpha restore/security/cost verification.
+1. Scope the later OIDC/session and trusted local operator work only after separate authorization. Foundation #8–#15 GitHub review/closure remains a separate administrative decision.
+2. After separate authorization, scope Google OIDC verification, invitation admission, session authorization, and a trusted local owner invitation administration entry point before user-owned product data or Internet exposure.
 3. Before V0.2 offline transaction synchronization, accept a focused ADR for reliability, idempotency, recovery, conflicts, and account/device boundaries. Bluecoins import remains V0.3 or later under ADR-009's safety rules.
 
 ## Known Risks
@@ -101,7 +102,7 @@ These decisions are intentionally deferred to their real decision points:
 | Decision | Latest decision point | Baseline direction |
 | --- | --- | --- |
 | Web UI component library | Before the first production UI screen | Choose an actively maintained, accessible library |
-| Invitation bootstrap/revocation and session details | First identity implementation issue | Follow accepted ADR-014; document and test the concrete flow |
+| Invitation operator entry point and session details | Later identity application/API issue | Use the Issue #18 repository's one-time bootstrap and active owner-admin guards; derive admin ID from a verified session, never a client field |
 | Offline sync architecture | Before V0.2 implementation | Accept a focused ADR; do not prebuild a protocol in V0.1 |
 | Cloud test provider and spending controls | Before paid or Internet-facing testing | Review concrete cost, TLS, secrets, backup, and shutdown plan |
 | First Ollama model | Only if a later AI milestone is authorized | Evaluate against actual hardware and tool needs |
@@ -124,6 +125,7 @@ When work resumes:
 
 ### 2026-10-09
 
+- Created Issue #18 after checking for an equivalent issue. Local work adds migration version 2 and minimal identity persistence under ADR-014. Package-private bootstrap/revocation methods require explicit internal operator authorization; no production issuer or network path exists yet. The designated bootstrap invitation alone grants the owner-admin flag, while ordinary invitations never do so, including under concurrent acceptance. Admission takes a package-private verified-identity value; a later OIDC service must construct it only after server-side validation. Later services must derive the admin ID from a verified session. An explicit PostgreSQL integration run passed the version 1→2 upgrade, security/integrity checks, and data-preserving down-migration refusal. The full Go suite, `go vet`, and clean migration-chain verifier also passed locally.
 - Product Owner approved Issue #16's Life-first, mobile-first, invite-only multi-user rebaseline. The original single-user scope and Bluecoins-first V0.1 timing are intentionally replaced as product direction; ADR-008/009 historical files remain preserved.
 - Created Issue #17 for documentation and ADR rebaseline. The Product Owner reviewed and accepted ADR-013/014, then authorized documentation-only commit, push, and Issue #17 closure after verification. No code, API, schema, migration, deployment, or Issue #18 work was authorized.
 - V0.1 is an online Alpha with Today/Money/Plans/Me, invitation-gated Google identity, user isolation, suitable export, security tests, and tested backup/restore. V0.2 adds offline capture/sync and Wishlist after an accepted sync ADR; Bluecoins import is V0.3 or later.
