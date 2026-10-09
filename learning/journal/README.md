@@ -10,5 +10,6 @@ Do not store secrets, API keys, passwords, raw private financial data, or full s
 
 Current entries:
 
+- [2026-10-09: Google OIDC and sessions](2026-10-09-google-oidc-sessions.md) - server verification, invitations, protected cookies, local operator, tests, and function-level data flow.
 - [2026-10-09: Identity persistence foundation](2026-10-09-identity-persistence.md) - user and invitation schema, Google `sub` binding, operator bootstrap boundary, and function-level data flow.
 - [2026-08-17: Monorepo skeleton](2026-08-17-monorepo-skeleton.md) - dependency-free Go/web workspace structure, ownership boundaries, and structural checks.

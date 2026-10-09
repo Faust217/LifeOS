@@ -1,8 +1,8 @@
 # LifeOS Foundation Configuration
 
-**Status:** Accepted; Issue #5 completed and ready to close
+**Status:** Foundation contract accepted; Issue #19 adds an identity configuration extension
 
-**Last updated:** 2026-08-19
+**Last updated:** 2026-10-09
 
 ## Purpose and Boundary
 
@@ -14,11 +14,11 @@ The Foundation configuration contract covers runtime and platform concerns neede
 - logging level;
 - web-client API location.
 
-This contract defines names, defaults, validation, precedence, and secret-handling expectations. It does not implement a configuration loader or start any process.
+This contract defines names, defaults, validation, precedence, and secret-handling expectations. Issue #7 implemented the loader; Issue #19 extends it with server-only identity settings.
 
 ## Sources and Precedence
 
-The future application configuration loader must resolve values in this order:
+The application configuration loader resolves values in this order:
 
 1. process environment variables;
 2. the project-root `.env` file;
@@ -46,9 +46,20 @@ A higher-precedence value overrides a lower-precedence value. No CLI configurati
 
 The PostgreSQL fields remain separate. LifeOS does not define a duplicate `DATABASE_URL` setting at this stage.
 
+## Issue #19 Identity Extension
+
+| Key | Purpose | Default | Validation and sensitivity |
+| --- | --- | --- | --- |
+| `LIFEOS_OIDC_CLIENT_ID` | Google Web application client ID | Empty in local Foundation mode | Required with the client secret to enable sign-in; required in production |
+| `LIFEOS_OIDC_CLIENT_SECRET` | Server-side Google client secret | Empty in local Foundation mode | Required with client ID; never use a `VITE_*` key or commit it |
+| `LIFEOS_OIDC_ISSUER` | OIDC discovery issuer | `https://accounts.google.com` | Fixed to Google outside tests; test mode permits a local provider double |
+| `LIFEOS_AUTH_PUBLIC_ORIGIN` | Exact browser origin used for redirects and logout Origin checks | `http://127.0.0.1:4173` | Origin only, no path; HTTP is limited to localhost, and production requires HTTPS |
+
+See [local authentication setup](AUTH_LOCAL_SETUP.md) for the Google redirect URI, invitation bootstrap, and demo procedure. The client ID may be public, but the secret and session cookies are server-only.
+
 ## Validation and Failure Behavior
 
-The future loader must resolve the precedence chain and validate the resulting configuration before application startup. Startup must fail when a value is:
+The loader resolves the precedence chain and validates the resulting configuration before application startup. Startup fails when a value is:
 
 - missing when required;
 - malformed;
@@ -77,7 +88,6 @@ The following are explicitly deferred:
 - Finance or other domain settings;
 - AI provider and model settings;
 - MCP configuration;
-- remote authentication;
 - TLS;
 - hosted secret management.
 

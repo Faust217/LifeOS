@@ -53,7 +53,7 @@ func TestIdentityMigrationAndRepository(t *testing.T) {
 	if version, dirty, err := runner.Version(); err != nil || version != 1 || dirty {
 		t.Fatalf("Foundation version = %d dirty=%t err=%v", version, dirty, err)
 	}
-	if err := runner.Up(); err != nil {
+	if err := runner.Steps(1); err != nil {
 		t.Fatalf("upgrade version 1 to identity version 2: %v", err)
 	}
 	if version, dirty, err := runner.Version(); err != nil || version != 2 || dirty {
@@ -61,7 +61,7 @@ func TestIdentityMigrationAndRepository(t *testing.T) {
 	}
 
 	repo := newRepository(pool)
-	operator := operatorAuthorization{approved: true} // Test-only stand-in for a future authenticated local operator.
+	operator := operatorAuthorization{approved: true} // Test-only stand-in for the confirmed local operator command.
 	expiry := time.Now().Add(2 * time.Hour)
 	if _, err := repo.bootstrapOwnerInvitation(ctx, operatorAuthorization{}, "Owner@Example.com", expiry); !errors.Is(err, ErrOperatorRequired) {
 		t.Fatalf("unauthorized bootstrap error = %v", err)

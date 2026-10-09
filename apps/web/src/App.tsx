@@ -1,11 +1,31 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
+import { fetchCurrentUser, signOut, type CurrentUser } from "./api/auth";
 import { fetchHealth } from "./api/client";
 
 type CheckState = "idle" | "checking" | "healthy" | "unavailable";
 
 export function App() {
   const [checkState, setCheckState] = useState<CheckState>("idle");
+  const [user, setUser] = useState<CurrentUser | null>(null);
+  const [authState, setAuthState] = useState("Checking sign-in status…");
+
+  useEffect(() => {
+    void fetchCurrentUser()
+      .then((current) => { setUser(current); setAuthState(current ? "Signed in" : "Sign in with an invited Google account."); })
+      .catch(() => setAuthState("Sign-in status is unavailable."));
+  }, []);
+
+  async function handleSignOut() {
+    if (!user) return;
+    try {
+      await signOut(user.csrf_token);
+      setUser(null);
+      setAuthState("Signed out.");
+    } catch {
+      setAuthState("Sign-out failed. Please try again.");
+    }
+  }
 
   async function checkAPI() {
     setCheckState("checking");
@@ -21,10 +41,22 @@ export function App() {
     <main className="shell">
       <section className="foundation" aria-labelledby="foundation-title">
         <p className="eyebrow">LifeOS</p>
-        <h1 id="foundation-title">Foundation is taking shape.</h1>
+        <h1 id="foundation-title">Your life, in one place.</h1>
         <p className="summary">
-          The durable server, database, and web boundaries are being established before any personal finance features are added.
+          Invite-only Alpha sign-in is ready for local testing. Life features will follow.
         </p>
+        <div className="status-panel">
+          <h2>Account</h2>
+          <p aria-live="polite">{authState}</p>
+          {user ? (
+            <>
+              <p>{user.email}</p>
+              <button type="button" onClick={() => void handleSignOut()}>Sign out</button>
+            </>
+          ) : (
+            <a href="/api/v1/auth/start">Sign in with Google</a>
+          )}
+        </div>
         <div className="status-panel">
           <h2>API connection</h2>
           <p aria-live="polite">{statusMessage(checkState)}</p>

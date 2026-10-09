@@ -37,6 +37,9 @@ func (database *PostgreSQL) Close() {
 	database.pool.Close()
 }
 
+// Pool is exposed only to the composition root for module-owned repositories.
+func (database *PostgreSQL) Pool() *pgxpool.Pool { return database.pool }
+
 // Ping reports whether PostgreSQL accepts a connection.
 func (database *PostgreSQL) Ping(ctx context.Context) error {
 	return database.pool.Ping(ctx)

@@ -40,16 +40,16 @@ const (
 	InvitationRevoked  InvitationState = "revoked"
 )
 
-// verifiedGoogleIdentity cannot be constructed by a handler or another package.
-// A later server-side OIDC verifier must create it only after checking the token.
+// verifiedGoogleIdentity cannot be constructed by a handler in another package.
+// Auth.callback creates it only after server-side ID-token and nonce verification.
 type verifiedGoogleIdentity struct {
 	sub           string
 	email         string
 	emailVerified bool
 }
 
-// operatorAuthorization is deliberately private and has no production issuer in #18.
-// A later local-only operator adapter must authenticate the operator before setting approved.
+// operatorAuthorization is deliberately private. The local-only operator command
+// requires explicit confirmation and loopback database access before approval.
 type operatorAuthorization struct{ approved bool }
 
 // repository owns identity persistence. Only a future identity service in this package can invoke it.
@@ -152,7 +152,7 @@ func (r *repository) revokeBootstrapInvitation(ctx context.Context, operator ope
 }
 
 // createInvitation permits only an active owner administrator to invite a tester.
-// A future identity service must derive adminID from a verified server-side session.
+// The local operator supplies adminID after confirming trusted database access.
 func (r *repository) createInvitation(ctx context.Context, adminID, email string, expiresAt time.Time) (string, error) {
 	email, err := normalizeEmail(email)
 	if err != nil || !expiresAt.After(time.Now()) || adminID == "" {
@@ -197,8 +197,8 @@ func (r *repository) revokeInvitation(ctx context.Context, adminID, invitationID
 }
 
 // acceptInvitation atomically consumes one invitation and binds one stable Google sub.
-// No outside package can pass client claims as a verified identity; a future OIDC
-// service in this package must validate the token before calling this method.
+// No outside package can pass client claims as a verified identity; Auth.callback
+// validates the server-side ID token before calling this method.
 func (r *repository) acceptInvitation(ctx context.Context, invitationID string, identity verifiedGoogleIdentity) (User, error) {
 	email, err := normalizeEmail(identity.email)
 	if err != nil || !identity.emailVerified || strings.TrimSpace(identity.sub) != identity.sub || len(identity.sub) == 0 || len(identity.sub) > 255 || invitationID == "" {
@@ -255,7 +255,7 @@ func (r *repository) acceptInvitation(ctx context.Context, invitationID string, 
 }
 
 // findByGoogleSub resolves the internal owner ID without using email as a key.
-// A future identity service must supply a sub from a verified token.
+// Auth.admitVerifiedIdentity supplies a sub from a server-verified token.
 func (r *repository) findByGoogleSub(ctx context.Context, sub string) (User, error) {
 	if sub == "" {
 		return User{}, ErrInvalidInput
@@ -268,6 +268,17 @@ func (r *repository) findByGoogleSub(ctx context.Context, sub string) (User, err
 		return User{}, err
 	}
 	return user, nil
+}
+
+func (r *repository) findPendingInvitationByEmail(ctx context.Context, email string) (string, error) {
+	email, err := normalizeEmail(email)
+	if err != nil {
+		return "", err
+	}
+	var id string
+	err = r.pool.QueryRow(ctx, `SELECT id FROM invitations WHERE email = $1
+		AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > now()`, email).Scan(&id)
+	return id, err
 }
 
 // State derives expiry at read time; accepted and revoked outcomes remain durable.

@@ -1,16 +1,104 @@
 openapi: 3.1.0
 info:
-  title: LifeOS Foundation API
+  title: LifeOS API
   version: 0.1.0
-  description: Operational liveness and readiness for the LifeOS Foundation stack.
+  description: Foundation operations and invite-only Alpha authentication.
 servers:
   - url: http://127.0.0.1:8080
     description: Default local API
 tags:
   - name: Operations
     description: Unversioned process and dependency health endpoints.
+  - name: Identity
+    description: Google sign-in and LifeOS sessions.
 security: []
 paths:
+  /api/v1/auth/start:
+    get:
+      tags: [Identity]
+      summary: Start Google sign-in with state, nonce, and PKCE
+      operationId: startSignIn
+      responses:
+        "302":
+          description: Redirect to Google authorization with a short-lived state cookie.
+        "503":
+          description: Sign-in cannot be started.
+  /api/v1/auth/callback:
+    get:
+      tags: [Identity]
+      summary: Verify Google OIDC response and issue a LifeOS session
+      operationId: finishSignIn
+      parameters:
+        - in: query
+          name: state
+          required: true
+          schema: { type: string }
+        - in: query
+          name: code
+          required: false
+          schema: { type: string }
+      responses:
+        "303":
+          description: Session established; redirect to the web app.
+        "400":
+          description: Missing, expired, mismatched, or reused sign-in attempt.
+        "401":
+          description: Google authorization or ID token verification failed.
+        "403":
+          description: No valid invitation or active user.
+        "503":
+          description: Session storage unavailable.
+  /api/v1/auth/logout:
+    post:
+      tags: [Identity]
+      summary: Revoke the current LifeOS session
+      operationId: signOut
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - in: header
+          name: Origin
+          required: true
+          schema: { type: string, format: uri }
+        - in: header
+          name: X-CSRF-Token
+          required: true
+          schema: { type: string }
+      responses:
+        "204":
+          description: Session revoked and cookie cleared.
+        "401":
+          description: No active session.
+        "403":
+          description: Origin or CSRF token mismatch.
+        "503":
+          description: Session storage unavailable.
+  /api/v1/me:
+    get:
+      tags: [Identity]
+      summary: Get the current LifeOS user and logout CSRF token
+      operationId: getCurrentUser
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: Active LifeOS user.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CurrentUser" }
+        "401":
+          description: No active session.
+  /api/v1/admin/status:
+    get:
+      tags: [Identity]
+      summary: Check owner administrator access
+      operationId: getAdminStatus
+      security: [{ sessionCookie: [] }]
+      responses:
+        "204":
+          description: Current user is the owner administrator.
+        "401":
+          description: No active session.
+        "403":
+          description: Current user is not an owner administrator.
   /healthz:
     get:
       tags: [Operations]
@@ -51,6 +139,11 @@ paths:
               schema:
                 $ref: "#/components/schemas/ReadinessResponse"
 components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: lifeos_session
   headers:
     RequestId:
       description: Identifier used to correlate a request with structured server logs.
@@ -58,6 +151,15 @@ components:
         type: string
         minLength: 1
   schemas:
+    CurrentUser:
+      type: object
+      additionalProperties: false
+      required: [id, email, is_owner_admin, csrf_token]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        is_owner_admin: { type: boolean }
+        csrf_token: { type: string }
     HealthResponse:
       type: object
       additionalProperties: false

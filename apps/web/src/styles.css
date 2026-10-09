@@ -83,6 +83,26 @@ h1 {
   background: rgb(7 17 31 / 72%);
 }
 
+.status-panel + .status-panel {
+  margin-top: 1rem;
+}
+
+.status-panel a {
+  display: inline-block;
+  min-height: 44px;
+  border-radius: 0.75rem;
+  padding: 0.7rem 1rem;
+  color: #07111f;
+  background: #81d4c4;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.status-panel a:focus-visible {
+  outline: 3px solid #f6c177;
+  outline-offset: 3px;
+}
+
 .status-panel h2 {
   margin-top: 0;
   font-size: 1rem;

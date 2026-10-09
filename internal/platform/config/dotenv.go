@@ -34,7 +34,7 @@ func readDotEnv(path string) (map[string]string, error) {
 			return nil, fmt.Errorf("read project .env line %d: expected KEY=VALUE", lineNumber)
 		}
 		key = strings.TrimSpace(key)
-		if !isFoundationKey(key) {
+		if !isSupportedKey(key) {
 			continue
 		}
 
@@ -51,8 +51,8 @@ func readDotEnv(path string) (map[string]string, error) {
 	return values, nil
 }
 
-func isFoundationKey(candidate string) bool {
-	for _, key := range foundationKeys {
+func isSupportedKey(candidate string) bool {
+	for _, key := range supportedKeys {
 		if candidate == key {
 			return true
 		}

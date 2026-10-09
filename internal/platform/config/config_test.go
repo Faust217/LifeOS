@@ -79,9 +79,12 @@ func TestProcessEnvironmentOverridesDotEnv(t *testing.T) {
 	}, "\n"))
 
 	config, err := load(dotEnvPath, mapLookup(map[string]string{
-		keyEnvironment: "production",
-		keyAPIPort:     "9090",
-		keyDBPassword:  "process-secret",
+		keyEnvironment:      "production",
+		keyAPIPort:          "9090",
+		keyDBPassword:       "process-secret",
+		keyOIDCClientID:     "test-client-id",
+		keyOIDCClientSecret: "test-client-secret",
+		keyAuthPublicOrigin: "https://example.test",
 	}))
 	if err != nil {
 		t.Fatalf("load precedence configuration: %v", err)
@@ -268,6 +271,27 @@ func TestLoadRejectsInvalidBindAddress(t *testing.T) {
 	requireErrorForKey(t, err, keyAPIBind)
 }
 
+func TestAuthConfigurationFailsClosed(t *testing.T) {
+	for name, change := range map[string]func(map[string]string){
+		"missing OIDC secret":        func(values map[string]string) { values[keyOIDCClientSecret] = "" },
+		"missing OIDC ID":            func(values map[string]string) { values[keyOIDCClientID] = "" },
+		"insecure production origin": func(values map[string]string) { values[keyAuthPublicOrigin] = "http://example.test" },
+		"non Google issuer":          func(values map[string]string) { values[keyOIDCIssuer] = "https://other.example" },
+		"public HTTP origin": func(values map[string]string) {
+			values[keyEnvironment] = "development"
+			values[keyAuthPublicOrigin] = "http://public.example"
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			values := validValues()
+			change(values)
+			if _, err := load(missingDotEnvPath(t), mapLookup(values)); err == nil {
+				t.Fatal("invalid production authentication configuration was accepted")
+			}
+		})
+	}
+}
+
 func TestLoadRejectsInvalidRequiredDatabaseValues(t *testing.T) {
 	testCases := map[string]struct {
 		key   string
@@ -315,16 +339,19 @@ func TestDotEnvParseErrorsDoNotEchoValues(t *testing.T) {
 
 func validValues() map[string]string {
 	return map[string]string{
-		keyEnvironment: "production",
-		keyAPIBind:     "0.0.0.0",
-		keyAPIPort:     "9090",
-		keyDBHost:      "postgres",
-		keyDBPort:      "5544",
-		keyDBName:      "lifeos_test",
-		keyDBUser:      "lifeos_test",
-		keyDBPassword:  "valid-development-secret",
-		keyLogLevel:    "debug",
-		keyWebAPIURL:   "https://example.test/api",
+		keyEnvironment:      "production",
+		keyAPIBind:          "0.0.0.0",
+		keyAPIPort:          "9090",
+		keyDBHost:           "postgres",
+		keyDBPort:           "5544",
+		keyDBName:           "lifeos_test",
+		keyDBUser:           "lifeos_test",
+		keyDBPassword:       "valid-development-secret",
+		keyLogLevel:         "debug",
+		keyWebAPIURL:        "https://example.test/api",
+		keyOIDCClientID:     "test-client-id",
+		keyOIDCClientSecret: "test-client-secret",
+		keyAuthPublicOrigin: "https://example.test",
 	}
 }
 

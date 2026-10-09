@@ -61,6 +61,7 @@ Any proposed change to these principles requires an ADR that explains the reason
 
 ## Change Discipline
 
+- From Issue #19 onward, use DEVELOPMENT-FIRST workflow: prioritize implementation, automated tests, and usable product milestones. Do not pause for interactive teaching unless the Product Owner asks. Automatically preserve the mandatory Function-level Data Flow and learning journal for later self-study, and keep completion summaries concise. Stop only for genuine blockers, security-sensitive decisions, destructive operations, paid services, or authorization boundaries.
 - Keep work limited to the agreed issue or task. Put unrelated ideas in a backlog rather than expanding the current scope.
 - Every schema change requires a new numbered migration and an upgrade-path test.
 - Update OpenAPI and contract tests when external API behavior changes.

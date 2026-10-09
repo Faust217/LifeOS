@@ -14,19 +14,23 @@ import (
 const (
 	lifeOSModulePath = "github.com/Faust217/LifeOS"
 
-	keyEnvironment = "LIFEOS_ENV"
-	keyAPIBind     = "LIFEOS_API_BIND"
-	keyAPIPort     = "LIFEOS_API_PORT"
-	keyDBHost      = "LIFEOS_DB_HOST"
-	keyDBPort      = "LIFEOS_DB_PORT"
-	keyDBName      = "LIFEOS_DB_NAME"
-	keyDBUser      = "LIFEOS_DB_USER"
-	keyDBPassword  = "LIFEOS_DB_PASSWORD"
-	keyLogLevel    = "LIFEOS_LOG_LEVEL"
-	keyWebAPIURL   = "VITE_API_BASE_URL"
+	keyEnvironment      = "LIFEOS_ENV"
+	keyAPIBind          = "LIFEOS_API_BIND"
+	keyAPIPort          = "LIFEOS_API_PORT"
+	keyDBHost           = "LIFEOS_DB_HOST"
+	keyDBPort           = "LIFEOS_DB_PORT"
+	keyDBName           = "LIFEOS_DB_NAME"
+	keyDBUser           = "LIFEOS_DB_USER"
+	keyDBPassword       = "LIFEOS_DB_PASSWORD"
+	keyLogLevel         = "LIFEOS_LOG_LEVEL"
+	keyWebAPIURL        = "VITE_API_BASE_URL"
+	keyOIDCClientID     = "LIFEOS_OIDC_CLIENT_ID"
+	keyOIDCClientSecret = "LIFEOS_OIDC_CLIENT_SECRET"
+	keyOIDCIssuer       = "LIFEOS_OIDC_ISSUER"
+	keyAuthPublicOrigin = "LIFEOS_AUTH_PUBLIC_ORIGIN"
 )
 
-var foundationKeys = []string{
+var supportedKeys = []string{
 	keyEnvironment,
 	keyAPIBind,
 	keyAPIPort,
@@ -37,6 +41,10 @@ var foundationKeys = []string{
 	keyDBPassword,
 	keyLogLevel,
 	keyWebAPIURL,
+	keyOIDCClientID,
+	keyOIDCClientSecret,
+	keyOIDCIssuer,
+	keyAuthPublicOrigin,
 }
 
 // Environment identifies the application runtime mode.
@@ -65,6 +73,7 @@ type Config struct {
 	Database    DatabaseConfig
 	Logging     LoggingConfig
 	Web         WebConfig
+	Auth        AuthConfig
 }
 
 // APIConfig contains HTTP listener settings.
@@ -92,6 +101,14 @@ type WebConfig struct {
 	APIBaseURL string
 }
 
+// AuthConfig contains server-only OIDC settings; the secret is never browser-visible.
+type AuthConfig struct {
+	ClientID     string
+	ClientSecret string
+	Issuer       string
+	PublicOrigin string
+}
+
 type lookupEnvironment func(string) (string, bool)
 
 // Load resolves process environment variables over the LifeOS module-root .env
@@ -112,14 +129,14 @@ func load(dotEnvPath string, lookup lookupEnvironment) (Config, error) {
 		if err != nil {
 			return Config{}, err
 		}
-		for _, key := range foundationKeys {
+		for _, key := range supportedKeys {
 			if value, ok := fileValues[key]; ok {
 				values[key] = value
 			}
 		}
 	}
 
-	for _, key := range foundationKeys {
+	for _, key := range supportedKeys {
 		if value, ok := lookup(key); ok {
 			values[key] = value
 		}
@@ -164,15 +181,17 @@ func isLifeOSModuleRoot(directory string) bool {
 
 func defaultValues() map[string]string {
 	return map[string]string{
-		keyEnvironment: string(EnvironmentDevelopment),
-		keyAPIBind:     "127.0.0.1",
-		keyAPIPort:     "8080",
-		keyDBHost:      "127.0.0.1",
-		keyDBPort:      "5432",
-		keyDBName:      "lifeos",
-		keyDBUser:      "lifeos",
-		keyLogLevel:    string(LogLevelInfo),
-		keyWebAPIURL:   "http://127.0.0.1:8080",
+		keyEnvironment:      string(EnvironmentDevelopment),
+		keyAPIBind:          "127.0.0.1",
+		keyAPIPort:          "8080",
+		keyDBHost:           "127.0.0.1",
+		keyDBPort:           "5432",
+		keyDBName:           "lifeos",
+		keyDBUser:           "lifeos",
+		keyLogLevel:         string(LogLevelInfo),
+		keyWebAPIURL:        "http://127.0.0.1:8080",
+		keyOIDCIssuer:       "https://accounts.google.com",
+		keyAuthPublicOrigin: "http://127.0.0.1:4173",
 	}
 }
 
@@ -230,6 +249,30 @@ func validate(values map[string]string) (Config, error) {
 	if err := validateWebAPIURL(webAPIURL); err != nil {
 		return Config{}, err
 	}
+	clientID := strings.TrimSpace(values[keyOIDCClientID])
+	clientSecret := values[keyOIDCClientSecret]
+	if (clientID == "") != (clientSecret == "") {
+		return Config{}, fmt.Errorf("%s and %s must be set together", keyOIDCClientID, keyOIDCClientSecret)
+	}
+	issuer := strings.TrimSuffix(strings.TrimSpace(values[keyOIDCIssuer]), "/")
+	if environment != EnvironmentTest && issuer != "https://accounts.google.com" {
+		return Config{}, fmt.Errorf("%s must be Google's issuer outside test mode", keyOIDCIssuer)
+	}
+	publicOrigin := strings.TrimSuffix(strings.TrimSpace(values[keyAuthPublicOrigin]), "/")
+	parsedOrigin, err := url.Parse(publicOrigin)
+	if err != nil || parsedOrigin.Host == "" || parsedOrigin.User != nil || parsedOrigin.RawQuery != "" || parsedOrigin.Fragment != "" || parsedOrigin.Path != "" || (parsedOrigin.Scheme != "http" && parsedOrigin.Scheme != "https") {
+		return Config{}, fmt.Errorf("%s must be an absolute http or https origin without path or credentials", keyAuthPublicOrigin)
+	}
+	if parsedOrigin.Scheme == "http" {
+		host := parsedOrigin.Hostname()
+		address, parseErr := netip.ParseAddr(host)
+		if host != "localhost" && (parseErr != nil || !address.IsLoopback()) {
+			return Config{}, fmt.Errorf("%s requires https outside localhost", keyAuthPublicOrigin)
+		}
+	}
+	if environment == EnvironmentProduction && (clientID == "" || parsedOrigin.Scheme != "https") {
+		return Config{}, fmt.Errorf("production authentication requires %s, %s, and an https %s", keyOIDCClientID, keyOIDCClientSecret, keyAuthPublicOrigin)
+	}
 
 	return Config{
 		Environment: environment,
@@ -250,6 +293,7 @@ func validate(values map[string]string) (Config, error) {
 		Web: WebConfig{
 			APIBaseURL: webAPIURL,
 		},
+		Auth: AuthConfig{ClientID: clientID, ClientSecret: clientSecret, Issuer: issuer, PublicOrigin: publicOrigin},
 	}, nil
 }
 

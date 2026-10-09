@@ -2,17 +2,17 @@
 
 **Last updated:** 2026-10-09
 
-**Current milestone:** Issue #18 identity persistence foundation completed; Foundation implementation retained
+**Current milestone:** Issue #19 OIDC sign-in and sessions completed; Foundation retained
 
-**Product milestone:** Invite-only online V0.1 Alpha approved in Issue #16; identity schema work has begun locally
+**Product milestone:** Invite-only online V0.1 Alpha approved in Issue #16; identity and sign-in foundation in progress
 
 **Blueprint:** Master Project Blueprint v0.2 is the historical baseline; Issue #16 is the approved current product direction
 
 ## Current Status
 
-The Product Owner approved the [Issue #16 Product & Architecture Rebaseline](https://github.com/Faust217/LifeOS/issues/16): LifeOS becomes a Life-first, mobile-first platform whose V0.1 is an invite-only, online Alpha for the owner and a few testers. The Product Owner also approved ADR-013 and ADR-014 in [Issue #17](https://github.com/Faust217/LifeOS/issues/17). ADR-013 supersedes ADR-008's single-user V0.x scope and ADR-009's Bluecoins-in-V0.1 timing; owner scoping and safe import/export remain in force. Historical ADR-008/009 files remain untouched. Issue #18 identity persistence has started locally, but product access and workflows are unimplemented.
+The Product Owner approved the [Issue #16 Product & Architecture Rebaseline](https://github.com/Faust217/LifeOS/issues/16): LifeOS becomes a Life-first, mobile-first platform whose V0.1 is an invite-only, online Alpha for the owner and a few testers. The Product Owner also approved ADR-013 and ADR-014 in [Issue #17](https://github.com/Faust217/LifeOS/issues/17). ADR-013 supersedes ADR-008's single-user V0.x scope and ADR-009's Bluecoins-in-V0.1 timing; owner scoping and safe import/export remain in force. Historical ADR-008/009 files remain untouched. Issues #18 and #19 establish identity persistence and the local OIDC/session flow. **Live Google OAuth has NOT been manually verified and must be tested before the Alpha release.**
 
-Foundation #1–#15 remains the technical baseline. Issues #1–#7 were accepted and closed. Issues #8–#15 were implemented and verified locally in separate commits; their GitHub review and closure remain pending. The chain covers configuration, PostgreSQL, migrations, operational API health/readiness, OpenAPI-generated TypeScript types, the minimal web shell, and Compose startup. Issue #18 adds local identity persistence work; OAuth, sessions, Money, and Goals remain unimplemented.
+Foundation #1–#15 remains the technical baseline. Issues #1–#7 were accepted and closed. Issues #8–#15 were implemented and verified locally in separate commits; their GitHub review and closure remain pending. The chain covers configuration, PostgreSQL, migrations, operational API health/readiness, OpenAPI-generated TypeScript types, the minimal web shell, and Compose startup. Issue #18 supplies identity persistence. Issue #19 implements OAuth verification, invitation-gated admission, sessions, and a minimal sign-in page locally; Money and Goals remain unimplemented.
 
 ## Completed
 
@@ -43,11 +43,11 @@ Foundation #1–#15 remains the technical baseline. Issues #1–#7 were accepted
 - Implemented and verified Issue #13 locally with a canonical OpenAPI 3.1 contract for `/healthz` and `/readyz`, stable status/error schemas, explicit versioning guidance, and clean pinned Redocly validation; remote review and closure remain pending.
 - Implemented and verified Issue #14 locally with pinned `openapi-typescript` 7.13.0, committed generated Foundation types, deterministic stale-output checking, and web compilation against generated DTOs; remote review and closure remain pending.
 - Implemented and verified Issue #15 locally with a clean project-local startup guide and an isolated end-to-end Foundation check covering dependency bootstrap, tests, contracts, generated types, Compose, migrations, API readiness, and the web shell; remote review and closure remain pending.
-- Completed the Issue #18 identity persistence foundation locally: migration version 2, internal user IDs, unique Google `sub` bindings, invitations, package-private admission/operator boundaries, and PostgreSQL security and upgrade tests. OAuth and sessions remain later work.
+- Completed and pushed the Issue #18 identity persistence foundation: migration version 2, internal user IDs, unique Google `sub` bindings, invitations, package-private admission/operator boundaries, and PostgreSQL security and upgrade tests.
 
 ## In Progress
 
-Issue #17 is completed and closed; ADR-013/014 are accepted. [Issue #18](https://github.com/Faust217/LifeOS/issues/18) implements migration version 2 for LifeOS users, separate unique Google `sub` bindings, and invitations, plus package-private repository operations and tests. Bootstrap requires an internal trusted-operator authorization with no production issuer or network route yet; admission accepts only a package-private verified-identity value that a later server-side OIDC verifier must construct. No OAuth, session, API, frontend, finance, or deployment behavior is present. Issue #18's GitHub disposition is tracked in its issue.
+Issue #17 and [Issue #18](https://github.com/Faust217/LifeOS/issues/18) are completed. [Issue #19](https://github.com/Faust217/LifeOS/issues/19) has passed final local security review. It adds server-verified Google OIDC with state, nonce, and PKCE; invitation-gated admission; revocable PostgreSQL sessions; a reusable Origin/session/CSRF guard for writes; protected current-user and owner-admin checks; a local-only invitation operator; and a minimal web sign-in page. The Issue #18 identity trust boundary stays package-private. No Finance, Goals, Admin Dashboard, offline sync, or cloud deployment is added. **Live Google OAuth remains unverified and is an Alpha release gate.**
 
 All 15 Foundation issues are implemented locally. Issues #1–#7 are accepted and closed; Issues #8–#15 await Product Owner review and GitHub closure. The Foundation milestone remains administratively open even though its technical implementation and local verification are complete.
 
@@ -75,8 +75,8 @@ The recommended order is represented by the issue numbers. Issues #3 and #4 may 
 
 ## Next Work Requiring Explicit Authorization
 
-1. Scope the later OIDC/session and trusted local operator work only after separate authorization. Foundation #8–#15 GitHub review/closure remains a separate administrative decision.
-2. After separate authorization, scope Google OIDC verification, invitation admission, session authorization, and a trusted local owner invitation administration entry point before user-owned product data or Internet exposure.
+1. Configure a Google Web OAuth client and manually verify a live sign-in, an invited account, an uninvited account, and sign-out before Alpha release. Foundation #8–#15 GitHub review/closure remains a separate administrative decision.
+2. Before any Internet-facing Alpha use, review TLS, secrets, database transport, operational limits, and tested backup/restore. Do not begin Issue #20 without authorization.
 3. Before V0.2 offline transaction synchronization, accept a focused ADR for reliability, idempotency, recovery, conflicts, and account/device boundaries. Bluecoins import remains V0.3 or later under ADR-009's safety rules.
 
 ## Known Risks
@@ -89,6 +89,7 @@ The recommended order is represented by the issue numbers. Issues #3 and #4 may 
 | Database redesign and data loss | Stable meanings, forward migrations, upgrade tests, export, and restore-tested backups |
 | AI vendor churn or unsafe writes | Provider abstraction, Tool Gateway, explicit capability tiers, confirmation, and audit |
 | Identity or cross-user data exposure | Require both Google identity and invitation, revocable sessions, owner-scoped services/repositories, and negative isolation tests |
+| Live Google OAuth configuration | Automated signed-provider tests pass, but the real Google exchange has not been manually verified; test it before Alpha release |
 | Internet exposure and recovery | Review TLS, secrets, database transport, operational endpoints, and restore-tested backups before Alpha testing |
 | Offline data loss or duplication | Keep V0.1 online; require accepted sync ADR and idempotency/recovery tests before V0.2 |
 | Hosting cost drift | Treat USD $10 as a test target with spending visibility and shutdown controls, not a production guarantee |
@@ -102,7 +103,7 @@ These decisions are intentionally deferred to their real decision points:
 | Decision | Latest decision point | Baseline direction |
 | --- | --- | --- |
 | Web UI component library | Before the first production UI screen | Choose an actively maintained, accessible library |
-| Invitation operator entry point and session details | Later identity application/API issue | Use the Issue #18 repository's one-time bootstrap and active owner-admin guards; derive admin ID from a verified session, never a client field |
+| Invitation operator entry point and session details | Completed in Issue #19 | Local trusted operator command and 24-hour revocable sessions implemented; later user/session administration needs its own scope before Internet exposure |
 | Offline sync architecture | Before V0.2 implementation | Accept a focused ADR; do not prebuild a protocol in V0.1 |
 | Cloud test provider and spending controls | Before paid or Internet-facing testing | Review concrete cost, TLS, secrets, backup, and shutdown plan |
 | First Ollama model | Only if a later AI milestone is authorized | Evaluate against actual hardware and tool needs |
@@ -125,6 +126,8 @@ When work resumes:
 
 ### 2026-10-09
 
+- Product Owner authorized final Issue #19 review and completion. The full Go suite ran with both PostgreSQL integration tests enabled; the populated v2→v3 upgrade, guarded down migration, and clean version-3 chain passed. Invalid OIDC proofs, state/replay, PKCE, invitation/concurrent admission, fixed redirect, Secure/HttpOnly/SameSite cookies, CSRF, disabled users, expired/revoked sessions, and absent operator HTTP routes were checked. OpenAPI's two redirect-only 2xx warnings are documented and non-blocking. Live Google OAuth has NOT been manually verified and remains required before Alpha release.
+- Created Issue #19 after checking for an equivalent issue. Local work adds Google OIDC verification, anti-forgery/replay checks, invitation admission, revocable sessions, a protected current-user API, local operator command, OpenAPI contract, and web sign-in UI. Automated local-provider tests are distinct from a live Google test.
 - Created Issue #18 after checking for an equivalent issue. Local work adds migration version 2 and minimal identity persistence under ADR-014. Package-private bootstrap/revocation methods require explicit internal operator authorization; no production issuer or network path exists yet. The designated bootstrap invitation alone grants the owner-admin flag, while ordinary invitations never do so, including under concurrent acceptance. Admission takes a package-private verified-identity value; a later OIDC service must construct it only after server-side validation. Later services must derive the admin ID from a verified session. An explicit PostgreSQL integration run passed the version 1→2 upgrade, security/integrity checks, and data-preserving down-migration refusal. The full Go suite, `go vet`, and clean migration-chain verifier also passed locally.
 - Product Owner approved Issue #16's Life-first, mobile-first, invite-only multi-user rebaseline. The original single-user scope and Bluecoins-first V0.1 timing are intentionally replaced as product direction; ADR-008/009 historical files remain preserved.
 - Created Issue #17 for documentation and ADR rebaseline. The Product Owner reviewed and accepted ADR-013/014, then authorized documentation-only commit, push, and Issue #17 closure after verification. No code, API, schema, migration, deployment, or Issue #18 work was authorized.

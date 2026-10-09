@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Faust217/LifeOS/internal/identity"
 	"github.com/Faust217/LifeOS/internal/platform/config"
 	"github.com/Faust217/LifeOS/internal/platform/database"
 	"github.com/Faust217/LifeOS/internal/platform/health"
@@ -44,10 +45,18 @@ func run() error {
 	defer postgres.Close()
 
 	readiness := health.NewService(postgres, migrations.CurrentVersion)
+	auth, err := identity.NewAuth(ctx, postgres.Pool(), applicationConfig.Auth)
+	if err != nil {
+		return fmt.Errorf("initialize authentication: %w", err)
+	}
+	var authHandler http.Handler
+	if auth != nil {
+		authHandler = auth.Router()
+	}
 	address := net.JoinHostPort(applicationConfig.API.Bind.String(), fmt.Sprintf("%d", applicationConfig.API.Port))
 	server := &http.Server{
 		Addr:              address,
-		Handler:           httpapi.NewRouter(logger, readiness),
+		Handler:           httpapi.NewRouter(logger, readiness, authHandler),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}

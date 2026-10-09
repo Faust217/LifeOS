@@ -18,13 +18,16 @@ type ReadinessChecker interface {
 	Check(context.Context) health.Result
 }
 
-// NewRouter creates the Foundation-only HTTP router.
-func NewRouter(logger *slog.Logger, readiness ReadinessChecker) http.Handler {
+// NewRouter creates the HTTP router. The optional identity handler owns /api/v1.
+func NewRouter(logger *slog.Logger, readiness ReadinessChecker, identityHandlers ...http.Handler) http.Handler {
 	router := chi.NewRouter()
 	router.Use(middleware.RequestID)
 	router.Use(requestLogger(logger))
 	router.Get("/healthz", healthHandler)
 	router.Get("/readyz", readinessHandler(readiness))
+	if len(identityHandlers) > 0 && identityHandlers[0] != nil {
+		router.Mount("/api/v1", identityHandlers[0])
+	}
 	return router
 }
 
