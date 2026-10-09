@@ -1,10 +1,10 @@
 # LifeOS Project State
 
-**Last updated:** 2026-10-09
+**Last updated:** 2026-10-10
 
-**Current milestone:** Issue #23 mobile-first application shell approved; Money workflows are the next implementation scope
+**Current milestone:** Issue #24 usable Money workflows approved and verified; further V0.1 work requires separate authorization
 
-**Product milestone:** Invite-only online V0.1 Alpha approved in Issue #16; identity, owner boundary, Money domain, Money API, and four-area shell completed; Money workflows remain future work
+**Product milestone:** Invite-only online V0.1 Alpha approved in Issue #16; identity, owner boundary, Money domain, Money API, four-area shell, and usable Money UI completed
 
 **Blueprint:** Master Project Blueprint v0.2 is the historical baseline; Issue #16 is the approved current product direction
 
@@ -12,7 +12,7 @@
 
 The Product Owner approved the [Issue #16 Product & Architecture Rebaseline](https://github.com/Faust217/LifeOS/issues/16): LifeOS becomes a Life-first, mobile-first platform whose V0.1 is an invite-only, online Alpha for the owner and a few testers. The Product Owner also approved ADR-013 and ADR-014 in [Issue #17](https://github.com/Faust217/LifeOS/issues/17). ADR-013 supersedes ADR-008's single-user V0.x scope and ADR-009's Bluecoins-in-V0.1 timing; owner scoping and safe import/export remain in force. Historical ADR-008/009 files remain untouched. Issues #18 and #19 establish identity persistence and the local OIDC/session flow. The Product Owner manually verified the live Google flow on local Compose on 2026-10-09; Internet-facing Alpha readiness remains a separate gate.
 
-Foundation #1–#15 remains the technical baseline. Issues #1–#7 were accepted and closed. Issues #8–#15 were implemented and verified locally in separate commits; their GitHub review and closure remain pending. The chain covers configuration, PostgreSQL, migrations, operational API health/readiness, OpenAPI-generated TypeScript types, the minimal web shell, and Compose startup. Issues #18–#20 supply identity, sign-in, and owner authorization. Issue #21 adds the Money domain. Issue #22 adds authenticated Money APIs. Issue #23 adds the four-area app shell locally for review; no Money UI workflow or Goals workflow exists yet.
+Foundation #1–#15 remains the technical baseline. Issues #1–#7 were accepted and closed. Issues #8–#15 were implemented and verified locally in separate commits; their GitHub review and closure remain pending. The chain covers configuration, PostgreSQL, migrations, operational API health/readiness, OpenAPI-generated TypeScript types, the minimal web shell, and Compose startup. Issues #18–#20 supply identity, sign-in, and owner authorization. Issue #21 adds the Money domain. Issue #22 adds authenticated Money APIs. Issue #23 adds the four-area app shell. Issue #24 adds the approved Money UI and archive restoration. No Goals workflow exists yet.
 
 ## Completed
 
@@ -52,14 +52,24 @@ Foundation #1–#15 remains the technical baseline. Issues #1–#7 were accepted
 ## Issue #23 Completion
 
 - Created [Issue #23](https://github.com/Faust217/LifeOS/issues/23) after checking for an equivalent issue. The local React shell presents Today, Money, Plans, and Me with mobile bottom navigation, desktop sidebar, direct URLs and native browser history. It confirms `/api/v1/me` before rendering private pages, keeps real Google login and CSRF-protected logout, and shows honest loading, signed-out, API-error, and feature-empty states.
-- Money and Plans are layouts only. No Money endpoint is called by the shell; no balances, transactions, or Goal records are fabricated. No Go code, API contract, migration, database, or deployment changed. The Product Owner visually approved the Sage Green design.
+- In the committed #23 shell, Money and Plans were layouts only. No Money endpoint was called; no balances, transactions, or Goal records were fabricated. No Go code, API contract, migration, database, or deployment changed. The Product Owner visually approved the Sage Green design.
 - Issue #23 web tests, typecheck, build, and isolated browser checks passed at 320 px and 390 px, including mobile navigation, keyboard skip link, browser history, logout, protected history after logout, and API-error recovery. Live Google OIDC was previously verified for Issue #19; no new live OAuth test was claimed for the shell.
+- Issue #23 was committed as `f219847e0f3c8534c09640728f2a138a315c32b7`, pushed to `main`, verified against remote HEAD with a clean working tree, and closed after the Product Owner's visual approval.
+
+## Issue #24 Completion
+
+- Created [Issue #24](https://github.com/Faust217/LifeOS/issues/24) after checking for an equivalent issue. The React work connects the authenticated Money API to real account balances, account/category creation, income/expense entry, same-currency transfers, paginated history with movement/allocation details, void with reason, and account archive. Its approved UX review adds a sticky quick-transaction dialog, explicit account/category selections, lightweight Account → Category → First Transaction guidance, readable history, correction review after void, and recoverable feedback. The Product Owner approved the final Sage Green Money design and workflows.
+- Issue #24 adds an owner-scoped Restore Account service and authenticated/CSRF-protected API route using the existing `archived_at` field. Historical events and balances remain intact; there is no new migration. OpenAPI and generated TypeScript types include the restore operation. Archive confirmation warns about nonzero balances and credit-card negative positions are labeled as liabilities.
+- Amount entry uses decimal text and `BigInt` to produce exact signed int64 minor-unit strings. Each account and transaction displays its own currency; different currencies are never combined. Mutations use the existing session CSRF token and refresh account balances and history. Today, Plans, Me, and logout remain part of the approved Sage Green shell.
+- Web tests (26), typecheck/build, OpenAPI lint/generated-type checks, full Go tests, `go vet`, and `git diff --check` passed for #24. Explicit Finance/Money API PostgreSQL integration tests ran on fresh disposable databases `lifeos_issue24_close_finance_1010_test` and `lifeos_issue24_close_api_1010_test`. An isolated synthetic-browser check covered 320 px, 390 px, and desktop usability. A real Edge browser then used the production React bundle, guarded Go API, and disposable PostgreSQL v4 database `lifeos_issue24_browser_20261010_test` to verify account/category creation, expense, income, transfer, balances and history after reload, and archive/restore. Unauthenticated reads and a mutation without CSRF were denied. This test seeded a synthetic session in the disposable database; it did not repeat live Google sign-in. All disposable databases remain intact. Final checks are recorded in the #24 learning entry.
+- Before the private Alpha relies on real personal finance data, review and resolve dated opening-balance/backdated-transaction correctness and owner-scoped financial-write idempotency. API-backed history search/filtering and accurate historical post-transaction balances are future Money enhancements. The present warning and retry guidance are interim safeguards.
+- The existing personal LifeOS database was not inspected, migrated, reset, or used for Money testing. It may still be at schema v3. Its Money use requires separate Product Owner approval for a backup and non-destructive v4 migration plan. No deployment or #25 work was included.
 
 ## Current Handoff
 
 [Issue #22](https://github.com/Faust217/LifeOS/issues/22) completed the authenticated `/api/v1` Money API for accounts, categories, income, expense, transfers, balances, spending, history, archive, and void. Mutations require Origin and CSRF checks. Request and response DTOs are separate from domain/persistence types; minor units travel as signed decimal strings so the TypeScript client does not lose int64 precision. The running Compose stack remains on its earlier image/schema until a separately authorized rollout.
 
-Issue #22 verification passed on fresh disposable PostgreSQL databases: the full Go suite (including Finance, Money API, identity, and OIDC/session integration tests), `go vet ./...`, OpenAPI lint and generated-type consistency, web tests/typecheck/build, and `git diff --check`. Redocly retains two pre-existing redirect-only OAuth response warnings. All existing and new test databases remain intact. Issue #23 is authorized only as a local web shell and does not connect Money APIs; live browser-to-Money testing remains for a later UI milestone.
+Issue #24 passed an isolated real browser-to-Money test using the guarded Go API and disposable PostgreSQL v4, plus Finance/Money API integration tests and the web/contract suites. Redocly retains two pre-existing redirect-only OAuth response warnings. All existing and new test databases remain intact. The running Compose stack and personal database remain on their earlier image/schema; use of the new Money UI with that database is gated on separate backup and migration approval.
 
 All 15 Foundation issues are implemented locally. Issues #1–#7 are accepted and closed; Issues #8–#15 await Product Owner review and GitHub closure. The Foundation milestone remains administratively open even though its technical implementation and local verification are complete.
 
@@ -87,7 +97,7 @@ The recommended order is represented by the issue numbers. Issues #3 and #4 may 
 
 ## Next Work Requiring Explicit Authorization
 
-1. Implement Money workflows only in their separately authorized scope. Do not deploy or migrate the existing personal LifeOS database without separate approval. Foundation #8–#15 GitHub review/closure remains separate.
+1. Select and authorize the next V0.1 implementation scope separately. Do not deploy or migrate the existing personal LifeOS database without separate approval. Resolve dated opening-balance semantics and financial-write idempotency before relying on real personal finance data. Foundation #8–#15 GitHub review/closure remains separate.
 2. Before any Internet-facing Alpha use, review TLS, secrets, database transport, operational limits, and tested backup/restore.
 3. Before V0.2 offline transaction synchronization, accept a focused ADR for reliability, idempotency, recovery, conflicts, and account/device boundaries. Bluecoins import remains V0.3 or later under ADR-009's safety rules.
 
@@ -140,10 +150,15 @@ When work resumes:
 
 ## State History
 
+### 2026-10-10
+
+- The Product Owner approved the second Issue #24 Sage Green Money UI. Final Go, web, OpenAPI, generated-type, and PostgreSQL integration checks passed. A real Edge browser completed the Money workflow through the production React bundle, normal session/CSRF guards, Go API, and isolated PostgreSQL v4 with synthetic data. The personal database and existing disposable databases were left untouched; a new disposable browser-test database was retained. Issue #24 was authorized for commit, push, and closure after this verification.
+
 ### 2026-10-09
 
-- The Product Owner visually approved the Sage Green Issue #23 shell. Final web and isolated browser regressions passed without redesign, backend/schema changes, or personal-data use. Color theme packs and customization were recorded only as a deferred idea.
-- Created Issue #23 after checking for an equivalent issue. Implemented the four-area mobile-first React shell locally with real navigation, guarded profile/session display, working sign-out, responsive layouts, and honest Today/Money/Plans states. No Finance UI connection, backend endpoint, migration, personal-data change, or deployment was included. Product Owner review is pending.
+- The Product Owner visually approved the Sage Green Issue #23 shell. Final web and isolated browser regressions passed without redesign, backend/schema changes, or personal-data use. The commit was pushed and remote `main` verified; Issue #23 was closed. Color theme packs and customization were recorded only as a deferred idea.
+- Checked for an equivalent #24 issue and created Issue #24. Implemented the Money UI locally against the existing generated API contracts, with exact minor-unit parsing, session/CSRF requests, real owner-scoped balances and history, mobile forms, confirmation flows, and refresh/error states. Disposable PostgreSQL integration tests and an isolated synthetic browser fixture avoided the personal database. At this handoff the work awaited Product Owner review; using the personal database still requires separately approved backup and v4 migration.
+- Created Issue #23 after checking for an equivalent issue. Implemented the four-area mobile-first React shell with real navigation, guarded profile/session display, working sign-out, responsive layouts, and honest Today/Money/Plans states. No Finance UI connection, backend endpoint, migration, personal-data change, or deployment was included in #23.
 - Created Issue #22 after checking for an equivalent issue, then completed it after Product Owner final review. Money REST endpoints reuse Issue #21 services behind the Issue #19–#20 session, Origin, and CSRF guards. Strict DTOs and stable JSON errors reject invalid input and owner overrides. Minor units are decimal strings in JSON to preserve signed int64 exactness in generated TypeScript clients. OpenAPI and generated types were updated without a new migration, UI, deployment, or personal-data change. PostgreSQL integration tests and contract checks passed; live browser-to-Money testing remains for the UI milestone.
 - Created Issue #21 after checking for an equivalent issue. Migration 000004 and Finance service/repository work implement the ADR-004 lightweight ledger with owner-scoped composite foreign keys, currency and category-kind integrity, atomic writes, account locking, archival, and void metadata. The Product Owner approved negative ordinary-account balances in final review; regression tests cover expenses, transfers, concurrent posting, and income voids across zero. The full Go suite with PostgreSQL integration tests, populated version 3→4 upgrade, clean version-4 migration chain, `go vet`, `go mod tidy -diff`, formatting, and diff checks passed. No personal financial data, public Money route, UI, or deployment was changed.
 - Issue #19 was pushed and closed after Product Owner approval and live local Google verification. Issue #20 was created after checking for an equivalent issue and completed after Product Owner final review. Its owner-isolation integration subtest and full Go suite passed against disposable PostgreSQL databases; `go vet`, the clean migration chain at version 3, and `git diff --check` passed. The disposable test databases remain intact pending separate cleanup authorization.

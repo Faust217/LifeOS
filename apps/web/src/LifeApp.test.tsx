@@ -32,12 +32,11 @@ describe("LifeOS application shell", () => {
     expect(html).toContain('href="#main-content"');
   });
 
-  it("keeps Money and Plans honest without invented data or dead controls", () => {
+  it("gates Money data loading and keeps Plans honest", () => {
     const money = renderArea("money");
     const plans = renderArea("plans");
-    expect(money).toContain("No balances or activity are shown");
-    expect(money).not.toContain("amount_minor");
-    expect(money).not.toContain("Add transaction");
+    expect(money).toContain("Loading your Money space");
+    expect(money).not.toContain("MYR 0.00");
     expect(plans).toContain("not available in this shell yet");
     expect(plans).not.toContain("Add goal");
   });

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { fetchCurrentUser, signOut, type CurrentUser } from "./api/auth";
 import { Icon } from "./Icons";
+import { MoneyPage } from "./MoneyPage";
 import { primaryAreas, resolveArea, type Area } from "./navigation";
 
 type SessionState =
@@ -74,6 +75,7 @@ export function App() {
       area={resolveArea(window.location.pathname)}
       user={session.user}
       onSignOut={() => void handleSignOut()}
+      onSessionExpired={refreshSession}
       signingOut={session.status === "signing-out"}
       signOutError={signOutError}
     />
@@ -149,10 +151,11 @@ function UserAvatar({ email }: { email: string }) {
   return <span className="user-avatar" aria-hidden="true">{email.slice(0, 1).toUpperCase()}</span>;
 }
 
-export function AuthenticatedShell({ area, user, onSignOut, signingOut = false, signOutError = "" }: {
+export function AuthenticatedShell({ area, user, onSignOut, onSessionExpired = () => undefined, signingOut = false, signOutError = "" }: {
   area: Area | null;
   user: CurrentUser;
   onSignOut: () => void;
+  onSessionExpired?: () => void;
   signingOut?: boolean;
   signOutError?: string;
 }) {
@@ -177,7 +180,7 @@ export function AuthenticatedShell({ area, user, onSignOut, signingOut = false, 
         </header>
         <main id="main-content" className="page-content" tabIndex={-1}>
           {area === "today" && <TodayPage />}
-          {area === "money" && <MoneyPage />}
+          {area === "money" && <MoneyPage csrfToken={user.csrf_token} onSessionExpired={onSessionExpired} />}
           {area === "plans" && <PlansPage />}
           {area === "me" && <MePage user={user} onSignOut={onSignOut} signingOut={signingOut} signOutError={signOutError} />}
           {area === null && <NotFoundPage />}
@@ -206,7 +209,7 @@ function TodayPage() {
         <div className="today-hero-copy">
           <p className="eyebrow">TODAY · YOUR SPACE</p>
           <h1 id="today-title">A clearer view of your day.</h1>
-          <p>Your everyday life, gathered in one place. As Money and Goals become available, your overview will grow with you.</p>
+          <p>Your everyday life, gathered in one place. Begin with Money today; your Goals overview will grow here later.</p>
         </div>
         <div className="hero-shape" aria-hidden="true"><span /><span /><span /></div>
       </section>
@@ -219,7 +222,7 @@ function TodayPage() {
           <span className="icon-tile icon-tile-money"><Icon name="money" /></span>
           <span className="card-kicker">YOUR FINANCES</span>
           <strong>Money</strong>
-          <span>Accounts, activity, and everyday decisions will live here. The Money screen is ready for its next connection.</span>
+          <span>See your accounts, record activity, and keep each currency clear.</span>
           <span className="card-link">Explore Money <Icon name="arrow" /></span>
         </a>
         <a className="overview-card" href="/plans">
@@ -234,7 +237,7 @@ function TodayPage() {
   );
 }
 
-function EmptyFeature({ icon, title, description }: { icon: "money" | "plans"; title: string; description: string }) {
+function EmptyFeature({ icon, title, description }: { icon: "plans"; title: string; description: string }) {
   return (
     <section className="empty-feature">
       <div className={`empty-illustration empty-illustration-${icon}`} aria-hidden="true"><Icon name={icon} /><span /><span /></div>
@@ -242,23 +245,6 @@ function EmptyFeature({ icon, title, description }: { icon: "money" | "plans"; t
       <h2>{title}</h2>
       <p>{description}</p>
     </section>
-  );
-}
-
-function MoneyPage() {
-  return (
-    <div className="page-stack">
-      <PageHeading eyebrow="MONEY" title="Clarity for the everyday." description="A calmer view of the money that moves through your life." />
-      <EmptyFeature icon="money" title="Your Money workspace is taking shape." description="Account details and transaction history are not connected to this screen yet. No balances or activity are shown until the Money UI is ready." />
-      <section aria-labelledby="money-sections-title">
-        <div className="section-heading"><div><p className="eyebrow">COMING INTO VIEW</p><h2 id="money-sections-title">The essentials, together.</h2></div></div>
-        <div className="slot-grid">
-          <article className="slot-card"><span className="slot-number">01</span><h3>Accounts</h3><p>See each account and its balance when the Money screen is connected.</p></article>
-          <article className="slot-card"><span className="slot-number">02</span><h3>Activity</h3><p>Income, expenses, and transfers will have a clear history here.</p></article>
-          <article className="slot-card"><span className="slot-number">03</span><h3>Categories</h3><p>Keep everyday spending and income organized in your own way.</p></article>
-        </div>
-      </section>
-    </div>
   );
 }
 

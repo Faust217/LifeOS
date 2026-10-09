@@ -247,6 +247,17 @@ func (s *Service) ArchiveAccount(ctx context.Context, owner identity.OwnerID, ac
 	return s.repo.archiveAccount(ctx, owner, accountID)
 }
 
+// RestoreAccount makes an archived account usable again without changing its history.
+func (s *Service) RestoreAccount(ctx context.Context, owner identity.OwnerID, accountID string) error {
+	if !owner.Valid() {
+		return ErrUnauthorized
+	}
+	if !validID(accountID) {
+		return ErrInvalidInput
+	}
+	return s.repo.restoreAccount(ctx, owner, accountID)
+}
+
 // VoidEvent keeps the original event, movements, and allocations for audit.
 // A corrected event is posted separately after the void succeeds.
 func (s *Service) VoidEvent(ctx context.Context, owner identity.OwnerID, eventID, reason string) error {

@@ -294,6 +294,7 @@ func TestMoneyHTTPIntegration(t *testing.T) {
 
 	moneyError(t, request(http.MethodGet, "/api/v1/accounts/"+testerBank.ID+"/balance", "", ownerCookie, ""), http.StatusNotFound, "not_found")
 	moneyError(t, request(http.MethodPost, "/api/v1/accounts/"+testerBank.ID+"/archive", "", ownerCookie, ownerCSRF), http.StatusNotFound, "not_found")
+	moneyError(t, request(http.MethodPost, "/api/v1/accounts/"+testerBank.ID+"/restore", "", ownerCookie, ownerCSRF), http.StatusNotFound, "not_found")
 	moneyError(t, request(http.MethodGet, "/api/v1/categories/"+testerFood.ID+"/spending?currency=MYR", "", ownerCookie, ""), http.StatusNotFound, "not_found")
 	moneyError(t, request(http.MethodPost, "/api/v1/events", strings.Replace(expenseBody, ownerBank.ID, testerBank.ID, 1), ownerCookie, ownerCSRF), http.StatusNotFound, "not_found")
 	moneyError(t, request(http.MethodPost, "/api/v1/events", strings.Replace(expenseBody, food.ID, testerFood.ID, 1), ownerCookie, ownerCSRF), http.StatusNotFound, "not_found")
@@ -335,6 +336,14 @@ func TestMoneyHTTPIntegration(t *testing.T) {
 	moneyError(t, request(http.MethodPost, "/api/v1/events/"+expense.ID+"/void", `{"reason":"  "}`, ownerCookie, ownerCSRF), http.StatusBadRequest, "invalid_input")
 
 	moneyStatus(t, request(http.MethodPost, "/api/v1/accounts/"+ownerCard.ID+"/archive", "", ownerCookie, ownerCSRF), http.StatusNoContent)
+	restorePath := "/api/v1/accounts/" + ownerCard.ID + "/restore"
+	moneyError(t, request(http.MethodPost, restorePath, "", nil, ""), http.StatusUnauthorized, "authentication_required")
+	for _, cookie := range []*http.Cookie{expiredCookie, revokedCookie, disabledCookie} {
+		moneyError(t, request(http.MethodPost, restorePath, "", cookie, "x"), http.StatusUnauthorized, "authentication_required")
+	}
+	moneyError(t, request(http.MethodPost, restorePath, "", ownerCookie, ""), http.StatusForbidden, "invalid_csrf")
+	moneyError(t, moneyHTTP(t, router, http.MethodPost, restorePath, "", ownerCookie, "https://evil.example", ownerCSRF), http.StatusForbidden, "invalid_origin")
+	moneyError(t, request(http.MethodPost, restorePath, "", testerCookie, testerCSRF), http.StatusNotFound, "not_found")
 	archived := moneyDecode[struct {
 		Items []accountResponse `json:"items"`
 	}](t,
@@ -349,6 +358,22 @@ func TestMoneyHTTPIntegration(t *testing.T) {
 	}](t, request(http.MethodGet, "/api/v1/accounts/"+ownerCard.ID+"/balance", "", ownerCookie, ""), http.StatusOK)
 	if cardBalance.AmountMinor != "-300" {
 		t.Fatalf("archived account lost balance=%s", cardBalance.AmountMinor)
+	}
+	moneyStatus(t, request(http.MethodPost, restorePath, "", ownerCookie, ownerCSRF), http.StatusNoContent)
+	moneyError(t, request(http.MethodPost, restorePath, "", ownerCookie, ownerCSRF), http.StatusNotFound, "not_found")
+	restored := moneyDecode[struct {
+		Items []accountResponse `json:"items"`
+	}](t, request(http.MethodGet, "/api/v1/accounts", "", ownerCookie, ""), http.StatusOK)
+	for _, item := range restored.Items {
+		if item.ID == ownerCard.ID && item.ArchivedAt != nil {
+			t.Fatal("restored account remains archived")
+		}
+	}
+	cardBalance = moneyDecode[struct {
+		AmountMinor string `json:"amount_minor"`
+	}](t, request(http.MethodGet, "/api/v1/accounts/"+ownerCard.ID+"/balance", "", ownerCookie, ""), http.StatusOK)
+	if cardBalance.AmountMinor != "-300" {
+		t.Fatalf("restored account lost historical balance=%s", cardBalance.AmountMinor)
 	}
 	moneyStatus(t, request(http.MethodPost, "/api/v1/events/"+expense.ID+"/void", `{"reason":"Duplicate"}`, ownerCookie, ownerCSRF), http.StatusNoContent)
 	moneyError(t, request(http.MethodPost, "/api/v1/events/"+expense.ID+"/void", `{"reason":"Again"}`, ownerCookie, ownerCSRF), http.StatusConflict, "conflict")

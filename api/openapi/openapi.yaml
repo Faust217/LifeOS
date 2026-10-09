@@ -181,6 +181,24 @@ paths:
         "404": { $ref: "#/components/responses/MoneyNotFound" }
         "500": { $ref: "#/components/responses/MoneyInternalError" }
         "503": { $ref: "#/components/responses/MoneyUnavailable" }
+  /api/v1/accounts/{accountID}/restore:
+    post:
+      tags: [Money]
+      summary: Restore an archived account without changing its history
+      operationId: restoreMoneyAccount
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/MoneyAccountID" }
+        - { $ref: "#/components/parameters/MoneyOrigin" }
+        - { $ref: "#/components/parameters/MoneyCSRF" }
+      responses:
+        "204": { description: Account restored. }
+        "400": { $ref: "#/components/responses/MoneyBadRequest" }
+        "401": { $ref: "#/components/responses/MoneyUnauthorized" }
+        "403": { $ref: "#/components/responses/MoneyForbidden" }
+        "404": { $ref: "#/components/responses/MoneyNotFound" }
+        "500": { $ref: "#/components/responses/MoneyInternalError" }
+        "503": { $ref: "#/components/responses/MoneyUnavailable" }
   /api/v1/categories:
     get:
       tags: [Money]

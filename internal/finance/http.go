@@ -28,6 +28,7 @@ func RegisterRoutes(router chi.Router, auth *identity.Auth, service *Service) {
 	router.MethodFunc(http.MethodPost, "/accounts", auth.RequireMutation(handler.createAccount))
 	router.MethodFunc(http.MethodGet, "/accounts/{accountID}/balance", auth.RequireRead(handler.balance))
 	router.MethodFunc(http.MethodPost, "/accounts/{accountID}/archive", auth.RequireMutation(handler.archiveAccount))
+	router.MethodFunc(http.MethodPost, "/accounts/{accountID}/restore", auth.RequireMutation(handler.restoreAccount))
 	router.MethodFunc(http.MethodGet, "/categories", auth.RequireRead(handler.listCategories))
 	router.MethodFunc(http.MethodPost, "/categories", auth.RequireMutation(handler.createCategory))
 	router.MethodFunc(http.MethodGet, "/categories/{categoryID}/spending", auth.RequireRead(handler.categorySpending))
@@ -215,6 +216,21 @@ func (h moneyHandler) archiveAccount(w http.ResponseWriter, r *http.Request, own
 		return
 	}
 	if err := h.service.ArchiveAccount(r.Context(), owner, chi.URLParam(r, "accountID")); err != nil {
+		writeMoneyError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h moneyHandler) restoreAccount(w http.ResponseWriter, r *http.Request, owner identity.OwnerID) {
+	if _, err := moneyQuery(r); err != nil {
+		writeMoneyError(w, err)
+		return
+	}
+	if !emptyMoneyBody(w, r) {
+		return
+	}
+	if err := h.service.RestoreAccount(r.Context(), owner, chi.URLParam(r, "accountID")); err != nil {
 		writeMoneyError(w, err)
 		return
 	}

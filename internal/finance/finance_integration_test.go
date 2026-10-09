@@ -222,6 +222,9 @@ func TestFinanceMigrationAndLedger(t *testing.T) {
 	if err := service.ArchiveAccount(ctx, owner, otherBank.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("cross-owner archive=%v", err)
 	}
+	if err := service.RestoreAccount(ctx, owner, otherBank.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("cross-owner restore=%v", err)
+	}
 	if _, err := service.PostExpense(ctx, owner, EventInput{AccountID: otherBank.ID, AmountMinor: 100, Currency: "MYR",
 		OccurredAt: now, Allocations: []AllocationInput{{food.ID, 100}}}); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("foreign account write=%v", err)
@@ -342,6 +345,13 @@ func TestFinanceMigrationAndLedger(t *testing.T) {
 	if _, err := service.Transfer(ctx, owner, TransferInput{FromAccountID: bank.ID, ToAccountID: savings.ID,
 		AmountMinor: 100, Currency: "MYR", OccurredAt: now}); !errors.Is(err, ErrArchived) {
 		t.Fatalf("transfer to archived account=%v", err)
+	}
+	assertBalance(owner, savings.ID, 5000)
+	if err := service.RestoreAccount(ctx, owner, savings.ID); err != nil {
+		t.Fatalf("restore archived account: %v", err)
+	}
+	if err := service.RestoreAccount(ctx, owner, savings.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("restore active account=%v", err)
 	}
 	assertBalance(owner, savings.ID, 5000)
 	if err := service.VoidEvent(ctx, owner, expense.ID, "Entered twice"); err != nil {
@@ -475,6 +485,12 @@ func TestFinanceMigrationAndLedger(t *testing.T) {
 	if _, err := service.CategorySpending(ctx, owner, salary.ID, "MYR"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("income category counted as spending=%v", err)
 	}
+	if _, err := service.Transfer(ctx, owner, TransferInput{FromAccountID: bank.ID, ToAccountID: savings.ID,
+		AmountMinor: 100, Currency: "MYR", OccurredAt: now}); err != nil {
+		t.Fatalf("transfer to restored account: %v", err)
+	}
+	assertBalance(owner, bank.ID, 2900)
+	assertBalance(owner, savings.ID, 5100)
 
 	// A populated down migration refuses to erase financial history.
 	if err := runner.Steps(-1); err == nil {

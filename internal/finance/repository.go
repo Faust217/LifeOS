@@ -115,6 +115,13 @@ func (r *repository) archiveAccount(ctx context.Context, owner identity.OwnerID,
 	return notFoundOr("archive account", err)
 }
 
+func (r *repository) restoreAccount(ctx context.Context, owner identity.OwnerID, accountID string) error {
+	var id string
+	err := r.pool.QueryRow(ctx, `UPDATE finance_accounts SET archived_at = NULL, updated_at = now()
+		WHERE owner_id = $1 AND id = $2 AND archived_at IS NOT NULL RETURNING id`, owner.String(), accountID).Scan(&id)
+	return notFoundOr("restore account", err)
+}
+
 func (r *repository) balance(ctx context.Context, owner identity.OwnerID, accountID string) (Balance, error) {
 	var result Balance
 	var amountText string

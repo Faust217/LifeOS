@@ -86,7 +86,7 @@ api/openapi/
 deploy/
 ```
 
-The listed areas began as Foundation structure. Issues #18–#20 add identity persistence, OIDC sessions, and the owner authorization boundary. Issue #21 adds the first Finance tables and services. Issue #22 adds authenticated Money API adapters and OpenAPI contracts; the product UI remains later work.
+The listed areas began as Foundation structure. Issues #18–#20 add identity persistence, OIDC sessions, and the owner authorization boundary. Issue #21 adds the first Finance tables and services. Issue #22 adds authenticated Money API adapters and OpenAPI contracts. Issue #23 adds the four-area web shell; Issue #24 connects Money workflows and adds the minimal archive restoration operation without changing the server architecture.
 
 ### Boundary Rules
 
