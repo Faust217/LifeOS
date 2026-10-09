@@ -1,4 +1,5 @@
 FROM golang:1.26.6-alpine AS build
+RUN apk add --no-cache ca-certificates
 
 WORKDIR /src
 COPY go.mod go.sum ./
@@ -8,6 +9,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/lifeos-
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/lifeos-migrate ./cmd/lifeos-migrate
 
 FROM busybox:1.37.0-musl AS api
+COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 
 WORKDIR /app
 COPY --from=build /out/lifeos-api /usr/local/bin/lifeos-api

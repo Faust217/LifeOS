@@ -1,6 +1,6 @@
 # Issue #19 Local Authentication Setup
 
-**Status:** Issue #19 local implementation complete. **Live Google OAuth has NOT been manually verified and must be tested before the Alpha release.**
+**Status:** Issue #19 local implementation and Product Owner live Google OIDC verification passed on 2026-10-09. Public Alpha deployment remains out of scope.
 
 ## Google setup
 
@@ -32,4 +32,6 @@ go run ./cmd/lifeos-admin invite --confirm-local-operator --admin-id=OWNER_LIFEO
 
 The operator command verifies the supplied ID is an active owner administrator in PostgreSQL. An unaccepted invitation can be revoked with `revoke --confirm-local-operator --admin-id=OWNER_LIFEOS_ID --invitation-id=INVITATION_ID`. Before any owner is admitted, `revoke-bootstrap --confirm-local-operator` withdraws the bootstrap invitation. This is a trusted local tool, not an HTTP admin endpoint or Admin Dashboard. The command refuses non-loopback database hosts; local database access and the explicit confirmation flag are operator trust boundaries.
 
-If credentials are absent in development, the Foundation API starts without auth routes, and the page reports no signed-in user. The automated OIDC test uses a local signed provider double; it verifies server-side token checks and LifeOS admission but does **not** prove the real Google console configuration or live Google exchange. A manual live sign-in remains a Product Owner validation step.
+If credentials are absent in development, the Foundation API starts without auth routes, and the page reports no signed-in user. The automated OIDC test uses a local signed provider double; it verifies server-side token checks and LifeOS admission. Separately, the Product Owner tested real Google sign-in, invitation denial, owner access, session persistence, and logout on local Compose on 2026-10-09. Repeat this manual check for a new OAuth client or deployment environment.
+
+The API runtime image includes the standard CA certificate bundle for HTTPS verification during Google OIDC discovery. If startup reports `x509: certificate signed by unknown authority`, inspect the runtime trust store and local HTTPS interception before changing trust settings. Never disable OIDC TLS verification to make a test pass.
