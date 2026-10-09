@@ -89,6 +89,145 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the current user's accounts, including archived accounts */
+        get: operations["listMoneyAccounts"];
+        put?: never;
+        /** Create an account with an explicit opening position */
+        post: operations["createMoneyAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/accounts/{accountID}/balance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a deterministic account balance */
+        get: operations["getMoneyAccountBalance"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/accounts/{accountID}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Archive an account while retaining its history */
+        post: operations["archiveMoneyAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the current user's income and expense categories */
+        get: operations["listMoneyCategories"];
+        put?: never;
+        /** Create an income or expense category */
+        post: operations["createMoneyCategory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/categories/{categoryID}/spending": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read posted expense spending in one explicit currency */
+        get: operations["getMoneyCategorySpending"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List paginated financial event history */
+        get: operations["listMoneyEvents"];
+        put?: never;
+        /** Post income or expense with category allocations */
+        post: operations["postMoneyEvent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/transfers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post a same-currency transfer with no spending allocation */
+        post: operations["postMoneyTransfer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/events/{eventID}/void": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Void an event with an explicit reason while retaining history */
+        post: operations["voidMoneyEvent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/healthz": {
         parameters: {
             query?: never;
@@ -127,6 +266,150 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * @description Signed 64-bit integer minor units encoded as decimal text to preserve exactness in JavaScript.
+         * @example -1500
+         * @example 0
+         * @example 1500
+         */
+        MoneyMinorUnits: string;
+        /**
+         * @description Positive signed 64-bit integer minor units encoded as decimal text.
+         * @example 1500
+         */
+        MoneyPositiveMinorUnits: string;
+        /**
+         * @description Validated ISO 4217 currency code; the service rejects unknown codes.
+         * @example MYR
+         */
+        MoneyCurrency: string;
+        MoneyErrorResponse: {
+            error: {
+                /** @enum {string} */
+                code: "invalid_json" | "invalid_input" | "unsupported_media_type" | "request_too_large" | "authentication_required" | "invalid_origin" | "invalid_csrf" | "owner_override" | "method_not_allowed" | "session_unavailable" | "currency_mismatch" | "not_found" | "archived_record" | "conflict" | "amount_overflow" | "internal_error";
+                message: string;
+            };
+        };
+        MoneyAccountCreate: {
+            name: string;
+            /** @enum {string} */
+            type: "cash" | "bank" | "ewallet" | "savings" | "credit_card" | "other";
+            currency: components["schemas"]["MoneyCurrency"];
+            opening_balance_minor: components["schemas"]["MoneyMinorUnits"];
+        };
+        MoneyAccount: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** @enum {string} */
+            type: "cash" | "bank" | "ewallet" | "savings" | "credit_card" | "other";
+            currency: components["schemas"]["MoneyCurrency"];
+            opening_balance_minor: components["schemas"]["MoneyMinorUnits"];
+            /** Format: date-time */
+            archived_at?: string;
+        };
+        MoneyAccountsResponse: {
+            items: components["schemas"]["MoneyAccount"][];
+        };
+        MoneyBalance: {
+            /** Format: uuid */
+            account_id: string;
+            currency: components["schemas"]["MoneyCurrency"];
+            amount_minor: components["schemas"]["MoneyMinorUnits"];
+        };
+        MoneyCategoryCreate: {
+            name: string;
+            /** @enum {string} */
+            kind: "income" | "expense";
+        };
+        MoneyCategory: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** @enum {string} */
+            kind: "income" | "expense";
+            /** Format: date-time */
+            archived_at?: string;
+        };
+        MoneyCategoriesResponse: {
+            items: components["schemas"]["MoneyCategory"][];
+        };
+        MoneyCategorySpending: {
+            /** Format: uuid */
+            category_id: string;
+            currency: components["schemas"]["MoneyCurrency"];
+            amount_minor: components["schemas"]["MoneyMinorUnits"];
+        };
+        MoneyAllocationCreate: {
+            /** Format: uuid */
+            category_id: string;
+            amount_minor: components["schemas"]["MoneyPositiveMinorUnits"];
+        };
+        MoneyEventCreate: {
+            /** @enum {string} */
+            kind: "income" | "expense";
+            /** Format: uuid */
+            account_id: string;
+            amount_minor: components["schemas"]["MoneyPositiveMinorUnits"];
+            currency: components["schemas"]["MoneyCurrency"];
+            /** Format: date-time */
+            occurred_at: string;
+            note?: string;
+            allocations: components["schemas"]["MoneyAllocationCreate"][];
+        };
+        MoneyTransferCreate: {
+            /** Format: uuid */
+            from_account_id: string;
+            /** Format: uuid */
+            to_account_id: string;
+            amount_minor: components["schemas"]["MoneyPositiveMinorUnits"];
+            currency: components["schemas"]["MoneyCurrency"];
+            /** Format: date-time */
+            occurred_at: string;
+            note?: string;
+        };
+        MoneyMovement: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            account_id: string;
+            amount_minor: components["schemas"]["MoneyMinorUnits"];
+            currency: components["schemas"]["MoneyCurrency"];
+        };
+        MoneyAllocation: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            category_id: string;
+            amount_minor: components["schemas"]["MoneyPositiveMinorUnits"];
+            currency: components["schemas"]["MoneyCurrency"];
+        };
+        MoneyEvent: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            kind: "income" | "expense" | "transfer";
+            amount_minor: components["schemas"]["MoneyPositiveMinorUnits"];
+            currency: components["schemas"]["MoneyCurrency"];
+            /** Format: date-time */
+            occurred_at: string;
+            note: string;
+            /** @enum {string} */
+            status: "posted" | "voided";
+            /** Format: date-time */
+            voided_at?: string;
+            void_reason?: string;
+            movements: components["schemas"]["MoneyMovement"][];
+            allocations: components["schemas"]["MoneyAllocation"][];
+        };
+        MoneyHistoryResponse: {
+            items: components["schemas"]["MoneyEvent"][];
+            limit: number;
+            offset: number;
+        };
+        MoneyVoidRequest: {
+            reason: string;
+        };
         CurrentUser: {
             /** Format: uuid */
             id: string;
@@ -163,8 +446,110 @@ export interface components {
             message: string;
         };
     };
-    responses: never;
-    parameters: never;
+    responses: {
+        /** @description Invalid JSON, input, currency, pagination, owner override, or identifier. */
+        MoneyBadRequest: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["MoneyErrorResponse"];
+            };
+        };
+        /** @description Missing, expired, revoked, or disabled-user session. */
+        MoneyUnauthorized: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["MoneyErrorResponse"];
+            };
+        };
+        /** @description Origin or CSRF check failed. */
+        MoneyForbidden: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["MoneyErrorResponse"];
+            };
+        };
+        /** @description Record is missing or belongs to another user. */
+        MoneyNotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["MoneyErrorResponse"];
+            };
+        };
+        /** @description Account/category is archived or event cannot be changed. */
+        MoneyConflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["MoneyErrorResponse"];
+            };
+        };
+        /** @description Request body exceeds the supported size. */
+        MoneyTooLarge: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["MoneyErrorResponse"];
+            };
+        };
+        /** @description A JSON request body must use application/json. */
+        MoneyUnsupportedMediaType: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["MoneyErrorResponse"];
+            };
+        };
+        /** @description Minor-unit arithmetic or parsing exceeded signed 64-bit range. */
+        MoneyOverflow: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["MoneyErrorResponse"];
+            };
+        };
+        /** @description Money operation failed without exposing private storage details. */
+        MoneyInternalError: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["MoneyErrorResponse"];
+            };
+        };
+        /** @description Session validation is temporarily unavailable. */
+        MoneyUnavailable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["MoneyErrorResponse"];
+            };
+        };
+    };
+    parameters: {
+        MoneyAccountID: string;
+        MoneyCategoryID: string;
+        MoneyEventID: string;
+        /** @description Must exactly match the configured public origin. */
+        MoneyOrigin: string;
+        /** @description Session-bound token returned by GET /api/v1/me. */
+        MoneyCSRF: string;
+        MoneyCurrencyQuery: components["schemas"]["MoneyCurrency"];
+        MoneyLimit: number;
+        MoneyOffset: number;
+    };
     requestBodies: never;
     headers: {
         /** @description Identifier used to correlate a request with structured server logs. */
@@ -347,6 +732,359 @@ export interface operations {
                 };
                 content?: never;
             };
+        };
+    };
+    listMoneyAccounts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Owner-scoped accounts; items is an empty array when none exist. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MoneyAccountsResponse"];
+                };
+            };
+            400: components["responses"]["MoneyBadRequest"];
+            401: components["responses"]["MoneyUnauthorized"];
+            500: components["responses"]["MoneyInternalError"];
+            503: components["responses"]["MoneyUnavailable"];
+        };
+    };
+    createMoneyAccount: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured public origin. */
+                Origin: components["parameters"]["MoneyOrigin"];
+                /** @description Session-bound token returned by GET /api/v1/me. */
+                "X-CSRF-Token": components["parameters"]["MoneyCSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MoneyAccountCreate"];
+            };
+        };
+        responses: {
+            /** @description Account created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MoneyAccount"];
+                };
+            };
+            400: components["responses"]["MoneyBadRequest"];
+            401: components["responses"]["MoneyUnauthorized"];
+            403: components["responses"]["MoneyForbidden"];
+            413: components["responses"]["MoneyTooLarge"];
+            415: components["responses"]["MoneyUnsupportedMediaType"];
+            500: components["responses"]["MoneyInternalError"];
+            503: components["responses"]["MoneyUnavailable"];
+        };
+    };
+    getMoneyAccountBalance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                accountID: components["parameters"]["MoneyAccountID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Opening position plus signed movements from posted events. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MoneyBalance"];
+                };
+            };
+            400: components["responses"]["MoneyBadRequest"];
+            401: components["responses"]["MoneyUnauthorized"];
+            404: components["responses"]["MoneyNotFound"];
+            422: components["responses"]["MoneyOverflow"];
+            500: components["responses"]["MoneyInternalError"];
+            503: components["responses"]["MoneyUnavailable"];
+        };
+    };
+    archiveMoneyAccount: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured public origin. */
+                Origin: components["parameters"]["MoneyOrigin"];
+                /** @description Session-bound token returned by GET /api/v1/me. */
+                "X-CSRF-Token": components["parameters"]["MoneyCSRF"];
+            };
+            path: {
+                accountID: components["parameters"]["MoneyAccountID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Account archived. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["MoneyBadRequest"];
+            401: components["responses"]["MoneyUnauthorized"];
+            403: components["responses"]["MoneyForbidden"];
+            404: components["responses"]["MoneyNotFound"];
+            500: components["responses"]["MoneyInternalError"];
+            503: components["responses"]["MoneyUnavailable"];
+        };
+    };
+    listMoneyCategories: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Owner-scoped categories; items is an empty array when none exist. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MoneyCategoriesResponse"];
+                };
+            };
+            400: components["responses"]["MoneyBadRequest"];
+            401: components["responses"]["MoneyUnauthorized"];
+            500: components["responses"]["MoneyInternalError"];
+            503: components["responses"]["MoneyUnavailable"];
+        };
+    };
+    createMoneyCategory: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured public origin. */
+                Origin: components["parameters"]["MoneyOrigin"];
+                /** @description Session-bound token returned by GET /api/v1/me. */
+                "X-CSRF-Token": components["parameters"]["MoneyCSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MoneyCategoryCreate"];
+            };
+        };
+        responses: {
+            /** @description Category created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MoneyCategory"];
+                };
+            };
+            400: components["responses"]["MoneyBadRequest"];
+            401: components["responses"]["MoneyUnauthorized"];
+            403: components["responses"]["MoneyForbidden"];
+            413: components["responses"]["MoneyTooLarge"];
+            415: components["responses"]["MoneyUnsupportedMediaType"];
+            500: components["responses"]["MoneyInternalError"];
+            503: components["responses"]["MoneyUnavailable"];
+        };
+    };
+    getMoneyCategorySpending: {
+        parameters: {
+            query: {
+                currency: components["parameters"]["MoneyCurrencyQuery"];
+            };
+            header?: never;
+            path: {
+                categoryID: components["parameters"]["MoneyCategoryID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Owner-scoped spending excluding transfers and voided events. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MoneyCategorySpending"];
+                };
+            };
+            400: components["responses"]["MoneyBadRequest"];
+            401: components["responses"]["MoneyUnauthorized"];
+            404: components["responses"]["MoneyNotFound"];
+            422: components["responses"]["MoneyOverflow"];
+            500: components["responses"]["MoneyInternalError"];
+            503: components["responses"]["MoneyUnavailable"];
+        };
+    };
+    listMoneyEvents: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["MoneyLimit"];
+                offset?: components["parameters"]["MoneyOffset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Owner-scoped events, including voided history and child records. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MoneyHistoryResponse"];
+                };
+            };
+            400: components["responses"]["MoneyBadRequest"];
+            401: components["responses"]["MoneyUnauthorized"];
+            500: components["responses"]["MoneyInternalError"];
+            503: components["responses"]["MoneyUnavailable"];
+        };
+    };
+    postMoneyEvent: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured public origin. */
+                Origin: components["parameters"]["MoneyOrigin"];
+                /** @description Session-bound token returned by GET /api/v1/me. */
+                "X-CSRF-Token": components["parameters"]["MoneyCSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MoneyEventCreate"];
+            };
+        };
+        responses: {
+            /** @description Atomic financial event with its movement and allocations. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MoneyEvent"];
+                };
+            };
+            400: components["responses"]["MoneyBadRequest"];
+            401: components["responses"]["MoneyUnauthorized"];
+            403: components["responses"]["MoneyForbidden"];
+            404: components["responses"]["MoneyNotFound"];
+            409: components["responses"]["MoneyConflict"];
+            413: components["responses"]["MoneyTooLarge"];
+            415: components["responses"]["MoneyUnsupportedMediaType"];
+            422: components["responses"]["MoneyOverflow"];
+            500: components["responses"]["MoneyInternalError"];
+            503: components["responses"]["MoneyUnavailable"];
+        };
+    };
+    postMoneyTransfer: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured public origin. */
+                Origin: components["parameters"]["MoneyOrigin"];
+                /** @description Session-bound token returned by GET /api/v1/me. */
+                "X-CSRF-Token": components["parameters"]["MoneyCSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MoneyTransferCreate"];
+            };
+        };
+        responses: {
+            /** @description Transfer event with equal opposite movements and no allocations. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MoneyEvent"];
+                };
+            };
+            400: components["responses"]["MoneyBadRequest"];
+            401: components["responses"]["MoneyUnauthorized"];
+            403: components["responses"]["MoneyForbidden"];
+            404: components["responses"]["MoneyNotFound"];
+            409: components["responses"]["MoneyConflict"];
+            413: components["responses"]["MoneyTooLarge"];
+            415: components["responses"]["MoneyUnsupportedMediaType"];
+            422: components["responses"]["MoneyOverflow"];
+            500: components["responses"]["MoneyInternalError"];
+            503: components["responses"]["MoneyUnavailable"];
+        };
+    };
+    voidMoneyEvent: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured public origin. */
+                Origin: components["parameters"]["MoneyOrigin"];
+                /** @description Session-bound token returned by GET /api/v1/me. */
+                "X-CSRF-Token": components["parameters"]["MoneyCSRF"];
+            };
+            path: {
+                eventID: components["parameters"]["MoneyEventID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MoneyVoidRequest"];
+            };
+        };
+        responses: {
+            /** @description Event voided; history remains available. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["MoneyBadRequest"];
+            401: components["responses"]["MoneyUnauthorized"];
+            403: components["responses"]["MoneyForbidden"];
+            404: components["responses"]["MoneyNotFound"];
+            409: components["responses"]["MoneyConflict"];
+            413: components["responses"]["MoneyTooLarge"];
+            415: components["responses"]["MoneyUnsupportedMediaType"];
+            422: components["responses"]["MoneyOverflow"];
+            500: components["responses"]["MoneyInternalError"];
+            503: components["responses"]["MoneyUnavailable"];
         };
     };
     getHealth: {

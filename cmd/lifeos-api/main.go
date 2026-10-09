@@ -13,12 +13,14 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Faust217/LifeOS/internal/finance"
 	"github.com/Faust217/LifeOS/internal/identity"
 	"github.com/Faust217/LifeOS/internal/platform/config"
 	"github.com/Faust217/LifeOS/internal/platform/database"
 	"github.com/Faust217/LifeOS/internal/platform/health"
 	"github.com/Faust217/LifeOS/internal/platform/httpapi"
 	"github.com/Faust217/LifeOS/internal/platform/migrations"
+	"github.com/go-chi/chi/v5"
 )
 
 func main() {
@@ -51,7 +53,10 @@ func run() error {
 	}
 	var authHandler http.Handler
 	if auth != nil {
-		authHandler = auth.Router()
+		apiRouter := chi.NewRouter()
+		auth.RegisterRoutes(apiRouter)
+		finance.RegisterRoutes(apiRouter, auth, finance.NewService(postgres.Pool()))
+		authHandler = apiRouter
 	}
 	address := net.JoinHostPort(applicationConfig.API.Bind.String(), fmt.Sprintf("%d", applicationConfig.API.Port))
 	server := &http.Server{

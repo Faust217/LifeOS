@@ -24,11 +24,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func financeTestDatabase(t *testing.T) (*pgxpool.Pool, *migrate.Migrate) {
+func financeTestDatabase(t *testing.T, environmentKey string) (*pgxpool.Pool, *migrate.Migrate) {
 	t.Helper()
-	dsn := os.Getenv("LIFEOS_FINANCE_TEST_DATABASE_URL")
+	dsn := os.Getenv(environmentKey)
 	if dsn == "" {
-		t.Skip("set LIFEOS_FINANCE_TEST_DATABASE_URL to an empty disposable *_test PostgreSQL database")
+		t.Skipf("set %s to an empty disposable *_test PostgreSQL database", environmentKey)
 	}
 	parsed, err := url.Parse(dsn)
 	if err != nil || !strings.HasSuffix(strings.TrimPrefix(parsed.Path, "/"), "_test") {
@@ -105,7 +105,7 @@ func verifiedTestOwner(t *testing.T, pool *pgxpool.Pool, userID, secret string) 
 }
 
 func TestFinanceMigrationAndLedger(t *testing.T) {
-	pool, runner := financeTestDatabase(t)
+	pool, runner := financeTestDatabase(t, "LIFEOS_FINANCE_TEST_DATABASE_URL")
 	ctx := context.Background()
 	owner := verifiedTestOwner(t, pool, "11111111-1111-4111-8111-111111111111", "owner-session-test")
 	other := verifiedTestOwner(t, pool, "22222222-2222-4222-8222-222222222222", "other-session-test")

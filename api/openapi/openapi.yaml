@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: LifeOS API
   version: 0.1.0
-  description: Foundation operations and invite-only Alpha authentication.
+  description: Foundation operations, invite-only Alpha authentication, and owner-scoped Money.
 servers:
   - url: http://127.0.0.1:8080
     description: Default local API
@@ -11,6 +11,8 @@ tags:
     description: Unversioned process and dependency health endpoints.
   - name: Identity
     description: Google sign-in and LifeOS sessions.
+  - name: Money
+    description: Owner-scoped accounts, categories, and financial events.
 security: []
 paths:
   /api/v1/auth/start:
@@ -99,6 +101,254 @@ paths:
           description: No active session.
         "403":
           description: Current user is not an owner administrator.
+  /api/v1/accounts:
+    get:
+      tags: [Money]
+      summary: List the current user's accounts, including archived accounts
+      operationId: listMoneyAccounts
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: Owner-scoped accounts; items is an empty array when none exist.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MoneyAccountsResponse" }
+        "400": { $ref: "#/components/responses/MoneyBadRequest" }
+        "401": { $ref: "#/components/responses/MoneyUnauthorized" }
+        "500": { $ref: "#/components/responses/MoneyInternalError" }
+        "503": { $ref: "#/components/responses/MoneyUnavailable" }
+    post:
+      tags: [Money]
+      summary: Create an account with an explicit opening position
+      operationId: createMoneyAccount
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/MoneyOrigin" }
+        - { $ref: "#/components/parameters/MoneyCSRF" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MoneyAccountCreate" }
+      responses:
+        "201":
+          description: Account created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MoneyAccount" }
+        "400": { $ref: "#/components/responses/MoneyBadRequest" }
+        "401": { $ref: "#/components/responses/MoneyUnauthorized" }
+        "403": { $ref: "#/components/responses/MoneyForbidden" }
+        "413": { $ref: "#/components/responses/MoneyTooLarge" }
+        "415": { $ref: "#/components/responses/MoneyUnsupportedMediaType" }
+        "500": { $ref: "#/components/responses/MoneyInternalError" }
+        "503": { $ref: "#/components/responses/MoneyUnavailable" }
+  /api/v1/accounts/{accountID}/balance:
+    get:
+      tags: [Money]
+      summary: Read a deterministic account balance
+      operationId: getMoneyAccountBalance
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/MoneyAccountID" }
+      responses:
+        "200":
+          description: Opening position plus signed movements from posted events.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MoneyBalance" }
+        "400": { $ref: "#/components/responses/MoneyBadRequest" }
+        "401": { $ref: "#/components/responses/MoneyUnauthorized" }
+        "404": { $ref: "#/components/responses/MoneyNotFound" }
+        "422": { $ref: "#/components/responses/MoneyOverflow" }
+        "500": { $ref: "#/components/responses/MoneyInternalError" }
+        "503": { $ref: "#/components/responses/MoneyUnavailable" }
+  /api/v1/accounts/{accountID}/archive:
+    post:
+      tags: [Money]
+      summary: Archive an account while retaining its history
+      operationId: archiveMoneyAccount
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/MoneyAccountID" }
+        - { $ref: "#/components/parameters/MoneyOrigin" }
+        - { $ref: "#/components/parameters/MoneyCSRF" }
+      responses:
+        "204": { description: Account archived. }
+        "400": { $ref: "#/components/responses/MoneyBadRequest" }
+        "401": { $ref: "#/components/responses/MoneyUnauthorized" }
+        "403": { $ref: "#/components/responses/MoneyForbidden" }
+        "404": { $ref: "#/components/responses/MoneyNotFound" }
+        "500": { $ref: "#/components/responses/MoneyInternalError" }
+        "503": { $ref: "#/components/responses/MoneyUnavailable" }
+  /api/v1/categories:
+    get:
+      tags: [Money]
+      summary: List the current user's income and expense categories
+      operationId: listMoneyCategories
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: Owner-scoped categories; items is an empty array when none exist.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MoneyCategoriesResponse" }
+        "400": { $ref: "#/components/responses/MoneyBadRequest" }
+        "401": { $ref: "#/components/responses/MoneyUnauthorized" }
+        "500": { $ref: "#/components/responses/MoneyInternalError" }
+        "503": { $ref: "#/components/responses/MoneyUnavailable" }
+    post:
+      tags: [Money]
+      summary: Create an income or expense category
+      operationId: createMoneyCategory
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/MoneyOrigin" }
+        - { $ref: "#/components/parameters/MoneyCSRF" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MoneyCategoryCreate" }
+      responses:
+        "201":
+          description: Category created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MoneyCategory" }
+        "400": { $ref: "#/components/responses/MoneyBadRequest" }
+        "401": { $ref: "#/components/responses/MoneyUnauthorized" }
+        "403": { $ref: "#/components/responses/MoneyForbidden" }
+        "413": { $ref: "#/components/responses/MoneyTooLarge" }
+        "415": { $ref: "#/components/responses/MoneyUnsupportedMediaType" }
+        "500": { $ref: "#/components/responses/MoneyInternalError" }
+        "503": { $ref: "#/components/responses/MoneyUnavailable" }
+  /api/v1/categories/{categoryID}/spending:
+    get:
+      tags: [Money]
+      summary: Read posted expense spending in one explicit currency
+      operationId: getMoneyCategorySpending
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/MoneyCategoryID" }
+        - { $ref: "#/components/parameters/MoneyCurrencyQuery" }
+      responses:
+        "200":
+          description: Owner-scoped spending excluding transfers and voided events.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MoneyCategorySpending" }
+        "400": { $ref: "#/components/responses/MoneyBadRequest" }
+        "401": { $ref: "#/components/responses/MoneyUnauthorized" }
+        "404": { $ref: "#/components/responses/MoneyNotFound" }
+        "422": { $ref: "#/components/responses/MoneyOverflow" }
+        "500": { $ref: "#/components/responses/MoneyInternalError" }
+        "503": { $ref: "#/components/responses/MoneyUnavailable" }
+  /api/v1/events:
+    get:
+      tags: [Money]
+      summary: List paginated financial event history
+      operationId: listMoneyEvents
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/MoneyLimit" }
+        - { $ref: "#/components/parameters/MoneyOffset" }
+      responses:
+        "200":
+          description: Owner-scoped events, including voided history and child records.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MoneyHistoryResponse" }
+        "400": { $ref: "#/components/responses/MoneyBadRequest" }
+        "401": { $ref: "#/components/responses/MoneyUnauthorized" }
+        "500": { $ref: "#/components/responses/MoneyInternalError" }
+        "503": { $ref: "#/components/responses/MoneyUnavailable" }
+    post:
+      tags: [Money]
+      summary: Post income or expense with category allocations
+      operationId: postMoneyEvent
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/MoneyOrigin" }
+        - { $ref: "#/components/parameters/MoneyCSRF" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MoneyEventCreate" }
+      responses:
+        "201":
+          description: Atomic financial event with its movement and allocations.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MoneyEvent" }
+        "400": { $ref: "#/components/responses/MoneyBadRequest" }
+        "401": { $ref: "#/components/responses/MoneyUnauthorized" }
+        "403": { $ref: "#/components/responses/MoneyForbidden" }
+        "404": { $ref: "#/components/responses/MoneyNotFound" }
+        "409": { $ref: "#/components/responses/MoneyConflict" }
+        "413": { $ref: "#/components/responses/MoneyTooLarge" }
+        "415": { $ref: "#/components/responses/MoneyUnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/MoneyOverflow" }
+        "500": { $ref: "#/components/responses/MoneyInternalError" }
+        "503": { $ref: "#/components/responses/MoneyUnavailable" }
+  /api/v1/transfers:
+    post:
+      tags: [Money]
+      summary: Post a same-currency transfer with no spending allocation
+      operationId: postMoneyTransfer
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/MoneyOrigin" }
+        - { $ref: "#/components/parameters/MoneyCSRF" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MoneyTransferCreate" }
+      responses:
+        "201":
+          description: Transfer event with equal opposite movements and no allocations.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MoneyEvent" }
+        "400": { $ref: "#/components/responses/MoneyBadRequest" }
+        "401": { $ref: "#/components/responses/MoneyUnauthorized" }
+        "403": { $ref: "#/components/responses/MoneyForbidden" }
+        "404": { $ref: "#/components/responses/MoneyNotFound" }
+        "409": { $ref: "#/components/responses/MoneyConflict" }
+        "413": { $ref: "#/components/responses/MoneyTooLarge" }
+        "415": { $ref: "#/components/responses/MoneyUnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/MoneyOverflow" }
+        "500": { $ref: "#/components/responses/MoneyInternalError" }
+        "503": { $ref: "#/components/responses/MoneyUnavailable" }
+  /api/v1/events/{eventID}/void:
+    post:
+      tags: [Money]
+      summary: Void an event with an explicit reason while retaining history
+      operationId: voidMoneyEvent
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/MoneyEventID" }
+        - { $ref: "#/components/parameters/MoneyOrigin" }
+        - { $ref: "#/components/parameters/MoneyCSRF" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MoneyVoidRequest" }
+      responses:
+        "204": { description: Event voided; history remains available. }
+        "400": { $ref: "#/components/responses/MoneyBadRequest" }
+        "401": { $ref: "#/components/responses/MoneyUnauthorized" }
+        "403": { $ref: "#/components/responses/MoneyForbidden" }
+        "404": { $ref: "#/components/responses/MoneyNotFound" }
+        "409": { $ref: "#/components/responses/MoneyConflict" }
+        "413": { $ref: "#/components/responses/MoneyTooLarge" }
+        "415": { $ref: "#/components/responses/MoneyUnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/MoneyOverflow" }
+        "500": { $ref: "#/components/responses/MoneyInternalError" }
+        "503": { $ref: "#/components/responses/MoneyUnavailable" }
   /healthz:
     get:
       tags: [Operations]
@@ -144,6 +394,100 @@ components:
       type: apiKey
       in: cookie
       name: lifeos_session
+  parameters:
+    MoneyAccountID:
+      in: path
+      name: accountID
+      required: true
+      schema: { type: string, format: uuid }
+    MoneyCategoryID:
+      in: path
+      name: categoryID
+      required: true
+      schema: { type: string, format: uuid }
+    MoneyEventID:
+      in: path
+      name: eventID
+      required: true
+      schema: { type: string, format: uuid }
+    MoneyOrigin:
+      in: header
+      name: Origin
+      required: true
+      description: Must exactly match the configured public origin.
+      schema: { type: string, format: uri }
+    MoneyCSRF:
+      in: header
+      name: X-CSRF-Token
+      required: true
+      description: Session-bound token returned by GET /api/v1/me.
+      schema: { type: string }
+    MoneyCurrencyQuery:
+      in: query
+      name: currency
+      required: true
+      schema: { $ref: "#/components/schemas/MoneyCurrency" }
+    MoneyLimit:
+      in: query
+      name: limit
+      required: false
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    MoneyOffset:
+      in: query
+      name: offset
+      required: false
+      schema: { type: integer, minimum: 0, default: 0 }
+  responses:
+    MoneyBadRequest:
+      description: Invalid JSON, input, currency, pagination, owner override, or identifier.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/MoneyErrorResponse" }
+    MoneyUnauthorized:
+      description: Missing, expired, revoked, or disabled-user session.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/MoneyErrorResponse" }
+    MoneyForbidden:
+      description: Origin or CSRF check failed.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/MoneyErrorResponse" }
+    MoneyNotFound:
+      description: Record is missing or belongs to another user.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/MoneyErrorResponse" }
+    MoneyConflict:
+      description: Account/category is archived or event cannot be changed.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/MoneyErrorResponse" }
+    MoneyTooLarge:
+      description: Request body exceeds the supported size.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/MoneyErrorResponse" }
+    MoneyUnsupportedMediaType:
+      description: A JSON request body must use application/json.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/MoneyErrorResponse" }
+    MoneyOverflow:
+      description: Minor-unit arithmetic or parsing exceeded signed 64-bit range.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/MoneyErrorResponse" }
+    MoneyInternalError:
+      description: Money operation failed without exposing private storage details.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/MoneyErrorResponse" }
+    MoneyUnavailable:
+      description: Session validation is temporarily unavailable.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/MoneyErrorResponse" }
   headers:
     RequestId:
       description: Identifier used to correlate a request with structured server logs.
@@ -151,6 +495,193 @@ components:
         type: string
         minLength: 1
   schemas:
+    MoneyMinorUnits:
+      type: string
+      pattern: '^-?(0|[1-9][0-9]*)$'
+      maxLength: 20
+      description: Signed 64-bit integer minor units encoded as decimal text to preserve exactness in JavaScript.
+      examples: ["-1500", "0", "1500"]
+    MoneyPositiveMinorUnits:
+      type: string
+      pattern: '^[1-9][0-9]*$'
+      maxLength: 19
+      description: Positive signed 64-bit integer minor units encoded as decimal text.
+      examples: ["1500"]
+    MoneyCurrency:
+      type: string
+      pattern: '^[A-Z]{3}$'
+      description: Validated ISO 4217 currency code; the service rejects unknown codes.
+      examples: [MYR]
+    MoneyErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum: [invalid_json, invalid_input, unsupported_media_type, request_too_large, authentication_required, invalid_origin, invalid_csrf, owner_override, method_not_allowed, session_unavailable, currency_mismatch, not_found, archived_record, conflict, amount_overflow, internal_error]
+            message: { type: string }
+    MoneyAccountCreate:
+      type: object
+      additionalProperties: false
+      required: [name, type, currency, opening_balance_minor]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 120 }
+        type: { type: string, enum: [cash, bank, ewallet, savings, credit_card, other] }
+        currency: { $ref: "#/components/schemas/MoneyCurrency" }
+        opening_balance_minor: { $ref: "#/components/schemas/MoneyMinorUnits" }
+    MoneyAccount:
+      type: object
+      additionalProperties: false
+      required: [id, name, type, currency, opening_balance_minor]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        type: { type: string, enum: [cash, bank, ewallet, savings, credit_card, other] }
+        currency: { $ref: "#/components/schemas/MoneyCurrency" }
+        opening_balance_minor: { $ref: "#/components/schemas/MoneyMinorUnits" }
+        archived_at: { type: string, format: date-time }
+    MoneyAccountsResponse:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/MoneyAccount" }
+    MoneyBalance:
+      type: object
+      additionalProperties: false
+      required: [account_id, currency, amount_minor]
+      properties:
+        account_id: { type: string, format: uuid }
+        currency: { $ref: "#/components/schemas/MoneyCurrency" }
+        amount_minor: { $ref: "#/components/schemas/MoneyMinorUnits" }
+    MoneyCategoryCreate:
+      type: object
+      additionalProperties: false
+      required: [name, kind]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 120 }
+        kind: { type: string, enum: [income, expense] }
+    MoneyCategory:
+      type: object
+      additionalProperties: false
+      required: [id, name, kind]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        kind: { type: string, enum: [income, expense] }
+        archived_at: { type: string, format: date-time }
+    MoneyCategoriesResponse:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/MoneyCategory" }
+    MoneyCategorySpending:
+      type: object
+      additionalProperties: false
+      required: [category_id, currency, amount_minor]
+      properties:
+        category_id: { type: string, format: uuid }
+        currency: { $ref: "#/components/schemas/MoneyCurrency" }
+        amount_minor: { $ref: "#/components/schemas/MoneyMinorUnits" }
+    MoneyAllocationCreate:
+      type: object
+      additionalProperties: false
+      required: [category_id, amount_minor]
+      properties:
+        category_id: { type: string, format: uuid }
+        amount_minor: { $ref: "#/components/schemas/MoneyPositiveMinorUnits" }
+    MoneyEventCreate:
+      type: object
+      additionalProperties: false
+      required: [kind, account_id, amount_minor, currency, occurred_at, allocations]
+      properties:
+        kind: { type: string, enum: [income, expense] }
+        account_id: { type: string, format: uuid }
+        amount_minor: { $ref: "#/components/schemas/MoneyPositiveMinorUnits" }
+        currency: { $ref: "#/components/schemas/MoneyCurrency" }
+        occurred_at: { type: string, format: date-time }
+        note: { type: string, maxLength: 1000 }
+        allocations:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/MoneyAllocationCreate" }
+    MoneyTransferCreate:
+      type: object
+      additionalProperties: false
+      required: [from_account_id, to_account_id, amount_minor, currency, occurred_at]
+      properties:
+        from_account_id: { type: string, format: uuid }
+        to_account_id: { type: string, format: uuid }
+        amount_minor: { $ref: "#/components/schemas/MoneyPositiveMinorUnits" }
+        currency: { $ref: "#/components/schemas/MoneyCurrency" }
+        occurred_at: { type: string, format: date-time }
+        note: { type: string, maxLength: 1000 }
+    MoneyMovement:
+      type: object
+      additionalProperties: false
+      required: [id, account_id, amount_minor, currency]
+      properties:
+        id: { type: string, format: uuid }
+        account_id: { type: string, format: uuid }
+        amount_minor: { $ref: "#/components/schemas/MoneyMinorUnits" }
+        currency: { $ref: "#/components/schemas/MoneyCurrency" }
+    MoneyAllocation:
+      type: object
+      additionalProperties: false
+      required: [id, category_id, amount_minor, currency]
+      properties:
+        id: { type: string, format: uuid }
+        category_id: { type: string, format: uuid }
+        amount_minor: { $ref: "#/components/schemas/MoneyPositiveMinorUnits" }
+        currency: { $ref: "#/components/schemas/MoneyCurrency" }
+    MoneyEvent:
+      type: object
+      additionalProperties: false
+      required: [id, kind, amount_minor, currency, occurred_at, note, status, movements, allocations]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [income, expense, transfer] }
+        amount_minor: { $ref: "#/components/schemas/MoneyPositiveMinorUnits" }
+        currency: { $ref: "#/components/schemas/MoneyCurrency" }
+        occurred_at: { type: string, format: date-time }
+        note: { type: string }
+        status: { type: string, enum: [posted, voided] }
+        voided_at: { type: string, format: date-time }
+        void_reason: { type: string }
+        movements:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/MoneyMovement" }
+        allocations:
+          type: array
+          items: { $ref: "#/components/schemas/MoneyAllocation" }
+    MoneyHistoryResponse:
+      type: object
+      additionalProperties: false
+      required: [items, limit, offset]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/MoneyEvent" }
+        limit: { type: integer, minimum: 1, maximum: 100 }
+        offset: { type: integer, minimum: 0 }
+    MoneyVoidRequest:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 1, maxLength: 500 }
     CurrentUser:
       type: object
       additionalProperties: false

@@ -75,12 +75,17 @@ func newAuth(ctx context.Context, pool *pgxpool.Pool, cfg config.AuthConfig, cli
 // Router exposes only the small authentication and current-user surface.
 func (a *Auth) Router() http.Handler {
 	router := chi.NewRouter()
+	a.RegisterRoutes(router)
+	return router
+}
+
+// RegisterRoutes adds identity endpoints to a shared /api/v1 router.
+func (a *Auth) RegisterRoutes(router chi.Router) {
 	router.Get("/auth/start", a.start)
 	router.Get("/auth/callback", a.callback)
 	router.Post("/auth/logout", a.logout)
 	router.Get("/me", a.me)
 	router.Get("/admin/status", a.adminStatus)
-	return router
 }
 
 func (a *Auth) start(w http.ResponseWriter, r *http.Request) {
@@ -246,16 +251,16 @@ func (a *Auth) logout(w http.ResponseWriter, r *http.Request) {
 // and the session-bound CSRF token before changing user-owned state.
 func (a *Auth) authorizeMutation(w http.ResponseWriter, r *http.Request) (User, string, bool) {
 	if r.Header.Get("Origin") != a.publicOrigin {
-		http.Error(w, "Invalid origin", http.StatusForbidden)
+		writeGuardError(w, http.StatusForbidden, "invalid_origin", "Invalid origin")
 		return User{}, "", false
 	}
 	user, secret, err := a.currentUser(r)
 	if err != nil {
-		http.Error(w, "Authentication required", http.StatusUnauthorized)
+		writeSessionError(w, err)
 		return User{}, "", false
 	}
 	if subtle.ConstantTimeCompare([]byte(r.Header.Get("X-CSRF-Token")), []byte(csrfToken(secret))) != 1 {
-		http.Error(w, "Invalid CSRF token", http.StatusForbidden)
+		writeGuardError(w, http.StatusForbidden, "invalid_csrf", "Invalid CSRF token")
 		return User{}, "", false
 	}
 	return user, secret, true
@@ -267,16 +272,16 @@ func (a *Auth) RequireRead(next func(http.ResponseWriter, *http.Request, OwnerID
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			writeGuardError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Method not allowed")
 			return
 		}
 		user, _, err := a.currentUser(r)
 		if err != nil {
-			http.Error(w, "Authentication required", http.StatusUnauthorized)
+			writeSessionError(w, err)
 			return
 		}
 		if clientOwnerOverride(r) {
-			http.Error(w, "Owner override is not accepted", http.StatusBadRequest)
+			writeGuardError(w, http.StatusBadRequest, "owner_override", "Owner override is not accepted")
 			return
 		}
 		next(w, r, OwnerID{value: user.ID})
@@ -290,7 +295,7 @@ func (a *Auth) RequireMutation(next func(http.ResponseWriter, *http.Request, Own
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		if r.Method != http.MethodPost && r.Method != http.MethodPut && r.Method != http.MethodPatch && r.Method != http.MethodDelete {
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			writeGuardError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Method not allowed")
 			return
 		}
 		user, _, ok := a.authorizeMutation(w, r)
@@ -298,11 +303,28 @@ func (a *Auth) RequireMutation(next func(http.ResponseWriter, *http.Request, Own
 			return
 		}
 		if clientOwnerOverride(r) {
-			http.Error(w, "Owner override is not accepted", http.StatusBadRequest)
+			writeGuardError(w, http.StatusBadRequest, "owner_override", "Owner override is not accepted")
 			return
 		}
 		next(w, r, OwnerID{value: user.ID})
 	}
+}
+
+func writeSessionError(w http.ResponseWriter, err error) {
+	if errors.Is(err, ErrNotAuthorized) || errors.Is(err, pgx.ErrNoRows) {
+		writeGuardError(w, http.StatusUnauthorized, "authentication_required", "Authentication required")
+		return
+	}
+	writeGuardError(w, http.StatusServiceUnavailable, "session_unavailable", "Session validation unavailable")
+}
+
+func writeGuardError(w http.ResponseWriter, status int, code, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"error": map[string]string{"code": code, "message": message},
+	})
 }
 
 func clientOwnerOverride(r *http.Request) bool {
