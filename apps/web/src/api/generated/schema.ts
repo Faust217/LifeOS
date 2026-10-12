@@ -245,6 +245,177 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/goals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the current user's Goals, including archived Goals */
+        get: operations["listGoals"];
+        put?: never;
+        /** Create a checklist Goal */
+        post: operations["createGoal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/goals/{goalID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get one owner-scoped Goal and its checklist */
+        get: operations["getGoal"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/goals/{goalID}/rename": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rename an active or completed Goal */
+        post: operations["renameGoal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/goals/{goalID}/completion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Complete a Goal only when its nonempty checklist is done, or reopen it */
+        post: operations["setGoalCompletion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/goals/{goalID}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Archive a Goal while retaining its checklist */
+        post: operations["archiveGoal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/goals/{goalID}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restore an archived Goal with its checklist intact */
+        post: operations["restoreGoal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/goals/{goalID}/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add a checklist item to an active, incomplete Goal */
+        post: operations["addGoalItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/goals/{goalID}/items/{itemID}/rename": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Edit a checklist item title */
+        post: operations["renameGoalItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/goals/{goalID}/items/{itemID}/completion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Complete or uncomplete a checklist item */
+        post: operations["setGoalItemCompletion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/goals/{goalID}/items/{itemID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove a checklist item from an active, incomplete Goal */
+        delete: operations["removeGoalItem"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/healthz": {
         parameters: {
             query?: never;
@@ -283,6 +454,49 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        GoalTitleRequest: {
+            title: string;
+        };
+        GoalCompletionRequest: {
+            completed: boolean;
+        };
+        GoalItem: {
+            /** Format: uuid */
+            id: string;
+            title: string;
+            /** Format: date-time */
+            completed_at?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        Goal: {
+            /** Format: uuid */
+            id: string;
+            title: string;
+            /** Format: date-time */
+            completed_at?: string;
+            /** Format: date-time */
+            archived_at?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            completed_count: number;
+            total_count: number;
+            items: components["schemas"]["GoalItem"][];
+        };
+        GoalsResponse: {
+            items: components["schemas"]["Goal"][];
+        };
+        GoalErrorResponse: {
+            error: {
+                /** @enum {string} */
+                code: "invalid_json" | "invalid_input" | "unsupported_media_type" | "request_too_large" | "authentication_required" | "invalid_origin" | "invalid_csrf" | "owner_override" | "method_not_allowed" | "session_unavailable" | "not_found" | "conflict" | "internal_error";
+                message: string;
+            };
+        };
         /**
          * @description Signed 64-bit integer minor units encoded as decimal text to preserve exactness in JavaScript.
          * @example -1500
@@ -464,6 +678,105 @@ export interface components {
         };
     };
     responses: {
+        /** @description Owner-scoped Goal and current checklist progress. */
+        GoalOK: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Goal"];
+            };
+        };
+        /** @description Goal or checklist item created; current Goal returned. */
+        GoalCreated: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Goal"];
+            };
+        };
+        /** @description Malformed JSON, invalid input or identifier, or client owner override. */
+        GoalBadRequest: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["GoalErrorResponse"];
+            };
+        };
+        /** @description Missing, expired, revoked, or disabled-user session. */
+        GoalUnauthorized: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["GoalErrorResponse"];
+            };
+        };
+        /** @description Origin or CSRF check failed. */
+        GoalForbidden: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["GoalErrorResponse"];
+            };
+        };
+        /** @description Record is missing or belongs to another user. */
+        GoalNotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["GoalErrorResponse"];
+            };
+        };
+        /** @description Goal is archived or complete, or its checklist is not ready for completion. */
+        GoalConflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["GoalErrorResponse"];
+            };
+        };
+        /** @description Request body exceeds the supported size. */
+        GoalTooLarge: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["GoalErrorResponse"];
+            };
+        };
+        /** @description A JSON request body must use application/json. */
+        GoalUnsupportedMediaType: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["GoalErrorResponse"];
+            };
+        };
+        /** @description Goal operation failed without exposing private storage details. */
+        GoalInternalError: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["GoalErrorResponse"];
+            };
+        };
+        /** @description Session validation is temporarily unavailable. */
+        GoalUnavailable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["GoalErrorResponse"];
+            };
+        };
         /** @description Invalid JSON, input, currency, pagination, owner override, or identifier. */
         MoneyBadRequest: {
             headers: {
@@ -566,6 +879,8 @@ export interface components {
         MoneyCurrencyQuery: components["schemas"]["MoneyCurrency"];
         MoneyLimit: number;
         MoneyOffset: number;
+        GoalID: string;
+        GoalItemID: string;
     };
     requestBodies: never;
     headers: {
@@ -1133,6 +1448,315 @@ export interface operations {
             422: components["responses"]["MoneyOverflow"];
             500: components["responses"]["MoneyInternalError"];
             503: components["responses"]["MoneyUnavailable"];
+        };
+    };
+    listGoals: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Goals and checklist progress; items is empty when no Goals exist. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoalsResponse"];
+                };
+            };
+            400: components["responses"]["GoalBadRequest"];
+            401: components["responses"]["GoalUnauthorized"];
+            500: components["responses"]["GoalInternalError"];
+            503: components["responses"]["GoalUnavailable"];
+        };
+    };
+    createGoal: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured public origin. */
+                Origin: components["parameters"]["MoneyOrigin"];
+                /** @description Session-bound token returned by GET /api/v1/me. */
+                "X-CSRF-Token": components["parameters"]["MoneyCSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GoalTitleRequest"];
+            };
+        };
+        responses: {
+            201: components["responses"]["GoalCreated"];
+            400: components["responses"]["GoalBadRequest"];
+            401: components["responses"]["GoalUnauthorized"];
+            403: components["responses"]["GoalForbidden"];
+            413: components["responses"]["GoalTooLarge"];
+            415: components["responses"]["GoalUnsupportedMediaType"];
+            500: components["responses"]["GoalInternalError"];
+            503: components["responses"]["GoalUnavailable"];
+        };
+    };
+    getGoal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                goalID: components["parameters"]["GoalID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["GoalOK"];
+            400: components["responses"]["GoalBadRequest"];
+            401: components["responses"]["GoalUnauthorized"];
+            404: components["responses"]["GoalNotFound"];
+            500: components["responses"]["GoalInternalError"];
+            503: components["responses"]["GoalUnavailable"];
+        };
+    };
+    renameGoal: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured public origin. */
+                Origin: components["parameters"]["MoneyOrigin"];
+                /** @description Session-bound token returned by GET /api/v1/me. */
+                "X-CSRF-Token": components["parameters"]["MoneyCSRF"];
+            };
+            path: {
+                goalID: components["parameters"]["GoalID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GoalTitleRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["GoalOK"];
+            400: components["responses"]["GoalBadRequest"];
+            401: components["responses"]["GoalUnauthorized"];
+            403: components["responses"]["GoalForbidden"];
+            404: components["responses"]["GoalNotFound"];
+            413: components["responses"]["GoalTooLarge"];
+            415: components["responses"]["GoalUnsupportedMediaType"];
+            500: components["responses"]["GoalInternalError"];
+            503: components["responses"]["GoalUnavailable"];
+        };
+    };
+    setGoalCompletion: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured public origin. */
+                Origin: components["parameters"]["MoneyOrigin"];
+                /** @description Session-bound token returned by GET /api/v1/me. */
+                "X-CSRF-Token": components["parameters"]["MoneyCSRF"];
+            };
+            path: {
+                goalID: components["parameters"]["GoalID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GoalCompletionRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["GoalOK"];
+            400: components["responses"]["GoalBadRequest"];
+            401: components["responses"]["GoalUnauthorized"];
+            403: components["responses"]["GoalForbidden"];
+            404: components["responses"]["GoalNotFound"];
+            409: components["responses"]["GoalConflict"];
+            413: components["responses"]["GoalTooLarge"];
+            415: components["responses"]["GoalUnsupportedMediaType"];
+            500: components["responses"]["GoalInternalError"];
+            503: components["responses"]["GoalUnavailable"];
+        };
+    };
+    archiveGoal: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured public origin. */
+                Origin: components["parameters"]["MoneyOrigin"];
+                /** @description Session-bound token returned by GET /api/v1/me. */
+                "X-CSRF-Token": components["parameters"]["MoneyCSRF"];
+            };
+            path: {
+                goalID: components["parameters"]["GoalID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["GoalOK"];
+            400: components["responses"]["GoalBadRequest"];
+            401: components["responses"]["GoalUnauthorized"];
+            403: components["responses"]["GoalForbidden"];
+            404: components["responses"]["GoalNotFound"];
+            500: components["responses"]["GoalInternalError"];
+            503: components["responses"]["GoalUnavailable"];
+        };
+    };
+    restoreGoal: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured public origin. */
+                Origin: components["parameters"]["MoneyOrigin"];
+                /** @description Session-bound token returned by GET /api/v1/me. */
+                "X-CSRF-Token": components["parameters"]["MoneyCSRF"];
+            };
+            path: {
+                goalID: components["parameters"]["GoalID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["GoalOK"];
+            400: components["responses"]["GoalBadRequest"];
+            401: components["responses"]["GoalUnauthorized"];
+            403: components["responses"]["GoalForbidden"];
+            404: components["responses"]["GoalNotFound"];
+            500: components["responses"]["GoalInternalError"];
+            503: components["responses"]["GoalUnavailable"];
+        };
+    };
+    addGoalItem: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured public origin. */
+                Origin: components["parameters"]["MoneyOrigin"];
+                /** @description Session-bound token returned by GET /api/v1/me. */
+                "X-CSRF-Token": components["parameters"]["MoneyCSRF"];
+            };
+            path: {
+                goalID: components["parameters"]["GoalID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GoalTitleRequest"];
+            };
+        };
+        responses: {
+            201: components["responses"]["GoalCreated"];
+            400: components["responses"]["GoalBadRequest"];
+            401: components["responses"]["GoalUnauthorized"];
+            403: components["responses"]["GoalForbidden"];
+            404: components["responses"]["GoalNotFound"];
+            409: components["responses"]["GoalConflict"];
+            413: components["responses"]["GoalTooLarge"];
+            415: components["responses"]["GoalUnsupportedMediaType"];
+            500: components["responses"]["GoalInternalError"];
+            503: components["responses"]["GoalUnavailable"];
+        };
+    };
+    renameGoalItem: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured public origin. */
+                Origin: components["parameters"]["MoneyOrigin"];
+                /** @description Session-bound token returned by GET /api/v1/me. */
+                "X-CSRF-Token": components["parameters"]["MoneyCSRF"];
+            };
+            path: {
+                goalID: components["parameters"]["GoalID"];
+                itemID: components["parameters"]["GoalItemID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GoalTitleRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["GoalOK"];
+            400: components["responses"]["GoalBadRequest"];
+            401: components["responses"]["GoalUnauthorized"];
+            403: components["responses"]["GoalForbidden"];
+            404: components["responses"]["GoalNotFound"];
+            409: components["responses"]["GoalConflict"];
+            413: components["responses"]["GoalTooLarge"];
+            415: components["responses"]["GoalUnsupportedMediaType"];
+            500: components["responses"]["GoalInternalError"];
+            503: components["responses"]["GoalUnavailable"];
+        };
+    };
+    setGoalItemCompletion: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured public origin. */
+                Origin: components["parameters"]["MoneyOrigin"];
+                /** @description Session-bound token returned by GET /api/v1/me. */
+                "X-CSRF-Token": components["parameters"]["MoneyCSRF"];
+            };
+            path: {
+                goalID: components["parameters"]["GoalID"];
+                itemID: components["parameters"]["GoalItemID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GoalCompletionRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["GoalOK"];
+            400: components["responses"]["GoalBadRequest"];
+            401: components["responses"]["GoalUnauthorized"];
+            403: components["responses"]["GoalForbidden"];
+            404: components["responses"]["GoalNotFound"];
+            409: components["responses"]["GoalConflict"];
+            413: components["responses"]["GoalTooLarge"];
+            415: components["responses"]["GoalUnsupportedMediaType"];
+            500: components["responses"]["GoalInternalError"];
+            503: components["responses"]["GoalUnavailable"];
+        };
+    };
+    removeGoalItem: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured public origin. */
+                Origin: components["parameters"]["MoneyOrigin"];
+                /** @description Session-bound token returned by GET /api/v1/me. */
+                "X-CSRF-Token": components["parameters"]["MoneyCSRF"];
+            };
+            path: {
+                goalID: components["parameters"]["GoalID"];
+                itemID: components["parameters"]["GoalItemID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["GoalOK"];
+            400: components["responses"]["GoalBadRequest"];
+            401: components["responses"]["GoalUnauthorized"];
+            403: components["responses"]["GoalForbidden"];
+            404: components["responses"]["GoalNotFound"];
+            409: components["responses"]["GoalConflict"];
+            500: components["responses"]["GoalInternalError"];
+            503: components["responses"]["GoalUnavailable"];
         };
     };
     getHealth: {

@@ -34,7 +34,7 @@ LifeOS user / Owner (one independent data boundary per admitted user)
 │  └─ ImportBatch
 ├─ Planning
 │  ├─ Plan
-│  ├─ Goal (V0.1 checklist-based future intent; exact persistence shape deferred)
+│  ├─ Goal (V0.1 checklist-based future intent; migration 000005)
 │  ├─ PlanItem (later)
 │  └─ ChecklistItem
 ├─ Wishlist
@@ -119,7 +119,7 @@ Important financial events support edit/void or soft-delete behavior with audit 
 
 ### Plan
 
-A `Plan` is a generic container for future intent. V0.1 Goals are simple checklist-based intent with no balance effect. Whether a Goal is stored as a Plan type or as a separate planning record remains an implementation-level schema decision to review before the first migration; do not collapse it into a FinancialEvent. Later Plan types may include travel, purchase, moving, event, and custom.
+A `Plan` is a generic container for future intent. V0.1 Goals are simple checklist-based intent with no balance effect. Issue #25 uses a focused `goals` record and owner-scoped `goal_checklist_items` rather than a generic Plan table. Later Plan types may include travel, purchase, moving, event, and custom; their storage is a separate decision.
 
 Type-specific details should use explicit extensions rather than continuously expanding the base Plan table.
 
@@ -129,7 +129,7 @@ A `PlanItem` is an estimated future item such as a hotel budget. It does not aff
 
 ### ChecklistItem
 
-A `ChecklistItem` is a non-financial task within a Goal or later Plan and never affects account balances.
+A `ChecklistItem` is a non-financial task within a Goal or later Plan and never affects account balances. Issue #25 tracks completion per item and derives progress as completed count over total count. A Goal can be marked complete only with at least one item and every item complete. Reopen a completed Goal before changing its checklist. Archived Goals retain their checklist and are read-only while archived; the owner can restore one without losing its steps.
 
 ### Planning Invariants
 
@@ -211,7 +211,7 @@ External client/session metadata supports adapters such as MCP without making th
 
 ## Conceptual Storage Sketch
 
-The following is a vocabulary and ownership sketch, not final SQL. Issue #18 defines identity persistence in its own migration; the exact Goal persistence shape remains deferred to scoped planning work:
+The following is a vocabulary and ownership sketch, not final SQL. Issues #18–#25 define implemented identity, Finance, and Goal persistence in numbered migrations; other modules remain conceptual:
 
 ```text
 lifeos_users (one independent owner per admitted LifeOS user; migration 000002)
@@ -223,7 +223,9 @@ financial_events
 account_movements
 category_allocations
 import_batches
-plans
+goals (migration 000005; owner-scoped)
+goal_checklist_items (migration 000005; owner-scoped composite Goal reference)
+plans (future)
 plan_items
 checklist_items
 wishlist_items

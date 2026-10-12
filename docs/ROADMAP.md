@@ -2,7 +2,7 @@
 
 **Status:** Issue #16 direction approved; ADR-013 and ADR-014 accepted
 
-**Updated:** 2026-10-09
+**Updated:** 2026-10-12
 
 ## Roadmap Rule
 
@@ -56,6 +56,12 @@ Trips, Assets, People/Split, AI, MCP, self-host hardening, and native mobile app
 ## V1.0 Outcome
 
 V1.0 criteria will be set from observed use rather than assuming every deferred module is required. Data isolation, correct financial behavior, tested upgrades and restores, complete export for implemented domains, and no-AI operation remain durable quality gates. No normal workflow should require manual database surgery.
+
+## Future Money Improvements and Alpha Gates
+
+Product improvements to evaluate after the core V0.1 workflows: gradually reduce excessive explanatory UI text with appropriate accessible icons; recurring scheduled income and expense entries; monthly spending and category charts; API-backed transaction search and filtering. These are backlog ideas, not current implementation commitments.
+
+Before the private Alpha relies on real personal finance data, review and resolve opening-balance effective dates with correct backdated-entry semantics, and owner-scoped idempotency for financial writes. Current warning text and uncertain-result retry guidance do not close these correctness gates. Historical post-transaction account balances are another deferred Money enhancement.
 
 ## Future Domains
 

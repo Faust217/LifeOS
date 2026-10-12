@@ -1,10 +1,10 @@
 # LifeOS Project State
 
-**Last updated:** 2026-10-10
+**Last updated:** 2026-10-12
 
-**Current milestone:** Issue #24 usable Money workflows approved and verified; further V0.1 work requires separate authorization
+**Current milestone:** Issue #25 Goals and checklist workflows approved and verified; next V0.1 scope pending
 
-**Product milestone:** Invite-only online V0.1 Alpha approved in Issue #16; identity, owner boundary, Money domain, Money API, four-area shell, and usable Money UI completed
+**Product milestone:** Invite-only online V0.1 Alpha approved in Issue #16; identity, owner boundary, Money, and Goals workflows implemented
 
 **Blueprint:** Master Project Blueprint v0.2 is the historical baseline; Issue #16 is the approved current product direction
 
@@ -12,7 +12,7 @@
 
 The Product Owner approved the [Issue #16 Product & Architecture Rebaseline](https://github.com/Faust217/LifeOS/issues/16): LifeOS becomes a Life-first, mobile-first platform whose V0.1 is an invite-only, online Alpha for the owner and a few testers. The Product Owner also approved ADR-013 and ADR-014 in [Issue #17](https://github.com/Faust217/LifeOS/issues/17). ADR-013 supersedes ADR-008's single-user V0.x scope and ADR-009's Bluecoins-in-V0.1 timing; owner scoping and safe import/export remain in force. Historical ADR-008/009 files remain untouched. Issues #18 and #19 establish identity persistence and the local OIDC/session flow. The Product Owner manually verified the live Google flow on local Compose on 2026-10-09; Internet-facing Alpha readiness remains a separate gate.
 
-Foundation #1–#15 remains the technical baseline. Issues #1–#7 were accepted and closed. Issues #8–#15 were implemented and verified locally in separate commits; their GitHub review and closure remain pending. The chain covers configuration, PostgreSQL, migrations, operational API health/readiness, OpenAPI-generated TypeScript types, the minimal web shell, and Compose startup. Issues #18–#20 supply identity, sign-in, and owner authorization. Issue #21 adds the Money domain. Issue #22 adds authenticated Money APIs. Issue #23 adds the four-area app shell. Issue #24 adds the approved Money UI and archive restoration. No Goals workflow exists yet.
+Foundation #1–#15 remains the technical baseline. Issues #1–#7 were accepted and closed. Issues #8–#15 were implemented and verified locally in separate commits; their GitHub review and closure remain pending. The chain covers configuration, PostgreSQL, migrations, operational API health/readiness, OpenAPI-generated TypeScript types, the minimal web shell, and Compose startup. Issues #18–#20 supply identity, sign-in, and owner authorization. Issue #21 adds the Money domain. Issue #22 adds authenticated Money APIs. Issue #23 adds the four-area app shell. Issue #24 adds the approved Money UI and archive restoration. The Product Owner approved Issue #25's Goals implementation and visual review; final verification passed before closure.
 
 ## Completed
 
@@ -65,11 +65,24 @@ Foundation #1–#15 remains the technical baseline. Issues #1–#7 were accepted
 - Before the private Alpha relies on real personal finance data, review and resolve dated opening-balance/backdated-transaction correctness and owner-scoped financial-write idempotency. API-backed history search/filtering and accurate historical post-transaction balances are future Money enhancements. The present warning and retry guidance are interim safeguards.
 - The existing personal LifeOS database was not inspected, migrated, reset, or used for Money testing. It may still be at schema v3. Its Money use requires separate Product Owner approval for a backup and non-destructive v4 migration plan. No deployment or #25 work was included.
 
+## Issue #25 Goals Completion
+
+- Created [Issue #25](https://github.com/Faust217/LifeOS/issues/25) after checking for an equivalent issue. The local implementation adds migration v5 for owner-scoped `goals` and `goal_checklist_items`, focused Go services and guarded `/api/v1/goals` endpoints, OpenAPI and generated TypeScript contracts, and real checklist workflows in Plans.
+- Goal creation, rename, completion/reopen, archive/restore, checklist add/edit/complete/uncomplete/remove, and completed/total progress are non-financial. Completion requires at least one item with every item done; completed Goals must be reopened before checklist changes, and archived Goals retain their checklists. Restore uses the existing `archived_at` column, a server-derived owner ID, and the normal session/Origin/CSRF mutation guard. Goal item writes lock the parent Goal to serialize against completion. PostgreSQL ownership constraints and SQL predicates include both owner and related record IDs.
+- Product Owner review found that the ignored visual fixture answered Goal POST with a list-shaped GET response, never persisted generated Goals, returned 404 for Goal item/mutation routes, and returned 404 for Money reads. This caused false success, missing new Goals, and false Money errors in the preview. The fixture now models method-specific Goal responses and mutable related items, and reuses the existing complete Issue #24 synthetic Money fixture behind the same preview origin. The production Go handler already returned correct Goal DTOs; the real browser/API/database lifecycle below verifies that distinction.
+- Plans now uses compact Goal overview cards with status and progress, dedicated `/plans/goals/{id}` detail URLs for the full checklist and management actions, native browser history/reload, and a separate archived section. The Sage Green styling and four-area navigation remain intact.
+- Verification uses only new disposable `*_test` databases and synthetic sessions. The existing personal LifeOS database and earlier disposable databases are outside this task. Product Owner visual review passed; no deployment or Issue #26 work is included.
+- The v5 migration chain and populated v4→v5 upgrade passed in the initial implementation. After the review fix, the full Go suite ran with fresh disposable identity/auth/Finance/Money/Goals PostgreSQL databases; `go vet`, 30 web tests, typecheck/build, OpenAPI lint/generated-type check, and `git diff --check` passed. Redocly has only the two existing redirect-only OAuth 2XX warnings.
+- A Chrome browser exercised create → detail/reload → add/edit/check/uncheck/remove → complete/reopen → archive/restore through the production React bundle, normal Go session/CSRF guards, and new disposable PostgreSQL v5 database `lifeos_issue25_browser_v5_test`. The archived Goal's checklist persisted and Money loaded its legitimate empty state. Unauthenticated Goals and Money requests returned 401. A synthetic session and local fake OIDC discovery enabled this isolated test; it does not claim another live Google sign-in. The visual fixture is for design preview only.
+- The personal database was not inspected or changed. It may be below v5, so running this build against it requires separate backup and migration approval. Existing disposable databases were not deleted.
+- [Codebase Map](CODEBASE_MAP.md) and [Development Guide](DEVELOPMENT_GUIDE.md) consolidate current source paths, safe local commands, integration-test setup, and personal-data boundaries without changing accepted ADRs.
+- Final verification reran the complete Go suite on five new, empty disposable `*_test` databases. Identity, OIDC/session, Finance ledger/Money API, and Goals migration/service/HTTP integration tests all executed and passed. The Goals test exercises populated v4→v5 upgrade, full lifecycle, owner/CSRF denials, concurrency, and a Money balance before and after Goals work. All 30 web tests, typecheck, build, `go vet`, OpenAPI lint and generated-type check passed; the two known redirect-only OAuth warnings remain. The already running synthetic preview passed create/list/step/check/archive/restore/read and returned 200 for Money accounts. The prior real-browser-to-Go-to-v5 smoke remains the separate full-stack evidence; final closure did not repeat live Google sign-in.
+
 ## Current Handoff
 
 [Issue #22](https://github.com/Faust217/LifeOS/issues/22) completed the authenticated `/api/v1` Money API for accounts, categories, income, expense, transfers, balances, spending, history, archive, and void. Mutations require Origin and CSRF checks. Request and response DTOs are separate from domain/persistence types; minor units travel as signed decimal strings so the TypeScript client does not lose int64 precision. The running Compose stack remains on its earlier image/schema until a separately authorized rollout.
 
-Issue #24 passed an isolated real browser-to-Money test using the guarded Go API and disposable PostgreSQL v4, plus Finance/Money API integration tests and the web/contract suites. Redocly retains two pre-existing redirect-only OAuth response warnings. All existing and new test databases remain intact. The running Compose stack and personal database remain on their earlier image/schema; use of the new Money UI with that database is gated on separate backup and migration approval.
+Issues #24 and #25 passed isolated browser-to-Go-API tests using normal session/CSRF guards, synthetic identities, and disposable PostgreSQL v4/v5 respectively. The Goals test verified its full lifecycle and that Money still loads. Redocly retains two pre-existing redirect-only OAuth response warnings. All existing and new test databases remain intact. A previously running personal Compose stack may still use its earlier image/schema; use of this build with that database is gated on separate backup and migration approval.
 
 All 15 Foundation issues are implemented locally. Issues #1–#7 are accepted and closed; Issues #8–#15 await Product Owner review and GitHub closure. The Foundation milestone remains administratively open even though its technical implementation and local verification are complete.
 
@@ -97,7 +110,7 @@ The recommended order is represented by the issue numbers. Issues #3 and #4 may 
 
 ## Next Work Requiring Explicit Authorization
 
-1. Select and authorize the next V0.1 implementation scope separately. Do not deploy or migrate the existing personal LifeOS database without separate approval. Resolve dated opening-balance semantics and financial-write idempotency before relying on real personal finance data. Foundation #8–#15 GitHub review/closure remains separate.
+1. Scope the next V0.1 milestone for suitable owner data export and tested backup/restore; no new issue or implementation has started. Do not deploy or migrate the existing personal LifeOS database without separate approval. Resolve dated opening-balance semantics and financial-write idempotency before relying on real personal finance data. Foundation #8–#15 GitHub review/closure remains separate.
 2. Before any Internet-facing Alpha use, review TLS, secrets, database transport, operational limits, and tested backup/restore.
 3. Before V0.2 offline transaction synchronization, accept a focused ADR for reliability, idempotency, recovery, conflicts, and account/device boundaries. Bluecoins import remains V0.3 or later under ADR-009's safety rules.
 
@@ -108,6 +121,7 @@ The recommended order is represented by the issue numbers. Issues #3 and #4 may 
 | Scope creep | Keep V0.1 to the approved invite-only online Alpha; defer offline sync, Bluecoins, and other modules |
 | Over-engineering | Preserve boundaries but implement one database, provider path, and deployment path only when needed |
 | Financial correctness | Issue #21 stores integer money, calculates balances from posted movements, keeps transfer allocations empty, rejects currency mismatch/overflow, and tests atomicity/concurrency; ordinary negative balances are explicitly allowed |
+| Real-data Money readiness | Opening-balance effective dates/backdated-entry correctness and financial-write idempotency require resolution before the private Alpha relies on personal finance data; UI warnings are interim only |
 | Database redesign and data loss | Stable meanings, forward migrations, upgrade tests, export, and restore-tested backups |
 | AI vendor churn or unsafe writes | Provider abstraction, Tool Gateway, explicit capability tiers, confirmation, and audit |
 | Identity or cross-user data exposure | Require both Google identity and invitation, revocable sessions, owner-scoped services/repositories, and negative isolation tests |
@@ -135,6 +149,7 @@ These decisions are intentionally deferred to their real decision points:
 ## Deferred Product Ideas
 
 - Optional color theme packs and personal visual customization can be evaluated after the core workflows are usable. The approved Sage Green design remains the only implemented theme; no theme store or payment feature is planned in the current work.
+- Future Money product improvements: gradually shorten explanatory UI copy with accessible icons, recurring scheduled income and expenses, monthly spending/category charts, and API-backed transaction search/filtering. Historical post-transaction balances are also deferred. The separate financial-correctness and idempotency gates are mandatory before real-data Alpha use; see [Roadmap](ROADMAP.md).
 
 ## Resume Checklist
 

@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: LifeOS API
   version: 0.1.0
-  description: Foundation operations, invite-only Alpha authentication, and owner-scoped Money.
+  description: Foundation operations, invite-only Alpha authentication, owner-scoped Money, and checklist Goals.
 servers:
   - url: http://127.0.0.1:8080
     description: Default local API
@@ -13,6 +13,8 @@ tags:
     description: Google sign-in and LifeOS sessions.
   - name: Money
     description: Owner-scoped accounts, categories, and financial events.
+  - name: Goals
+    description: Owner-scoped, non-financial checklist Goals.
 security: []
 paths:
   /api/v1/auth/start:
@@ -367,6 +369,216 @@ paths:
         "422": { $ref: "#/components/responses/MoneyOverflow" }
         "500": { $ref: "#/components/responses/MoneyInternalError" }
         "503": { $ref: "#/components/responses/MoneyUnavailable" }
+  /api/v1/goals:
+    get:
+      tags: [Goals]
+      summary: List the current user's Goals, including archived Goals
+      operationId: listGoals
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: Goals and checklist progress; items is empty when no Goals exist.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GoalsResponse" }
+        "400": { $ref: "#/components/responses/GoalBadRequest" }
+        "401": { $ref: "#/components/responses/GoalUnauthorized" }
+        "500": { $ref: "#/components/responses/GoalInternalError" }
+        "503": { $ref: "#/components/responses/GoalUnavailable" }
+    post:
+      tags: [Goals]
+      summary: Create a checklist Goal
+      operationId: createGoal
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/MoneyOrigin" }, { $ref: "#/components/parameters/MoneyCSRF" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GoalTitleRequest" }
+      responses:
+        "201": { $ref: "#/components/responses/GoalCreated" }
+        "400": { $ref: "#/components/responses/GoalBadRequest" }
+        "401": { $ref: "#/components/responses/GoalUnauthorized" }
+        "403": { $ref: "#/components/responses/GoalForbidden" }
+        "413": { $ref: "#/components/responses/GoalTooLarge" }
+        "415": { $ref: "#/components/responses/GoalUnsupportedMediaType" }
+        "500": { $ref: "#/components/responses/GoalInternalError" }
+        "503": { $ref: "#/components/responses/GoalUnavailable" }
+  /api/v1/goals/{goalID}:
+    get:
+      tags: [Goals]
+      summary: Get one owner-scoped Goal and its checklist
+      operationId: getGoal
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/GoalID" }]
+      responses:
+        "200": { $ref: "#/components/responses/GoalOK" }
+        "400": { $ref: "#/components/responses/GoalBadRequest" }
+        "401": { $ref: "#/components/responses/GoalUnauthorized" }
+        "404": { $ref: "#/components/responses/GoalNotFound" }
+        "500": { $ref: "#/components/responses/GoalInternalError" }
+        "503": { $ref: "#/components/responses/GoalUnavailable" }
+  /api/v1/goals/{goalID}/rename:
+    post:
+      tags: [Goals]
+      summary: Rename an active or completed Goal
+      operationId: renameGoal
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/GoalID" }, { $ref: "#/components/parameters/MoneyOrigin" }, { $ref: "#/components/parameters/MoneyCSRF" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GoalTitleRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/GoalOK" }
+        "400": { $ref: "#/components/responses/GoalBadRequest" }
+        "401": { $ref: "#/components/responses/GoalUnauthorized" }
+        "403": { $ref: "#/components/responses/GoalForbidden" }
+        "404": { $ref: "#/components/responses/GoalNotFound" }
+        "413": { $ref: "#/components/responses/GoalTooLarge" }
+        "415": { $ref: "#/components/responses/GoalUnsupportedMediaType" }
+        "500": { $ref: "#/components/responses/GoalInternalError" }
+        "503": { $ref: "#/components/responses/GoalUnavailable" }
+  /api/v1/goals/{goalID}/completion:
+    post:
+      tags: [Goals]
+      summary: Complete a Goal only when its nonempty checklist is done, or reopen it
+      operationId: setGoalCompletion
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/GoalID" }, { $ref: "#/components/parameters/MoneyOrigin" }, { $ref: "#/components/parameters/MoneyCSRF" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GoalCompletionRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/GoalOK" }
+        "400": { $ref: "#/components/responses/GoalBadRequest" }
+        "401": { $ref: "#/components/responses/GoalUnauthorized" }
+        "403": { $ref: "#/components/responses/GoalForbidden" }
+        "404": { $ref: "#/components/responses/GoalNotFound" }
+        "409": { $ref: "#/components/responses/GoalConflict" }
+        "413": { $ref: "#/components/responses/GoalTooLarge" }
+        "415": { $ref: "#/components/responses/GoalUnsupportedMediaType" }
+        "500": { $ref: "#/components/responses/GoalInternalError" }
+        "503": { $ref: "#/components/responses/GoalUnavailable" }
+  /api/v1/goals/{goalID}/archive:
+    post:
+      tags: [Goals]
+      summary: Archive a Goal while retaining its checklist
+      operationId: archiveGoal
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/GoalID" }, { $ref: "#/components/parameters/MoneyOrigin" }, { $ref: "#/components/parameters/MoneyCSRF" }]
+      responses:
+        "200": { $ref: "#/components/responses/GoalOK" }
+        "400": { $ref: "#/components/responses/GoalBadRequest" }
+        "401": { $ref: "#/components/responses/GoalUnauthorized" }
+        "403": { $ref: "#/components/responses/GoalForbidden" }
+        "404": { $ref: "#/components/responses/GoalNotFound" }
+        "500": { $ref: "#/components/responses/GoalInternalError" }
+        "503": { $ref: "#/components/responses/GoalUnavailable" }
+  /api/v1/goals/{goalID}/restore:
+    post:
+      tags: [Goals]
+      summary: Restore an archived Goal with its checklist intact
+      operationId: restoreGoal
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/GoalID" }, { $ref: "#/components/parameters/MoneyOrigin" }, { $ref: "#/components/parameters/MoneyCSRF" }]
+      responses:
+        "200": { $ref: "#/components/responses/GoalOK" }
+        "400": { $ref: "#/components/responses/GoalBadRequest" }
+        "401": { $ref: "#/components/responses/GoalUnauthorized" }
+        "403": { $ref: "#/components/responses/GoalForbidden" }
+        "404": { $ref: "#/components/responses/GoalNotFound" }
+        "500": { $ref: "#/components/responses/GoalInternalError" }
+        "503": { $ref: "#/components/responses/GoalUnavailable" }
+  /api/v1/goals/{goalID}/items:
+    post:
+      tags: [Goals]
+      summary: Add a checklist item to an active, incomplete Goal
+      operationId: addGoalItem
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/GoalID" }, { $ref: "#/components/parameters/MoneyOrigin" }, { $ref: "#/components/parameters/MoneyCSRF" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GoalTitleRequest" }
+      responses:
+        "201": { $ref: "#/components/responses/GoalCreated" }
+        "400": { $ref: "#/components/responses/GoalBadRequest" }
+        "401": { $ref: "#/components/responses/GoalUnauthorized" }
+        "403": { $ref: "#/components/responses/GoalForbidden" }
+        "404": { $ref: "#/components/responses/GoalNotFound" }
+        "409": { $ref: "#/components/responses/GoalConflict" }
+        "413": { $ref: "#/components/responses/GoalTooLarge" }
+        "415": { $ref: "#/components/responses/GoalUnsupportedMediaType" }
+        "500": { $ref: "#/components/responses/GoalInternalError" }
+        "503": { $ref: "#/components/responses/GoalUnavailable" }
+  /api/v1/goals/{goalID}/items/{itemID}/rename:
+    post:
+      tags: [Goals]
+      summary: Edit a checklist item title
+      operationId: renameGoalItem
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/GoalID" }, { $ref: "#/components/parameters/GoalItemID" }, { $ref: "#/components/parameters/MoneyOrigin" }, { $ref: "#/components/parameters/MoneyCSRF" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GoalTitleRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/GoalOK" }
+        "400": { $ref: "#/components/responses/GoalBadRequest" }
+        "401": { $ref: "#/components/responses/GoalUnauthorized" }
+        "403": { $ref: "#/components/responses/GoalForbidden" }
+        "404": { $ref: "#/components/responses/GoalNotFound" }
+        "409": { $ref: "#/components/responses/GoalConflict" }
+        "413": { $ref: "#/components/responses/GoalTooLarge" }
+        "415": { $ref: "#/components/responses/GoalUnsupportedMediaType" }
+        "500": { $ref: "#/components/responses/GoalInternalError" }
+        "503": { $ref: "#/components/responses/GoalUnavailable" }
+  /api/v1/goals/{goalID}/items/{itemID}/completion:
+    post:
+      tags: [Goals]
+      summary: Complete or uncomplete a checklist item
+      operationId: setGoalItemCompletion
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/GoalID" }, { $ref: "#/components/parameters/GoalItemID" }, { $ref: "#/components/parameters/MoneyOrigin" }, { $ref: "#/components/parameters/MoneyCSRF" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GoalCompletionRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/GoalOK" }
+        "400": { $ref: "#/components/responses/GoalBadRequest" }
+        "401": { $ref: "#/components/responses/GoalUnauthorized" }
+        "403": { $ref: "#/components/responses/GoalForbidden" }
+        "404": { $ref: "#/components/responses/GoalNotFound" }
+        "409": { $ref: "#/components/responses/GoalConflict" }
+        "413": { $ref: "#/components/responses/GoalTooLarge" }
+        "415": { $ref: "#/components/responses/GoalUnsupportedMediaType" }
+        "500": { $ref: "#/components/responses/GoalInternalError" }
+        "503": { $ref: "#/components/responses/GoalUnavailable" }
+  /api/v1/goals/{goalID}/items/{itemID}:
+    delete:
+      tags: [Goals]
+      summary: Remove a checklist item from an active, incomplete Goal
+      operationId: removeGoalItem
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/GoalID" }, { $ref: "#/components/parameters/GoalItemID" }, { $ref: "#/components/parameters/MoneyOrigin" }, { $ref: "#/components/parameters/MoneyCSRF" }]
+      responses:
+        "200": { $ref: "#/components/responses/GoalOK" }
+        "400": { $ref: "#/components/responses/GoalBadRequest" }
+        "401": { $ref: "#/components/responses/GoalUnauthorized" }
+        "403": { $ref: "#/components/responses/GoalForbidden" }
+        "404": { $ref: "#/components/responses/GoalNotFound" }
+        "409": { $ref: "#/components/responses/GoalConflict" }
+        "500": { $ref: "#/components/responses/GoalInternalError" }
+        "503": { $ref: "#/components/responses/GoalUnavailable" }
   /healthz:
     get:
       tags: [Operations]
@@ -455,7 +667,72 @@ components:
       name: offset
       required: false
       schema: { type: integer, minimum: 0, default: 0 }
+    GoalID:
+      in: path
+      name: goalID
+      required: true
+      schema: { type: string, format: uuid }
+    GoalItemID:
+      in: path
+      name: itemID
+      required: true
+      schema: { type: string, format: uuid }
   responses:
+    GoalOK:
+      description: Owner-scoped Goal and current checklist progress.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Goal" }
+    GoalCreated:
+      description: Goal or checklist item created; current Goal returned.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Goal" }
+    GoalBadRequest:
+      description: Malformed JSON, invalid input or identifier, or client owner override.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/GoalErrorResponse" }
+    GoalUnauthorized:
+      description: Missing, expired, revoked, or disabled-user session.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/GoalErrorResponse" }
+    GoalForbidden:
+      description: Origin or CSRF check failed.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/GoalErrorResponse" }
+    GoalNotFound:
+      description: Record is missing or belongs to another user.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/GoalErrorResponse" }
+    GoalConflict:
+      description: Goal is archived or complete, or its checklist is not ready for completion.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/GoalErrorResponse" }
+    GoalTooLarge:
+      description: Request body exceeds the supported size.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/GoalErrorResponse" }
+    GoalUnsupportedMediaType:
+      description: A JSON request body must use application/json.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/GoalErrorResponse" }
+    GoalInternalError:
+      description: Goal operation failed without exposing private storage details.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/GoalErrorResponse" }
+    GoalUnavailable:
+      description: Session validation is temporarily unavailable.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/GoalErrorResponse" }
     MoneyBadRequest:
       description: Invalid JSON, input, currency, pagination, owner override, or identifier.
       content:
@@ -513,6 +790,66 @@ components:
         type: string
         minLength: 1
   schemas:
+    GoalTitleRequest:
+      type: object
+      additionalProperties: false
+      required: [title]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 160 }
+    GoalCompletionRequest:
+      type: object
+      additionalProperties: false
+      required: [completed]
+      properties:
+        completed: { type: boolean }
+    GoalItem:
+      type: object
+      additionalProperties: false
+      required: [id, title, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        completed_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    Goal:
+      type: object
+      additionalProperties: false
+      required: [id, title, created_at, updated_at, completed_count, total_count, items]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        completed_at: { type: string, format: date-time }
+        archived_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        completed_count: { type: integer, minimum: 0 }
+        total_count: { type: integer, minimum: 0 }
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/GoalItem" }
+    GoalsResponse:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Goal" }
+    GoalErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum: [invalid_json, invalid_input, unsupported_media_type, request_too_large, authentication_required, invalid_origin, invalid_csrf, owner_override, method_not_allowed, session_unavailable, not_found, conflict, internal_error]
+            message: { type: string }
     MoneyMinorUnits:
       type: string
       pattern: '^-?(0|[1-9][0-9]*)$'

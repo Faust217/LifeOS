@@ -2,8 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { fetchCurrentUser, signOut, type CurrentUser } from "./api/auth";
 import { Icon } from "./Icons";
+import { GoalsPage } from "./GoalsPage";
 import { MoneyPage } from "./MoneyPage";
-import { primaryAreas, resolveArea, type Area } from "./navigation";
+import { goalIDFromPath, primaryAreas, resolveArea, type Area } from "./navigation";
 
 type SessionState =
   | { status: "loading" }
@@ -73,6 +74,7 @@ export function App() {
   return (
     <AuthenticatedShell
       area={resolveArea(window.location.pathname)}
+      goalID={goalIDFromPath(window.location.pathname)}
       user={session.user}
       onSignOut={() => void handleSignOut()}
       onSessionExpired={refreshSession}
@@ -151,8 +153,9 @@ function UserAvatar({ email }: { email: string }) {
   return <span className="user-avatar" aria-hidden="true">{email.slice(0, 1).toUpperCase()}</span>;
 }
 
-export function AuthenticatedShell({ area, user, onSignOut, onSessionExpired = () => undefined, signingOut = false, signOutError = "" }: {
+export function AuthenticatedShell({ area, goalID = null, user, onSignOut, onSessionExpired = () => undefined, signingOut = false, signOutError = "" }: {
   area: Area | null;
+  goalID?: string | null;
   user: CurrentUser;
   onSignOut: () => void;
   onSessionExpired?: () => void;
@@ -181,7 +184,7 @@ export function AuthenticatedShell({ area, user, onSignOut, onSessionExpired = (
         <main id="main-content" className="page-content" tabIndex={-1}>
           {area === "today" && <TodayPage />}
           {area === "money" && <MoneyPage csrfToken={user.csrf_token} onSessionExpired={onSessionExpired} />}
-          {area === "plans" && <PlansPage />}
+          {area === "plans" && <GoalsPage goalID={goalID} csrfToken={user.csrf_token} onSessionExpired={onSessionExpired} />}
           {area === "me" && <MePage user={user} onSignOut={onSignOut} signingOut={signingOut} signOutError={signOutError} />}
           {area === null && <NotFoundPage />}
         </main>
@@ -229,31 +232,10 @@ function TodayPage() {
           <span className="icon-tile icon-tile-plans"><Icon name="plans" /></span>
           <span className="card-kicker">WHAT COMES NEXT</span>
           <strong>Plans</strong>
-          <span>A home for simple Goals and the steps that move them forward. Goal creation is coming later.</span>
+          <span>Create a Goal, keep its steps together, and see your progress.</span>
           <span className="card-link">Explore Plans <Icon name="arrow" /></span>
         </a>
       </div>
-    </div>
-  );
-}
-
-function EmptyFeature({ icon, title, description }: { icon: "plans"; title: string; description: string }) {
-  return (
-    <section className="empty-feature">
-      <div className={`empty-illustration empty-illustration-${icon}`} aria-hidden="true"><Icon name={icon} /><span /><span /></div>
-      <p className="eyebrow">A SPACE IN PROGRESS</p>
-      <h2>{title}</h2>
-      <p>{description}</p>
-    </section>
-  );
-}
-
-function PlansPage() {
-  return (
-    <div className="page-stack">
-      <PageHeading eyebrow="PLANS" title="Give your goals room to grow." description="Simple steps today can become meaningful progress over time." />
-      <EmptyFeature icon="plans" title="Goals will find a home here." description="Checklist-based Goals are part of the V0.1 plan, but creation and progress tracking are not available in this shell yet." />
-      <div className="quiet-banner"><Icon name="spark" /><p>Plans are future intentions. They will never change your Money balance until a real financial event is recorded.</p></div>
     </div>
   );
 }

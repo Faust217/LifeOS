@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import { App, AuthenticatedShell } from "./LifeApp";
+import { goalIDFromPath, resolveArea } from "./navigation";
 
 const user = {
   id: "11111111-1111-4111-8111-111111111111",
@@ -32,13 +33,13 @@ describe("LifeOS application shell", () => {
     expect(html).toContain('href="#main-content"');
   });
 
-  it("gates Money data loading and keeps Plans honest", () => {
+  it("gates Money and Goals data loading until protected responses arrive", () => {
     const money = renderArea("money");
     const plans = renderArea("plans");
     expect(money).toContain("Loading your Money space");
     expect(money).not.toContain("MYR 0.00");
-    expect(plans).toContain("not available in this shell yet");
-    expect(plans).not.toContain("Add goal");
+    expect(plans).toContain("Loading your Goals");
+    expect(plans).not.toContain("Build a reading habit");
   });
 
   it("shows only the confirmed user's profile and a real sign-out control", () => {
@@ -54,5 +55,12 @@ describe("LifeOS application shell", () => {
     const html = renderArea(null);
     expect(html).toContain("PAGE NOT FOUND");
     expect(html).toContain('href="/today"');
+  });
+
+  it("resolves a Goal detail URL to Plans for reload and browser history", () => {
+    const path = "/plans/goals/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    expect(resolveArea(path)).toBe("plans");
+    expect(goalIDFromPath(path)).toBe("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+    expect(resolveArea("/plans/goals/not-a-uuid")).toBeNull();
   });
 });

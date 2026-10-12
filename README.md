@@ -6,7 +6,7 @@ LifeOS is a Life-first, mobile-first personal life management platform. It conne
 
 ## Repository Status
 
-The **Foundation** implementation is complete and was verified locally. Issues #18–#22 added invitation-gated Google sign-in, secure sessions, owner-scoped authorization, the Money domain, and authenticated Money APIs. [Issue #23](https://github.com/Faust217/LifeOS/issues/23) added the mobile-first Today, Money, Plans, and Me shell. [Issue #24](https://github.com/Faust217/LifeOS/issues/24) adds usable Money forms and history, verified end to end with a disposable PostgreSQL database. Goals workflows, export, and backup/restore are still V0.1 work. The Product Owner approved the new direction in [Issue #16](https://github.com/Faust217/LifeOS/issues/16) and accepted ADR-013 and ADR-014 for the [Issue #17](https://github.com/Faust217/LifeOS/issues/17) documentation rebaseline.
+The **Foundation** implementation is complete and was verified locally. Issues #18–#22 added invitation-gated Google sign-in, secure sessions, owner-scoped authorization, the Money domain, and authenticated Money APIs. [Issue #23](https://github.com/Faust217/LifeOS/issues/23) added the mobile-first Today, Money, Plans, and Me shell. [Issue #24](https://github.com/Faust217/LifeOS/issues/24) adds usable Money forms and history, verified end to end with a disposable PostgreSQL database. [Issue #25](https://github.com/Faust217/LifeOS/issues/25) adds persisted checklist Goals with overview/detail and archive/restore; export and tested backup/restore are still V0.1 work. The Product Owner approved the new direction in [Issue #16](https://github.com/Faust217/LifeOS/issues/16) and accepted ADR-013 and ADR-014 for the [Issue #17](https://github.com/Faust217/LifeOS/issues/17) documentation rebaseline.
 
 See [Foundation Startup](docs/FOUNDATION_STARTUP.md) for the clean local workflow and [Project State](docs/PROJECT_STATE.md) for the current review and authorization boundary.
 
@@ -21,6 +21,8 @@ See [Foundation Startup](docs/FOUNDATION_STARTUP.md) for the clean local workflo
 7. [ADR Index](docs/adr/README.md) - architecture decision policy and the accepted initial ADR set.
 8. [Foundation Startup](docs/FOUNDATION_STARTUP.md) - clean configuration, verification, startup, and shutdown workflow.
 9. [Learning Area](learning/README.md) - non-normative implementation and engineering notes.
+10. [Codebase Map](docs/CODEBASE_MAP.md) - current entry points and feature call paths.
+11. [Development Guide](docs/DEVELOPMENT_GUIDE.md) - safe local startup, tests, migrations, and troubleshooting.
 
 Agents must also read [AGENTS.md](AGENTS.md) before making changes.
 
@@ -48,4 +50,4 @@ The Word files remain the historical source baseline. The Product Owner-approved
 
 ## Current Boundary
 
-The current web shell presents four real destinations, confirms the authenticated session before revealing personal pages, and offers working sign-out. The Issue #24 Money screen calls existing authenticated APIs and shows only real owner-scoped data. Plans contains an honest Goals placeholder. Goals, export, backup/restore, Bluecoins import, AI, and MCP require separately authorized work. The personal database may still need a separately approved, backed-up v4 upgrade before Money can use it. See [web preview instructions](apps/web/README.md).
+The current web shell presents four real destinations, confirms the authenticated session before revealing personal pages, and offers working sign-out. The Money screen calls authenticated APIs and shows only real owner-scoped data. Plans uses owner-scoped Goal APIs for checklists and progress. Export, backup/restore, Bluecoins import, AI, and MCP require separately authorized work. The personal database may still need a separately approved, backed-up migration through v5 before this build can run against it. See [web preview instructions](apps/web/README.md).

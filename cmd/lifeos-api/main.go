@@ -15,6 +15,7 @@ import (
 
 	"github.com/Faust217/LifeOS/internal/finance"
 	"github.com/Faust217/LifeOS/internal/identity"
+	"github.com/Faust217/LifeOS/internal/planning"
 	"github.com/Faust217/LifeOS/internal/platform/config"
 	"github.com/Faust217/LifeOS/internal/platform/database"
 	"github.com/Faust217/LifeOS/internal/platform/health"
@@ -56,6 +57,7 @@ func run() error {
 		apiRouter := chi.NewRouter()
 		auth.RegisterRoutes(apiRouter)
 		finance.RegisterRoutes(apiRouter, auth, finance.NewService(postgres.Pool()))
+		planning.RegisterRoutes(apiRouter, auth, planning.NewService(postgres.Pool()))
 		authHandler = apiRouter
 	}
 	address := net.JoinHostPort(applicationConfig.API.Bind.String(), fmt.Sprintf("%d", applicationConfig.API.Port))
