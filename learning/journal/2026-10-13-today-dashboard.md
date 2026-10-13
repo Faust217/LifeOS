@@ -1,6 +1,6 @@
 # Issue #26: Real Today dashboard
 
-**Status:** Local, uncommitted implementation for Product Owner visual review. This journal is for later study; product rules remain in `docs/`.
+**Status:** Product Owner approved; Issue #26 completed and closed. This journal is for later study; product rules remain in `docs/`.
 
 ## What changed and why
 

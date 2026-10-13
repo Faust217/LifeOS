@@ -1,6 +1,6 @@
 # Issue #27: Category management and Uncategorized transactions
 
-**Status:** Local and uncommitted for Product Owner review. [Issue #27](https://github.com/Faust217/LifeOS/issues/27) is separate from the open Today Issue #26. Product rules are in `docs/DOMAIN_MODEL.md`; this entry explains the implementation.
+**Status:** Product Owner approved; [Issue #27](https://github.com/Faust217/LifeOS/issues/27) completed and closed separately from Today Issue #26. Product rules are in `docs/DOMAIN_MODEL.md`; this entry explains the implementation.
 
 ## Why this design
 

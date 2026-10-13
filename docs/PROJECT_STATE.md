@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-10-13
 
-**Current milestone:** Issues #26 Today, #27 Money category/Uncategorized, and #28 optional void reason completed and Product Owner approved; permanent transaction deletion is a separate proposal before Me/export
+**Current milestone:** Issues #26 Today, #27 Money category/Uncategorized, and #28 optional void reason completed and closed; Issue #29 permanent transaction deletion is a proposal requiring separate approval before Me/export
 
 **Product milestone:** Invite-only online V0.1 Alpha approved in Issue #16; identity, owner boundary, Money, and Goals workflows implemented
 
@@ -92,7 +92,7 @@ The frontend suite passed 33 tests after using a repository-local temporary dire
 
 ### Issue #27 Money category management and Uncategorized
 
-After the Product Owner approved the compact layout, a search found no equivalent GitHub issue, so [Issue #27](https://github.com/Faust217/LifeOS/issues/27) was opened separately from Today #26. The local uncommitted implementation adds owner-scoped category rename/archive/restore APIs and compact sheet actions. Rename preserves category ID, kind and historical allocation links; archive hides a category from new entries while keeping history, balances and category-specific spending intact; restore makes it selectable again. Category names are validated, case-insensitive conflicts within a kind are rejected, and `Uncategorized` is reserved as a display label. No category rows are deleted or reclassified.
+After the Product Owner approved the compact layout, a search found no equivalent GitHub issue, so [Issue #27](https://github.com/Faust217/LifeOS/issues/27) was opened separately from Today #26. The completed implementation adds owner-scoped category rename/archive/restore APIs and compact sheet actions. Rename preserves category ID, kind and historical allocation links; archive hides a category from new entries while keeping history, balances and category-specific spending intact; restore makes it selectable again. Category names are validated, case-insensitive conflicts within a kind are rejected, and `Uncategorized` is reserved as a display label. No category rows are deleted or reclassified.
 
 Income and expense requests may now send an explicit empty `allocations` array. The service still requires exact sum equality when allocations are nonempty; the repository writes the event and account movement atomically with zero allocation rows for Uncategorized. Money history and Today display the label. Overall spending/reporting must include posted uncategorized expense events and exclude transfers/voids; summing named-category allocations alone is insufficient. OpenAPI and generated TypeScript contracts were updated. Existing v4 Finance tables support this behavior, so no schema migration or new infrastructure was added.
 
@@ -136,7 +136,7 @@ The recommended order is represented by the issue numbers. Issues #3 and #4 may 
 
 ## Next Work Requiring Explicit Authorization
 
-1. The Product Owner approved Issues #26–#28 and requested a separate scoped proposal for permanent deletion of already-voided transactions before Me/export. Do not implement deletion until the detailed issue, domain/audit semantics, and backup-retention limits are approved. Then scope Me/export, opening-balance/backdated correctness, financial-write idempotency, backup/restore, and the non-destructive upgrade path through separate authorization. Foundation #8–#15 GitHub review/closure remains separate.
+1. [Issue #29](https://github.com/Faust217/LifeOS/issues/29) separately proposes permanent deletion of already-voided transactions before Me/export. It remains open for Product Owner review. Do not implement deletion until its detailed scope, domain/audit semantics, and backup-retention limits are approved. Then scope Me/export, opening-balance/backdated correctness, financial-write idempotency, backup/restore, and the non-destructive upgrade path through separate authorization. Foundation #8–#15 GitHub review/closure remains separate.
 2. Establish and explicitly accept the Personal Data Ready gate before real financial data: Finance correctness, idempotency, export, owner isolation, backups and verified restore, forward upgrades, and secure persistent operation. Do not deploy or migrate the personal database without separate approval.
 3. Before any Internet-facing Alpha use, review HTTPS/TLS, secrets, database transport, operational limits, PWA installation, persistent storage, and tested recovery. Before V0.2 offline synchronization, accept a focused ADR for reliability, recovery, conflicts, and account/device boundaries. Product Owner acceptance of proposed ADR-015 is required to remove the accepted Bluecoins product-adapter commitment.
 

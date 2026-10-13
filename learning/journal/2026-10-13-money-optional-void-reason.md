@@ -1,6 +1,6 @@
 # Issue #28: Optional Void Reason
 
-**Status:** Product Owner approved implementation and final display polish. [Issue #28](https://github.com/Faust217/LifeOS/issues/28) is separate from Today #26 and Money categories #27. The current product rule is in `docs/DOMAIN_MODEL.md`.
+**Status:** Product Owner approved implementation and final display polish; [Issue #28](https://github.com/Faust217/LifeOS/issues/28) completed and closed separately from Today #26 and Money categories #27. The current product rule is in `docs/DOMAIN_MODEL.md`.
 
 ## What changed and why
 

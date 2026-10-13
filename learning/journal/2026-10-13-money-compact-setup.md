@@ -1,6 +1,6 @@
 # Compact Money setup: local UX refinement
 
-**Status:** Local and uncommitted for Product Owner review. This is separate from Issue #26's Today dashboard scope. Product rules stay in `docs/`.
+**Status:** Product Owner approved; compact setup shipped with Issue #27, separate from Issue #26's Today dashboard scope. Product rules stay in `docs/`.
 
 ## What changed and why
 
