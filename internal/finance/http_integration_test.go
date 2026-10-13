@@ -333,7 +333,7 @@ func TestMoneyHTTPIntegration(t *testing.T) {
 	malformedQueryResponse := httptest.NewRecorder()
 	router.ServeHTTP(malformedQueryResponse, malformedQuery)
 	moneyError(t, malformedQueryResponse, http.StatusBadRequest, "invalid_input")
-	moneyError(t, request(http.MethodPost, "/api/v1/events/"+expense.ID+"/void", `{"reason":"  "}`, ownerCookie, ownerCSRF), http.StatusBadRequest, "invalid_input")
+	moneyError(t, request(http.MethodPost, "/api/v1/events/"+expense.ID+"/void", `{"reason":"`+strings.Repeat("x", 501)+`"}`, ownerCookie, ownerCSRF), http.StatusBadRequest, "invalid_input")
 
 	moneyStatus(t, request(http.MethodPost, "/api/v1/accounts/"+ownerCard.ID+"/archive", "", ownerCookie, ownerCSRF), http.StatusNoContent)
 	restorePath := "/api/v1/accounts/" + ownerCard.ID + "/restore"
@@ -375,7 +375,7 @@ func TestMoneyHTTPIntegration(t *testing.T) {
 	if cardBalance.AmountMinor != "-300" {
 		t.Fatalf("restored account lost historical balance=%s", cardBalance.AmountMinor)
 	}
-	moneyStatus(t, request(http.MethodPost, "/api/v1/events/"+expense.ID+"/void", `{"reason":"Duplicate"}`, ownerCookie, ownerCSRF), http.StatusNoContent)
+	moneyStatus(t, request(http.MethodPost, "/api/v1/events/"+expense.ID+"/void", `{}`, ownerCookie, ownerCSRF), http.StatusNoContent)
 	moneyError(t, request(http.MethodPost, "/api/v1/events/"+expense.ID+"/void", `{"reason":"Again"}`, ownerCookie, ownerCSRF), http.StatusConflict, "conflict")
 	spending = moneyDecode[struct {
 		AmountMinor string `json:"amount_minor"`
@@ -395,12 +395,140 @@ func TestMoneyHTTPIntegration(t *testing.T) {
 	foundVoid := false
 	for _, event := range fullHistory.Items {
 		if event.ID == expense.ID {
-			foundVoid = event.Status == "voided" && event.VoidedAt != nil && len(event.Movements) == 1 && len(event.Allocations) == 1
+			foundVoid = event.Status == "voided" && event.VoidedAt != nil && event.VoidReason == noVoidReasonProvided && len(event.Movements) == 1 && len(event.Allocations) == 1
 		}
 	}
 	if !foundVoid {
 		t.Fatal("void removed history")
 	}
+	categoryPath := "/api/v1/categories/" + food.ID
+	moneyError(t, request(http.MethodPost, categoryPath+"/rename", `{"name":"Medical"}`, nil, ""), http.StatusUnauthorized, "authentication_required")
+	for _, cookie := range []*http.Cookie{expiredCookie, revokedCookie, disabledCookie} {
+		moneyError(t, request(http.MethodPost, categoryPath+"/archive", "", cookie, "x"), http.StatusUnauthorized, "authentication_required")
+	}
+	moneyError(t, request(http.MethodPost, categoryPath+"/rename", `{"name":"Medical"}`, ownerCookie, ""), http.StatusForbidden, "invalid_csrf")
+	moneyError(t, moneyHTTP(t, router, http.MethodPost, categoryPath+"/archive", "", ownerCookie, "https://evil.example", ownerCSRF), http.StatusForbidden, "invalid_origin")
+	moneyError(t, request(http.MethodPost, categoryPath+"/rename", `{"name":"Private"}`, testerCookie, testerCSRF), http.StatusNotFound, "not_found")
+	moneyError(t, request(http.MethodPost, categoryPath+"/archive", "", testerCookie, testerCSRF), http.StatusNotFound, "not_found")
+	moneyError(t, request(http.MethodPost, categoryPath+"/restore", "", testerCookie, testerCSRF), http.StatusNotFound, "not_found")
+	moneyError(t, request(http.MethodPost, categoryPath+"/rename", `{"name":"Uncategorized"}`, ownerCookie, ownerCSRF), http.StatusBadRequest, "invalid_input")
+	moneyError(t, request(http.MethodPost, categoryPath+"/rename", `{"name":"Medical","kind":"income"}`, ownerCookie, ownerCSRF), http.StatusBadRequest, "invalid_json")
+	renamedCategory := moneyDecode[categoryResponse](t, request(http.MethodPost, categoryPath+"/rename", `{"name":"Medical"}`, ownerCookie, ownerCSRF), http.StatusOK)
+	if renamedCategory.ID != food.ID || renamedCategory.Name != "Medical" || renamedCategory.Kind != "expense" {
+		t.Fatalf("renamed category=%+v", renamedCategory)
+	}
+	moneyError(t, request(http.MethodPost, "/api/v1/categories", `{"name":"medical","kind":"expense"}`, ownerCookie, ownerCSRF), http.StatusConflict, "conflict")
+	medicalCategories := moneyDecode[struct {
+		Items []categoryResponse `json:"items"`
+	}](t, request(http.MethodGet, "/api/v1/categories", "", ownerCookie, ""), http.StatusOK)
+	if medicalCategories.Items[0].ID != food.ID || medicalCategories.Items[0].Name != "Medical" {
+		t.Fatalf("renamed category list=%+v", medicalCategories.Items)
+	}
+	linkedHistory := moneyDecode[struct {
+		Items []eventResponse `json:"items"`
+	}](t, request(http.MethodGet, "/api/v1/events", "", ownerCookie, ""), http.StatusOK)
+	linked := false
+	for _, item := range linkedHistory.Items {
+		if item.ID == expense.ID && len(item.Allocations) == 1 && item.Allocations[0].CategoryID == food.ID {
+			linked = true
+		}
+	}
+	if !linked {
+		t.Fatal("category rename lost historical allocation")
+	}
+	moneyStatus(t, request(http.MethodPost, categoryPath+"/archive", "", ownerCookie, ownerCSRF), http.StatusNoContent)
+	archivedCategories := moneyDecode[struct {
+		Items []categoryResponse `json:"items"`
+	}](t, request(http.MethodGet, "/api/v1/categories", "", ownerCookie, ""), http.StatusOK)
+	if archivedCategories.Items[0].ArchivedAt == nil {
+		t.Fatal("archived category missing timestamp")
+	}
+	moneyError(t, request(http.MethodPost, "/api/v1/events", expenseBody, ownerCookie, ownerCSRF), http.StatusConflict, "archived_record")
+	moneyStatus(t, request(http.MethodPost, categoryPath+"/restore", "", ownerCookie, ownerCSRF), http.StatusNoContent)
+	moneyError(t, request(http.MethodPost, categoryPath+"/restore", "", ownerCookie, ownerCSRF), http.StatusNotFound, "not_found")
+	for _, kind := range []string{"expense", "income"} {
+		body := `{"kind":"` + kind + `","account_id":"` + ownerBank.ID + `","amount_minor":"` + map[string]string{"expense": "200", "income": "300"}[kind] + `","currency":"MYR","occurred_at":` + at + `,"allocations":[]}`
+		uncategorized := moneyDecode[eventResponse](t, request(http.MethodPost, "/api/v1/events", body, ownerCookie, ownerCSRF), http.StatusCreated)
+		if len(uncategorized.Allocations) != 0 || len(uncategorized.Movements) != 1 {
+			t.Fatalf("uncategorized %s=%+v", kind, uncategorized)
+		}
+	}
+	balance = moneyDecode[struct {
+		AmountMinor string `json:"amount_minor"`
+	}](t, request(http.MethodGet, "/api/v1/accounts/"+ownerBank.ID+"/balance", "", ownerCookie, ""), http.StatusOK)
+	if balance.AmountMinor != "1100" {
+		t.Fatalf("uncategorized balance=%s", balance.AmountMinor)
+	}
+	spending = moneyDecode[struct {
+		AmountMinor string `json:"amount_minor"`
+	}](t, request(http.MethodGet, spendingPath, "", ownerCookie, ""), http.StatusOK)
+	if spending.AmountMinor != "0" {
+		t.Fatalf("uncategorized or transfer misclassified as Medical=%s", spending.AmountMinor)
+	}
+	for _, variant := range []struct {
+		name, body, wantReason string
+	}{
+		{"omitted", `{}`, noVoidReasonProvided},
+		{"empty", `{"reason":""}`, noVoidReasonProvided},
+		{"whitespace", `{"reason":"   "}`, noVoidReasonProvided},
+		{"explicit", `{"reason":"  Entered twice  "}`, "Entered twice"},
+		{"unicode limit", `{"reason":"` + strings.Repeat("药", 500) + `"}`, strings.Repeat("药", 500)},
+	} {
+		t.Run("void reason "+variant.name, func(t *testing.T) {
+			body := `{"kind":"expense","account_id":"` + ownerBank.ID + `","amount_minor":"100","currency":"MYR","occurred_at":` + at + `,"allocations":[{"category_id":"` + food.ID + `","amount_minor":"100"}]}`
+			event := moneyDecode[eventResponse](t, request(http.MethodPost, "/api/v1/events", body, ownerCookie, ownerCSRF), http.StatusCreated)
+			voidPath := "/api/v1/events/" + event.ID + "/void"
+			if variant.name == "omitted" {
+				moneyError(t, request(http.MethodPost, voidPath, variant.body, nil, ""), http.StatusUnauthorized, "authentication_required")
+				moneyError(t, request(http.MethodPost, voidPath, variant.body, testerCookie, testerCSRF), http.StatusNotFound, "not_found")
+				moneyError(t, request(http.MethodPost, voidPath, variant.body, ownerCookie, ""), http.StatusForbidden, "invalid_csrf")
+				moneyError(t, moneyHTTP(t, router, http.MethodPost, voidPath, variant.body, ownerCookie, "https://evil.example", ownerCSRF), http.StatusForbidden, "invalid_origin")
+			}
+			balance := moneyDecode[struct {
+				AmountMinor string `json:"amount_minor"`
+			}](t,
+				request(http.MethodGet, "/api/v1/accounts/"+ownerBank.ID+"/balance", "", ownerCookie, ""), http.StatusOK)
+			if balance.AmountMinor != "1000" {
+				t.Fatalf("balance before void=%s", balance.AmountMinor)
+			}
+			spending := moneyDecode[struct {
+				AmountMinor string `json:"amount_minor"`
+			}](t,
+				request(http.MethodGet, spendingPath, "", ownerCookie, ""), http.StatusOK)
+			if spending.AmountMinor != "100" {
+				t.Fatalf("spending before void=%s", spending.AmountMinor)
+			}
+			moneyStatus(t, request(http.MethodPost, voidPath, variant.body, ownerCookie, ownerCSRF), http.StatusNoContent)
+			moneyError(t, request(http.MethodPost, voidPath, variant.body, ownerCookie, ownerCSRF), http.StatusConflict, "conflict")
+			balance = moneyDecode[struct {
+				AmountMinor string `json:"amount_minor"`
+			}](t,
+				request(http.MethodGet, "/api/v1/accounts/"+ownerBank.ID+"/balance", "", ownerCookie, ""), http.StatusOK)
+			spending = moneyDecode[struct {
+				AmountMinor string `json:"amount_minor"`
+			}](t,
+				request(http.MethodGet, spendingPath, "", ownerCookie, ""), http.StatusOK)
+			if balance.AmountMinor != "1100" || spending.AmountMinor != "0" {
+				t.Fatalf("after void balance=%s spending=%s", balance.AmountMinor, spending.AmountMinor)
+			}
+			history := moneyDecode[struct {
+				Items []eventResponse `json:"items"`
+			}](t,
+				request(http.MethodGet, "/api/v1/events?limit=100", "", ownerCookie, ""), http.StatusOK)
+			found := false
+			for _, item := range history.Items {
+				if item.ID == event.ID {
+					found = item.Status == "voided" && item.VoidedAt != nil && item.VoidReason == variant.wantReason && len(item.Movements) == 1 && len(item.Allocations) == 1
+				}
+			}
+			if !found {
+				t.Fatalf("void history missing or changed for %s", variant.name)
+			}
+		})
+	}
+	moneyError(t, request(http.MethodPost, "/api/v1/events", strings.Replace(expenseBody, `,"allocations":[{"category_id":"`+food.ID+`","amount_minor":"1300"}]`, "", 1), ownerCookie, ownerCSRF), http.StatusBadRequest, "invalid_input")
+	moneyError(t, request(http.MethodPost, "/api/v1/events", strings.Replace(expenseBody, `"allocations":[{"category_id":"`+food.ID+`","amount_minor":"1300"}]`, `"allocations":null`, 1), ownerCookie, ownerCSRF), http.StatusBadRequest, "invalid_input")
+	moneyError(t, request(http.MethodPost, "/api/v1/events", strings.Replace(expenseBody, `"amount_minor":"1300"}]`, `"amount_minor":"1200"}]`, 1), ownerCookie, ownerCSRF), http.StatusBadRequest, "invalid_input")
 	testerAccounts := moneyDecode[struct {
 		Items []accountResponse `json:"items"`
 	}](t, request(http.MethodGet, "/api/v1/accounts", "", testerCookie, ""), http.StatusOK)

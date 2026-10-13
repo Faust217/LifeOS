@@ -176,6 +176,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/categories/{categoryID}/rename": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rename an owned category without changing its kind or historical links */
+        post: operations["renameMoneyCategory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/categories/{categoryID}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Archive a category while preserving all historical allocations */
+        post: operations["archiveMoneyCategory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/categories/{categoryID}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restore an archived category for new transactions */
+        post: operations["restoreMoneyCategory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/categories/{categoryID}/spending": {
         parameters: {
             query?: never;
@@ -203,7 +254,7 @@ export interface paths {
         /** List paginated financial event history */
         get: operations["listMoneyEvents"];
         put?: never;
-        /** Post income or expense with category allocations */
+        /** Post income or expense with explicit allocations or as Uncategorized */
         post: operations["postMoneyEvent"];
         delete?: never;
         options?: never;
@@ -237,7 +288,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Void an event with an explicit reason while retaining history */
+        /** Void an event with an optional note while retaining history */
         post: operations["voidMoneyEvent"];
         delete?: never;
         options?: never;
@@ -553,6 +604,9 @@ export interface components {
             /** @enum {string} */
             kind: "income" | "expense";
         };
+        MoneyCategoryRename: {
+            name: string;
+        };
         MoneyCategory: {
             /** Format: uuid */
             id: string;
@@ -586,6 +640,7 @@ export interface components {
             /** Format: date-time */
             occurred_at: string;
             note?: string;
+            /** @description Explicit empty array means Uncategorized. If nonempty, the positive allocations must sum exactly to amount_minor. */
             allocations: components["schemas"]["MoneyAllocationCreate"][];
         };
         MoneyTransferCreate: {
@@ -638,8 +693,9 @@ export interface components {
             limit: number;
             offset: number;
         };
+        /** @description An omitted, empty, or whitespace-only reason is recorded as no reason provided by the owner; the event remains in history. */
         MoneyVoidRequest: {
-            reason: string;
+            reason?: string;
         };
         CurrentUser: {
             /** Format: uuid */
@@ -1270,8 +1326,111 @@ export interface operations {
             400: components["responses"]["MoneyBadRequest"];
             401: components["responses"]["MoneyUnauthorized"];
             403: components["responses"]["MoneyForbidden"];
+            409: components["responses"]["MoneyConflict"];
             413: components["responses"]["MoneyTooLarge"];
             415: components["responses"]["MoneyUnsupportedMediaType"];
+            500: components["responses"]["MoneyInternalError"];
+            503: components["responses"]["MoneyUnavailable"];
+        };
+    };
+    renameMoneyCategory: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured public origin. */
+                Origin: components["parameters"]["MoneyOrigin"];
+                /** @description Session-bound token returned by GET /api/v1/me. */
+                "X-CSRF-Token": components["parameters"]["MoneyCSRF"];
+            };
+            path: {
+                categoryID: components["parameters"]["MoneyCategoryID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MoneyCategoryRename"];
+            };
+        };
+        responses: {
+            /** @description Same category ID and kind with its updated name. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MoneyCategory"];
+                };
+            };
+            400: components["responses"]["MoneyBadRequest"];
+            401: components["responses"]["MoneyUnauthorized"];
+            403: components["responses"]["MoneyForbidden"];
+            404: components["responses"]["MoneyNotFound"];
+            409: components["responses"]["MoneyConflict"];
+            413: components["responses"]["MoneyTooLarge"];
+            415: components["responses"]["MoneyUnsupportedMediaType"];
+            500: components["responses"]["MoneyInternalError"];
+            503: components["responses"]["MoneyUnavailable"];
+        };
+    };
+    archiveMoneyCategory: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured public origin. */
+                Origin: components["parameters"]["MoneyOrigin"];
+                /** @description Session-bound token returned by GET /api/v1/me. */
+                "X-CSRF-Token": components["parameters"]["MoneyCSRF"];
+            };
+            path: {
+                categoryID: components["parameters"]["MoneyCategoryID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Category archived; existing allocations remain linked. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["MoneyBadRequest"];
+            401: components["responses"]["MoneyUnauthorized"];
+            403: components["responses"]["MoneyForbidden"];
+            404: components["responses"]["MoneyNotFound"];
+            500: components["responses"]["MoneyInternalError"];
+            503: components["responses"]["MoneyUnavailable"];
+        };
+    };
+    restoreMoneyCategory: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured public origin. */
+                Origin: components["parameters"]["MoneyOrigin"];
+                /** @description Session-bound token returned by GET /api/v1/me. */
+                "X-CSRF-Token": components["parameters"]["MoneyCSRF"];
+            };
+            path: {
+                categoryID: components["parameters"]["MoneyCategoryID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Category restored without changing its history. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["MoneyBadRequest"];
+            401: components["responses"]["MoneyUnauthorized"];
+            403: components["responses"]["MoneyForbidden"];
+            404: components["responses"]["MoneyNotFound"];
             500: components["responses"]["MoneyInternalError"];
             503: components["responses"]["MoneyUnavailable"];
         };
@@ -1351,7 +1510,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Atomic financial event with its movement and allocations. */
+            /** @description Atomic financial event with its movement and zero or more allocations. An empty allocation array means Uncategorized. */
             201: {
                 headers: {
                     [name: string]: unknown;

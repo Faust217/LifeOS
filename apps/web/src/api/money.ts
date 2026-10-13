@@ -6,6 +6,7 @@ export type MoneyCategory = components["schemas"]["MoneyCategory"];
 export type MoneyEvent = components["schemas"]["MoneyEvent"];
 export type AccountCreate = components["schemas"]["MoneyAccountCreate"];
 export type CategoryCreate = components["schemas"]["MoneyCategoryCreate"];
+export type CategoryRename = components["schemas"]["MoneyCategoryRename"];
 export type EventCreate = components["schemas"]["MoneyEventCreate"];
 export type TransferCreate = components["schemas"]["MoneyTransferCreate"];
 export type MoneyHistory = components["schemas"]["MoneyHistoryResponse"];
@@ -65,8 +66,11 @@ export const listMoneyHistory = (limit: number, offset: number) => moneyRequest<
 
 export const createMoneyAccount = (csrfToken: string, input: AccountCreate) => moneyRequest<MoneyAccount>("/api/v1/accounts", csrfToken, input);
 export const createMoneyCategory = (csrfToken: string, input: CategoryCreate) => moneyRequest<MoneyCategory>("/api/v1/categories", csrfToken, input);
+export const renameMoneyCategory = (csrfToken: string, id: string, input: CategoryRename) => moneyRequest<MoneyCategory>(`/api/v1/categories/${encodeURIComponent(id)}/rename`, csrfToken, input);
+export const archiveMoneyCategory = (csrfToken: string, id: string) => moneyRequest<void>(`/api/v1/categories/${encodeURIComponent(id)}/archive`, csrfToken);
+export const restoreMoneyCategory = (csrfToken: string, id: string) => moneyRequest<void>(`/api/v1/categories/${encodeURIComponent(id)}/restore`, csrfToken);
 export const postMoneyEvent = (csrfToken: string, input: EventCreate) => moneyRequest<MoneyEvent>("/api/v1/events", csrfToken, input);
 export const postMoneyTransfer = (csrfToken: string, input: TransferCreate) => moneyRequest<MoneyEvent>("/api/v1/transfers", csrfToken, input);
 export const archiveMoneyAccount = (csrfToken: string, id: string) => moneyRequest<void>(`/api/v1/accounts/${encodeURIComponent(id)}/archive`, csrfToken);
 export const restoreMoneyAccount = (csrfToken: string, id: string) => moneyRequest<void>(`/api/v1/accounts/${encodeURIComponent(id)}/restore`, csrfToken);
-export const voidMoneyEvent = (csrfToken: string, id: string, reason: string) => moneyRequest<void>(`/api/v1/events/${encodeURIComponent(id)}/void`, csrfToken, { reason } satisfies components["schemas"]["MoneyVoidRequest"]);
+export const voidMoneyEvent = (csrfToken: string, id: string, reason = "") => moneyRequest<void>(`/api/v1/events/${encodeURIComponent(id)}/void`, csrfToken, { reason } satisfies components["schemas"]["MoneyVoidRequest"]);

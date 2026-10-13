@@ -1,0 +1,32 @@
+.today-page { gap: 1rem; }
+.today-heading { border-radius: 1.5rem; padding: clamp(1.5rem, 3vw, 2.3rem); background: linear-gradient(115deg, #d7eee0 3%, #e9f3dd 72%, #f8edd5); }
+.today-heading .eyebrow { margin-bottom: .55rem; }
+.today-heading h1 { margin: 0; font-size: clamp(2rem, 4vw, 3rem); letter-spacing: -.055em; line-height: 1.08; }
+.today-heading > p:last-child { margin: .6rem 0 0; color: #486b5f; }
+.today-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.today-panel { min-width: 0; border: 1px solid var(--border); border-radius: 1.4rem; padding: clamp(1.2rem, 2.6vw, 1.7rem); background: var(--paper); }
+.today-panel-head { display: flex; align-items: end; justify-content: space-between; gap: .8rem; margin-bottom: 1rem; }
+.today-panel-head .eyebrow { margin-bottom: .3rem; }
+.today-panel-head h2 { margin: 0; font-size: 1.35rem; letter-spacing: -.035em; }
+.today-panel-head > a { display: inline-flex; align-items: center; gap: .25rem; flex: none; min-height: 44px; color: var(--accent); font-size: .85rem; font-weight: 700; text-decoration: none; }
+.today-panel-head > a svg, .today-goal-list a svg { width: .95rem; height: .95rem; }
+.today-empty { margin: 0; color: var(--muted); line-height: 1.55; }
+.today-empty a { color: var(--accent); font-weight: 700; }
+.today-account-list, .today-goal-list, .today-activity-list { list-style: none; margin: 0; padding: 0; }
+.today-account-list li, .today-activity-list li { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: .85rem 0; border-top: 1px solid var(--border); }
+.today-account-list li > div, .today-activity-list li > div { display: grid; gap: .2rem; min-width: 0; }
+.today-account-list li strong, .today-activity-list li strong { overflow-wrap: anywhere; }
+.today-account-list li > strong, .today-activity-list li > strong { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.today-account-list span, .today-activity-list span { color: var(--muted); font-size: .82rem; line-height: 1.4; }
+.today-goal-list li { border-top: 1px solid var(--border); }
+.today-goal-list a { display: grid; gap: .4rem; min-height: 64px; padding: .75rem 0; color: inherit; text-decoration: none; }
+.today-goal-list a:hover strong, .today-goal-list a:focus-visible strong { color: var(--accent); text-decoration: underline; }
+.today-goal-list span { display: inline-flex; align-items: center; gap: .3rem; color: var(--muted); font-size: .83rem; }
+.today-goal-list progress { width: 100%; height: .45rem; accent-color: var(--accent); }
+.today-activity-list .is-voided { color: var(--muted); text-decoration: line-through; }
+@media (max-width: 700px) { .today-grid { grid-template-columns: 1fr; } }
+@media (max-width: 380px) {
+  .today-panel-head { align-items: start; }
+  .today-account-list li, .today-activity-list li { align-items: start; flex-direction: column; gap: .3rem; }
+  .today-account-list li > strong, .today-activity-list li > strong { text-align: left; }
+}

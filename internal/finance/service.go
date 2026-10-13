@@ -8,6 +8,7 @@ import (
 	"math"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Faust217/LifeOS/internal/identity"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -129,10 +130,41 @@ func (s *Service) CreateCategory(ctx context.Context, owner identity.OwnerID, in
 		return Category{}, ErrUnauthorized
 	}
 	input.Name = strings.TrimSpace(input.Name)
-	if input.Name == "" || len(input.Name) > 120 || (input.Kind != "expense" && input.Kind != "income") {
+	if input.Name == "" || len(input.Name) > 120 || strings.EqualFold(input.Name, "Uncategorized") || (input.Kind != "expense" && input.Kind != "income") {
 		return Category{}, ErrInvalidInput
 	}
 	return s.repo.createCategory(ctx, owner, input)
+}
+
+func (s *Service) RenameCategory(ctx context.Context, owner identity.OwnerID, categoryID, name string) (Category, error) {
+	if !owner.Valid() {
+		return Category{}, ErrUnauthorized
+	}
+	name = strings.TrimSpace(name)
+	if !validID(categoryID) || name == "" || len(name) > 120 || strings.EqualFold(name, "Uncategorized") {
+		return Category{}, ErrInvalidInput
+	}
+	return s.repo.renameCategory(ctx, owner, categoryID, name)
+}
+
+func (s *Service) ArchiveCategory(ctx context.Context, owner identity.OwnerID, categoryID string) error {
+	if !owner.Valid() {
+		return ErrUnauthorized
+	}
+	if !validID(categoryID) {
+		return ErrInvalidInput
+	}
+	return s.repo.archiveCategory(ctx, owner, categoryID)
+}
+
+func (s *Service) RestoreCategory(ctx context.Context, owner identity.OwnerID, categoryID string) error {
+	if !owner.Valid() {
+		return ErrUnauthorized
+	}
+	if !validID(categoryID) {
+		return ErrInvalidInput
+	}
+	return s.repo.restoreCategory(ctx, owner, categoryID)
 }
 
 func (s *Service) PostExpense(ctx context.Context, owner identity.OwnerID, input EventInput) (Event, error) {
@@ -147,7 +179,7 @@ func (s *Service) postSingleAccountEvent(ctx context.Context, owner identity.Own
 	if !owner.Valid() {
 		return Event{}, ErrUnauthorized
 	}
-	if !validID(input.AccountID) || !validEventInput(input.AmountMinor, input.Currency, input.OccurredAt, input.Note) || len(input.Allocations) == 0 {
+	if !validID(input.AccountID) || !validEventInput(input.AmountMinor, input.Currency, input.OccurredAt, input.Note) {
 		return Event{}, ErrInvalidInput
 	}
 	var total int64
@@ -162,7 +194,7 @@ func (s *Service) postSingleAccountEvent(ctx context.Context, owner identity.Own
 		}
 		total += allocation.AmountMinor
 	}
-	if total != input.AmountMinor {
+	if len(input.Allocations) > 0 && total != input.AmountMinor {
 		return Event{}, ErrInvalidInput
 	}
 	amount := input.AmountMinor
@@ -258,6 +290,8 @@ func (s *Service) RestoreAccount(ctx context.Context, owner identity.OwnerID, ac
 	return s.repo.restoreAccount(ctx, owner, accountID)
 }
 
+const noVoidReasonProvided = "No reason provided by owner"
+
 // VoidEvent keeps the original event, movements, and allocations for audit.
 // A corrected event is posted separately after the void succeeds.
 func (s *Service) VoidEvent(ctx context.Context, owner identity.OwnerID, eventID, reason string) error {
@@ -265,8 +299,11 @@ func (s *Service) VoidEvent(ctx context.Context, owner identity.OwnerID, eventID
 		return ErrUnauthorized
 	}
 	reason = strings.TrimSpace(reason)
-	if !validID(eventID) || reason == "" || len(reason) > 500 {
+	if !validID(eventID) || utf8.RuneCountInString(reason) > 500 {
 		return ErrInvalidInput
+	}
+	if reason == "" {
+		reason = noVoidReasonProvided
 	}
 	return s.repo.voidEvent(ctx, owner, eventID, reason)
 }

@@ -56,12 +56,101 @@ func (r *repository) createCategory(ctx context.Context, owner identity.OwnerID,
 	if err != nil {
 		return Category{}, err
 	}
-	_, err = r.pool.Exec(ctx, `INSERT INTO finance_categories (id, owner_id, name, kind)
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return Category{}, fmt.Errorf("begin category creation: %w", err)
+	}
+	defer tx.Rollback(ctx)
+	if err := lockCategoryNames(ctx, tx, owner); err != nil {
+		return Category{}, err
+	}
+	conflict, err := categoryNameExists(ctx, tx, owner, input.Kind, input.Name, "00000000-0000-0000-0000-000000000000")
+	if err != nil {
+		return Category{}, err
+	}
+	if conflict {
+		return Category{}, ErrConflict
+	}
+	_, err = tx.Exec(ctx, `INSERT INTO finance_categories (id, owner_id, name, kind)
 		VALUES ($1, $2, $3, $4)`, id, owner.String(), input.Name, input.Kind)
 	if err != nil {
 		return Category{}, fmt.Errorf("create category: %w", err)
 	}
+	if err := tx.Commit(ctx); err != nil {
+		return Category{}, fmt.Errorf("commit category creation: %w", err)
+	}
 	return Category{ID: id, Name: input.Name, Kind: input.Kind}, nil
+}
+
+// A row lock on the owner serializes category name writes without changing the v4 schema.
+func lockCategoryNames(ctx context.Context, tx pgx.Tx, owner identity.OwnerID) error {
+	var id string
+	err := tx.QueryRow(ctx, `SELECT id FROM lifeos_users WHERE id = $1 FOR UPDATE`, owner.String()).Scan(&id)
+	return notFoundOr("lock category owner", err)
+}
+
+func categoryNameExists(ctx context.Context, tx pgx.Tx, owner identity.OwnerID, kind, name, exceptID string) (bool, error) {
+	var exists bool
+	err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM finance_categories
+		WHERE owner_id = $1 AND kind = $2 AND lower(name) = lower($3) AND id <> $4)`,
+		owner.String(), kind, name, exceptID).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("check category name: %w", err)
+	}
+	return exists, nil
+}
+
+func (r *repository) renameCategory(ctx context.Context, owner identity.OwnerID, categoryID, name string) (Category, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return Category{}, fmt.Errorf("begin category rename: %w", err)
+	}
+	defer tx.Rollback(ctx)
+	if err := lockCategoryNames(ctx, tx, owner); err != nil {
+		return Category{}, err
+	}
+	var category Category
+	var archived sql.NullTime
+	err = tx.QueryRow(ctx, `SELECT id, kind, archived_at FROM finance_categories
+		WHERE owner_id = $1 AND id = $2 FOR UPDATE`, owner.String(), categoryID).
+		Scan(&category.ID, &category.Kind, &archived)
+	if err != nil {
+		return Category{}, notFoundOr("find category", err)
+	}
+	conflict, err := categoryNameExists(ctx, tx, owner, category.Kind, name, categoryID)
+	if err != nil {
+		return Category{}, err
+	}
+	if conflict {
+		return Category{}, ErrConflict
+	}
+	_, err = tx.Exec(ctx, `UPDATE finance_categories SET name = $3, updated_at = now()
+		WHERE owner_id = $1 AND id = $2`, owner.String(), categoryID, name)
+	if err != nil {
+		return Category{}, fmt.Errorf("rename category: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Category{}, fmt.Errorf("commit category rename: %w", err)
+	}
+	category.Name = name
+	if archived.Valid {
+		category.ArchivedAt = &archived.Time
+	}
+	return category, nil
+}
+
+func (r *repository) archiveCategory(ctx context.Context, owner identity.OwnerID, categoryID string) error {
+	var id string
+	err := r.pool.QueryRow(ctx, `UPDATE finance_categories SET archived_at = now(), updated_at = now()
+		WHERE owner_id = $1 AND id = $2 AND archived_at IS NULL RETURNING id`, owner.String(), categoryID).Scan(&id)
+	return notFoundOr("archive category", err)
+}
+
+func (r *repository) restoreCategory(ctx context.Context, owner identity.OwnerID, categoryID string) error {
+	var id string
+	err := r.pool.QueryRow(ctx, `UPDATE finance_categories SET archived_at = NULL, updated_at = now()
+		WHERE owner_id = $1 AND id = $2 AND archived_at IS NOT NULL RETURNING id`, owner.String(), categoryID).Scan(&id)
+	return notFoundOr("restore category", err)
 }
 
 func (r *repository) listAccounts(ctx context.Context, owner identity.OwnerID) ([]Account, error) {

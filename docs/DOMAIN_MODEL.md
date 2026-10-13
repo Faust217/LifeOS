@@ -101,6 +101,8 @@ An `AccountMovement` is the signed effect of a `FinancialEvent` on one account. 
 
 A `Category` classifies economic purpose. A `CategoryAllocation` assigns part or all of a `FinancialEvent` to a category without assuming one event always has one category.
 
+An income or expense may have zero allocations and is then displayed as **Uncategorized** without creating a category row. If allocations are present, their amounts must sum exactly to the event amount. Renaming a category keeps its ID and historical links; archiving removes it from new-entry choices while retaining those links. Neither operation reclassifies past events. Overall spending must include every posted expense `FinancialEvent`, including those with zero allocations, and must exclude transfers and voided events. A sum over named-category allocations alone is not an overall spending total. Keep totals separated by currency unless an explicit conversion rule is defined.
+
 Transfers and liability payments must not be reported as new spending merely because cash moved.
 
 ### Money and Currency
@@ -114,6 +116,8 @@ Transfers and liability payments must not be reported as new spending merely bec
 ### Corrections
 
 Important financial events support edit/void or soft-delete behavior with audit metadata. Bulk deletion, import rollback, and AI-initiated destructive changes require explicit confirmation. A stricter future ledger may introduce reversal events rather than rewriting history.
+
+Voiding an event requires explicit confirmation but the owner may leave the reason blank. In that case the server records a clearly labeled generated audit message rather than attributing an explanation to the owner. The original event and its links remain visible as voided; its balance and spending effects no longer count. This does not authorize permanent deletion.
 
 ## Planning and Travel
 

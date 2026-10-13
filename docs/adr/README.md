@@ -52,6 +52,12 @@ Small implementation details that do not change these boundaries do not require 
 
 Offline transaction synchronization is V0.2 work. It needs a separate **accepted** ADR before implementation. Issue #17 records that gate without choosing a protocol prematurely.
 
+## Proposed decisions
+
+| ADR | Proposed change | Status |
+| --- | --- | --- |
+| [ADR-015](ADR-015-personal-import-boundary.md) | Remove the Bluecoins-first product adapter/milestone commitment while retaining safe import and export rules; allow separately scoped personal conversion | Proposed; accepted ADR-009/013 portions remain authoritative until Product Owner approval |
+
 ## Naming
 
 Use the `ADR-` prefix, a zero-padded three-digit number, and a concise slug:

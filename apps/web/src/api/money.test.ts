@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { archiveMoneyAccount, createMoneyAccount, listMoneyAccounts, listMoneyHistory, MoneyApiError, postMoneyEvent, restoreMoneyAccount, voidMoneyEvent } from "./money";
+import { archiveMoneyAccount, archiveMoneyCategory, createMoneyAccount, listMoneyAccounts, listMoneyHistory, MoneyApiError, postMoneyEvent, renameMoneyCategory, restoreMoneyAccount, restoreMoneyCategory, voidMoneyEvent } from "./money";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -27,18 +27,40 @@ describe("Money API boundary", () => {
     expect(accountCall[1].body).not.toContain("owner_id");
   });
 
-  it("uses the contract's empty-body archive/restore and reasoned void endpoints", async () => {
+  it("uses the contract's empty-body archive/restore and optional void note", async () => {
     const request = vi.fn().mockResolvedValue({ ok: true, status: 204 });
     vi.stubGlobal("fetch", request);
     await archiveMoneyAccount("csrf", "account-1");
     await restoreMoneyAccount("csrf", "account-1");
     await voidMoneyEvent("csrf", "event-1", "Entered twice");
+    await voidMoneyEvent("csrf", "event-2");
     expect(request.mock.calls[0][0]).toBe("/api/v1/accounts/account-1/archive");
     expect(request.mock.calls[0][1].body).toBeUndefined();
     expect(request.mock.calls[1][0]).toBe("/api/v1/accounts/account-1/restore");
     expect(request.mock.calls[1][1]).toMatchObject({ method: "POST", headers: { "X-CSRF-Token": "csrf" } });
     expect(request.mock.calls[1][1].body).toBeUndefined();
     expect(JSON.parse(request.mock.calls[2][1].body)).toEqual({ reason: "Entered twice" });
+    expect(JSON.parse(request.mock.calls[3][1].body)).toEqual({ reason: "" });
+  });
+
+  it("uses guarded category management routes and explicit empty allocations", async () => {
+    const request = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ id: "category-1", name: "Medical", kind: "expense" }) });
+    vi.stubGlobal("fetch", request);
+    await renameMoneyCategory("csrf", "category-1", { name: "Medical" });
+    request.mockResolvedValue({ ok: true, status: 204 });
+    await archiveMoneyCategory("csrf", "category-1");
+    await restoreMoneyCategory("csrf", "category-1");
+    request.mockResolvedValue({ ok: true, status: 201, json: async () => ({ id: "event-1" }) });
+    await postMoneyEvent("csrf", { kind: "expense", account_id: "account-1", amount_minor: "100", currency: "MYR", occurred_at: "2026-10-13T00:00:00Z", allocations: [] });
+    expect(request.mock.calls.map((call) => call[0])).toEqual([
+      "/api/v1/categories/category-1/rename", "/api/v1/categories/category-1/archive",
+      "/api/v1/categories/category-1/restore", "/api/v1/events",
+    ]);
+    for (const call of request.mock.calls) expect(call[1]).toMatchObject({ method: "POST", credentials: "same-origin", headers: { "X-CSRF-Token": "csrf" } });
+    expect(JSON.parse(request.mock.calls[0][1].body)).toEqual({ name: "Medical" });
+    expect(request.mock.calls[1][1].body).toBeUndefined();
+    expect(request.mock.calls[2][1].body).toBeUndefined();
+    expect(JSON.parse(request.mock.calls[3][1].body).allocations).toEqual([]);
   });
 
   it("maps stable server errors without exposing private server messages", async () => {

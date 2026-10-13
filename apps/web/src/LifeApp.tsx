@@ -4,6 +4,7 @@ import { fetchCurrentUser, signOut, type CurrentUser } from "./api/auth";
 import { Icon } from "./Icons";
 import { GoalsPage } from "./GoalsPage";
 import { MoneyPage } from "./MoneyPage";
+import { TodayPage } from "./TodayPage";
 import { goalIDFromPath, primaryAreas, resolveArea, type Area } from "./navigation";
 
 type SessionState =
@@ -182,7 +183,7 @@ export function AuthenticatedShell({ area, goalID = null, user, onSignOut, onSes
           <a className="topbar-account" href="/me" aria-label={`Your profile: ${user.email}`}><UserAvatar email={user.email} /><span>{user.email}</span></a>
         </header>
         <main id="main-content" className="page-content" tabIndex={-1}>
-          {area === "today" && <TodayPage />}
+          {area === "today" && <TodayPage onSessionExpired={onSessionExpired} />}
           {area === "money" && <MoneyPage csrfToken={user.csrf_token} onSessionExpired={onSessionExpired} />}
           {area === "plans" && <GoalsPage goalID={goalID} csrfToken={user.csrf_token} onSessionExpired={onSessionExpired} />}
           {area === "me" && <MePage user={user} onSignOut={onSignOut} signingOut={signingOut} signOutError={signOutError} />}
@@ -202,41 +203,6 @@ function PageHeading({ eyebrow, title, description }: { eyebrow: string; title: 
       <h1>{title}</h1>
       <p>{description}</p>
     </header>
-  );
-}
-
-function TodayPage() {
-  return (
-    <div className="page-stack">
-      <section className="today-hero" aria-labelledby="today-title">
-        <div className="today-hero-copy">
-          <p className="eyebrow">TODAY · YOUR SPACE</p>
-          <h1 id="today-title">A clearer view of your day.</h1>
-          <p>Your everyday life, gathered in one place. Begin with Money today; your Goals overview will grow here later.</p>
-        </div>
-        <div className="hero-shape" aria-hidden="true"><span /><span /><span /></div>
-      </section>
-      <div className="section-heading">
-        <div><p className="eyebrow">START HERE</p><h2>One place, at your pace.</h2></div>
-        <p>Explore the spaces that will bring your day together.</p>
-      </div>
-      <div className="overview-grid">
-        <a className="overview-card" href="/money">
-          <span className="icon-tile icon-tile-money"><Icon name="money" /></span>
-          <span className="card-kicker">YOUR FINANCES</span>
-          <strong>Money</strong>
-          <span>See your accounts, record activity, and keep each currency clear.</span>
-          <span className="card-link">Explore Money <Icon name="arrow" /></span>
-        </a>
-        <a className="overview-card" href="/plans">
-          <span className="icon-tile icon-tile-plans"><Icon name="plans" /></span>
-          <span className="card-kicker">WHAT COMES NEXT</span>
-          <strong>Plans</strong>
-          <span>Create a Goal, keep its steps together, and see your progress.</span>
-          <span className="card-link">Explore Plans <Icon name="arrow" /></span>
-        </a>
-      </div>
-    </div>
   );
 }
 

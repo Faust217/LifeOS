@@ -31,6 +31,9 @@ func RegisterRoutes(router chi.Router, auth *identity.Auth, service *Service) {
 	router.MethodFunc(http.MethodPost, "/accounts/{accountID}/restore", auth.RequireMutation(handler.restoreAccount))
 	router.MethodFunc(http.MethodGet, "/categories", auth.RequireRead(handler.listCategories))
 	router.MethodFunc(http.MethodPost, "/categories", auth.RequireMutation(handler.createCategory))
+	router.MethodFunc(http.MethodPost, "/categories/{categoryID}/rename", auth.RequireMutation(handler.renameCategory))
+	router.MethodFunc(http.MethodPost, "/categories/{categoryID}/archive", auth.RequireMutation(handler.archiveCategory))
+	router.MethodFunc(http.MethodPost, "/categories/{categoryID}/restore", auth.RequireMutation(handler.restoreCategory))
 	router.MethodFunc(http.MethodGet, "/categories/{categoryID}/spending", auth.RequireRead(handler.categorySpending))
 	router.MethodFunc(http.MethodGet, "/events", auth.RequireRead(handler.history))
 	router.MethodFunc(http.MethodPost, "/events", auth.RequireMutation(handler.postEvent))
@@ -59,6 +62,10 @@ type categoryRequest struct {
 	Kind string `json:"kind"`
 }
 
+type categoryRenameRequest struct {
+	Name string `json:"name"`
+}
+
 type categoryResponse struct {
 	ID         string     `json:"id"`
 	Name       string     `json:"name"`
@@ -72,13 +79,13 @@ type allocationRequest struct {
 }
 
 type eventRequest struct {
-	Kind        string              `json:"kind"`
-	AccountID   string              `json:"account_id"`
-	AmountMinor string              `json:"amount_minor"`
-	Currency    string              `json:"currency"`
-	OccurredAt  time.Time           `json:"occurred_at"`
-	Note        string              `json:"note"`
-	Allocations []allocationRequest `json:"allocations"`
+	Kind        string               `json:"kind"`
+	AccountID   string               `json:"account_id"`
+	AmountMinor string               `json:"amount_minor"`
+	Currency    string               `json:"currency"`
+	OccurredAt  time.Time            `json:"occurred_at"`
+	Note        string               `json:"note"`
+	Allocations *[]allocationRequest `json:"allocations"`
 }
 
 type transferRequest struct {
@@ -254,6 +261,53 @@ func (h moneyHandler) createCategory(w http.ResponseWriter, r *http.Request, own
 	writeMoneyJSON(w, http.StatusCreated, categoryDTO(category))
 }
 
+func (h moneyHandler) renameCategory(w http.ResponseWriter, r *http.Request, owner identity.OwnerID) {
+	if _, err := moneyQuery(r); err != nil {
+		writeMoneyError(w, err)
+		return
+	}
+	var input categoryRenameRequest
+	if !decodeMoneyJSON(w, r, &input) {
+		return
+	}
+	category, err := h.service.RenameCategory(r.Context(), owner, chi.URLParam(r, "categoryID"), input.Name)
+	if err != nil {
+		writeMoneyError(w, err)
+		return
+	}
+	writeMoneyJSON(w, http.StatusOK, categoryDTO(category))
+}
+
+func (h moneyHandler) archiveCategory(w http.ResponseWriter, r *http.Request, owner identity.OwnerID) {
+	if _, err := moneyQuery(r); err != nil {
+		writeMoneyError(w, err)
+		return
+	}
+	if !emptyMoneyBody(w, r) {
+		return
+	}
+	if err := h.service.ArchiveCategory(r.Context(), owner, chi.URLParam(r, "categoryID")); err != nil {
+		writeMoneyError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h moneyHandler) restoreCategory(w http.ResponseWriter, r *http.Request, owner identity.OwnerID) {
+	if _, err := moneyQuery(r); err != nil {
+		writeMoneyError(w, err)
+		return
+	}
+	if !emptyMoneyBody(w, r) {
+		return
+	}
+	if err := h.service.RestoreCategory(r.Context(), owner, chi.URLParam(r, "categoryID")); err != nil {
+		writeMoneyError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h moneyHandler) listCategories(w http.ResponseWriter, r *http.Request, owner identity.OwnerID) {
 	if _, err := moneyQuery(r); err != nil {
 		writeMoneyError(w, err)
@@ -301,13 +355,17 @@ func (h moneyHandler) postEvent(w http.ResponseWriter, r *http.Request, owner id
 	if !decodeMoneyJSON(w, r, &input) {
 		return
 	}
+	if input.Allocations == nil {
+		writeMoneyError(w, ErrInvalidInput)
+		return
+	}
 	amount, err := parseMinorUnit(input.AmountMinor)
 	if err != nil {
 		writeMoneyError(w, err)
 		return
 	}
-	allocations := make([]AllocationInput, 0, len(input.Allocations))
-	for _, allocation := range input.Allocations {
+	allocations := make([]AllocationInput, 0, len(*input.Allocations))
+	for _, allocation := range *input.Allocations {
 		part, err := parseMinorUnit(allocation.AmountMinor)
 		if err != nil {
 			writeMoneyError(w, err)

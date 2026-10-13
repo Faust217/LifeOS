@@ -354,7 +354,7 @@ func TestFinanceMigrationAndLedger(t *testing.T) {
 		t.Fatalf("restore active account=%v", err)
 	}
 	assertBalance(owner, savings.ID, 5000)
-	if err := service.VoidEvent(ctx, owner, expense.ID, "Entered twice"); err != nil {
+	if err := service.VoidEvent(ctx, owner, expense.ID, ""); err != nil {
 		t.Fatal(err)
 	}
 	assertBalance(owner, bank.ID, 6000)
@@ -368,7 +368,7 @@ func TestFinanceMigrationAndLedger(t *testing.T) {
 	var foundVoid bool
 	for _, event := range history {
 		if event.ID == expense.ID {
-			foundVoid = event.Status == "voided" && event.VoidedAt != nil && len(event.Movements) == 1 && len(event.Allocations) == 2
+			foundVoid = event.Status == "voided" && event.VoidedAt != nil && event.VoidReason == noVoidReasonProvided && len(event.Movements) == 1 && len(event.Allocations) == 2
 		}
 	}
 	if !foundVoid {
@@ -491,6 +491,74 @@ func TestFinanceMigrationAndLedger(t *testing.T) {
 	}
 	assertBalance(owner, bank.ID, 2900)
 	assertBalance(owner, savings.ID, 5100)
+
+	// Category names are owner-scoped labels; changing them never rewrites allocations.
+	renamed, err := service.RenameCategory(ctx, owner, food.ID, "Medical")
+	if err != nil || renamed.ID != food.ID || renamed.Kind != "expense" || renamed.Name != "Medical" {
+		t.Fatalf("rename category=%+v err=%v", renamed, err)
+	}
+	if _, err := service.RenameCategory(ctx, owner, food.ID, "Groceries"); !errors.Is(err, ErrConflict) {
+		t.Fatalf("conflicting rename=%v", err)
+	}
+	if _, err := service.CreateCategory(ctx, owner, CategoryInput{Name: "medical", Kind: "expense"}); !errors.Is(err, ErrConflict) {
+		t.Fatalf("duplicate category creation=%v", err)
+	}
+	if _, err := service.RenameCategory(ctx, owner, food.ID, "Uncategorized"); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("reserved category name=%v", err)
+	}
+	if _, err := service.RenameCategory(ctx, other, food.ID, "Private"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("cross-owner rename=%v", err)
+	}
+	if err := service.ArchiveCategory(ctx, other, food.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("cross-owner category archive=%v", err)
+	}
+	spendingBeforeArchive, err := service.CategorySpending(ctx, owner, food.ID, "MYR")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := service.ArchiveCategory(ctx, owner, food.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.PostExpense(ctx, owner, EventInput{AccountID: bank.ID, AmountMinor: 100, Currency: "MYR", OccurredAt: now,
+		Allocations: []AllocationInput{{food.ID, 100}}}); !errors.Is(err, ErrArchived) {
+		t.Fatalf("archived category accepted=%v", err)
+	}
+	if got, err := service.CategorySpending(ctx, owner, food.ID, "MYR"); err != nil || got != spendingBeforeArchive {
+		t.Fatalf("archived category changed spending=%d want=%d err=%v", got, spendingBeforeArchive, err)
+	}
+	if err := service.RestoreCategory(ctx, other, food.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("cross-owner category restore=%v", err)
+	}
+	if err := service.RestoreCategory(ctx, owner, food.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.PostExpense(ctx, owner, EventInput{AccountID: bank.ID, AmountMinor: 100, Currency: "MYR", OccurredAt: now,
+		Allocations: []AllocationInput{{food.ID, 100}}}); err != nil {
+		t.Fatalf("restored category rejected=%v", err)
+	}
+	assertBalance(owner, bank.ID, 2800)
+	uncategorizedExpense, err := service.PostExpense(ctx, owner, EventInput{AccountID: bank.ID, AmountMinor: 200, Currency: "MYR", OccurredAt: now.Add(time.Hour), Allocations: []AllocationInput{}})
+	if err != nil || len(uncategorizedExpense.Movements) != 1 || len(uncategorizedExpense.Allocations) != 0 {
+		t.Fatalf("uncategorized expense=%+v err=%v", uncategorizedExpense, err)
+	}
+	uncategorizedIncome, err := service.PostIncome(ctx, owner, EventInput{AccountID: bank.ID, AmountMinor: 150, Currency: "MYR", OccurredAt: now.Add(2 * time.Hour), Allocations: []AllocationInput{}})
+	if err != nil || len(uncategorizedIncome.Movements) != 1 || len(uncategorizedIncome.Allocations) != 0 {
+		t.Fatalf("uncategorized income=%+v err=%v", uncategorizedIncome, err)
+	}
+	assertBalance(owner, bank.ID, 2750)
+	var persistedAllocations int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM category_allocations WHERE owner_id = $1 AND event_id IN ($2, $3)`,
+		owner.String(), uncategorizedExpense.ID, uncategorizedIncome.ID).Scan(&persistedAllocations); err != nil || persistedAllocations != 0 {
+		t.Fatalf("uncategorized allocations=%d err=%v", persistedAllocations, err)
+	}
+	if err := service.VoidEvent(ctx, owner, uncategorizedExpense.ID, "Correction"); err != nil {
+		t.Fatalf("void uncategorized expense=%v", err)
+	}
+	assertBalance(owner, bank.ID, 2950)
+	if _, err := service.PostExpense(ctx, owner, EventInput{AccountID: bank.ID, AmountMinor: 100, Currency: "MYR", OccurredAt: now,
+		Allocations: []AllocationInput{{food.ID, 70}, {groceries.ID, 20}}}); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("partial multi-allocation accepted=%v", err)
+	}
 
 	// A populated down migration refuses to erase financial history.
 	if err := runner.Steps(-1); err == nil {

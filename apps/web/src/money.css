@@ -37,6 +37,24 @@
 .money-transaction-dialog .money-action-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .money-transaction-dialog .money-action-tab { min-width: 0; padding: .55rem .25rem; font-size: .85rem; }
 .money-transaction-dialog [aria-invalid="true"] { border-color: #a34132; box-shadow: 0 0 0 2px #a3413233; }
+.money-setup-pane[hidden] { display: none; }
+.money-setup-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.money-setup-actions .button { min-height: 44px; padding: .65rem .9rem; white-space: nowrap; }
+.money-category-panel { display: grid; gap: 1.15rem; }
+.money-category-panel > div > .eyebrow { margin: 0 0 .3rem; }
+.money-category-list { display: grid; gap: .4rem; max-height: 17rem; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
+.money-category-list .money-category-item { display: grid; gap: .6rem; border: 1px solid var(--border); border-radius: .7rem; padding: .65rem .75rem; overflow-wrap: anywhere; }
+.money-category-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .3rem .7rem; }
+.money-category-actions { display: flex; flex-wrap: wrap; gap: .2rem .8rem; }
+.money-category-actions .money-text-action { min-height: 44px; margin: 0; }
+.money-category-edit { min-width: 0; }
+.money-category-edit input { width: 100%; min-height: 46px; border: 1px solid #b8c9bd; border-radius: .75rem; padding: .7rem .8rem; color: var(--ink); background: #fff; font: inherit; }
+.money-category-edit input[aria-invalid="true"] { border-color: #a34132; }
+.money-category-archived-section { min-width: 0; }
+.money-category-archived-section .money-category-list { margin-top: .5rem; }
+.money-category-kind { flex: none; color: var(--muted); font-size: .78rem; text-transform: capitalize; }
+.money-category-archived { color: var(--muted); font-size: .78rem; }
+.money-category-panel .money-form { border-top: 1px solid var(--border); padding-top: 1.1rem; }
 
 .money-account-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 245px), 1fr)); gap: 1rem; }
 .money-account-card { display: flex; min-width: 0; flex-direction: column; border: 1px solid var(--border); border-radius: 1.4rem; padding: 1.4rem; background: var(--paper); }
@@ -116,5 +134,8 @@
   .money-quick-row { position: sticky; top: .5rem; z-index: 15; flex-wrap: wrap; border-radius: .9rem; padding: .45rem 0; background: #f7faf7; }
   .money-quick-action { width: 100%; }
   .money-transaction-dialog { width: 100%; max-width: 100%; max-height: min(90dvh, 920px); margin: auto 0 0; border-radius: 1.3rem 1.3rem 0 0; }
+  .money-accounts-heading { align-items: flex-start; flex-direction: column; gap: .75rem; }
+  .money-setup-actions { width: 100%; }
+  .money-setup-actions .button { flex: 1 1 auto; }
   .money-dialog-content { padding-bottom: calc(1.3rem + env(safe-area-inset-bottom)); }
 }

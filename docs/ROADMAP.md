@@ -1,8 +1,8 @@
 # LifeOS Roadmap
 
-**Status:** Issue #16 direction approved; ADR-013 and ADR-014 accepted
+**Status:** Issue #16 direction approved; ADR-013 and ADR-014 accepted; Product Owner's 2026-10-13 milestone priorities recorded below. Bluecoins import scope change awaits proposed ADR-015 acceptance.
 
-**Updated:** 2026-10-12
+**Updated:** 2026-10-13
 
 ## Roadmap Rule
 
@@ -15,10 +15,10 @@ Unplanned ideas go to a backlog unless they change core semantics. They should n
 | Release | Goal | Major capability |
 | --- | --- | --- |
 | Foundation | Build the base | Repository, governance, Docker, PostgreSQL, migrations, Go module boundaries, OpenAPI, CI, and ADRs |
-| V0.1 Invite-only online Alpha | Prove a useful, private mobile-first life workflow | Google sign-in plus invitations; Today, Money, Plans checklist Goals, Me; user isolation, export, tested backup/restore |
-| V0.2 Offline capture and Wishlist | Enter transactions during disconnection and connect desired purchases to plans | Reliable transaction outbox/sync after an accepted ADR; Wishlist without double-counted spending |
-| V0.3 or later | Extend real-data continuity and Plans | Bluecoins import with the accepted safe pipeline; additional Plans functionality |
-| Later milestones | Expand only after use proves the need | Trips, Assets, People/Split, privacy-conscious Admin Dashboard, optional AI/MCP, self-host hardening, and possible native client |
+| V0.1 Invite-only online Alpha | Prove a useful, durable private mobile-first life workflow | Finish Today and Me/export; correct Finance semantics and idempotency; verify backup/restore and non-destructive upgrades; establish Personal Data Ready gate |
+| V0.2 Insight and capture | Make Money history easier to use and assess offline needs | API-backed transaction search/filter and monthly/category spending charts first; Wishlist and offline sync remain planned, with their order subject to Product Owner approval |
+| V0.3 | Extend Plans after daily-use evidence | Trips and richer Plans capabilities, each requiring separate scope review |
+| Later milestones | Expand only after use proves the need | Assets, People/Split, privacy-conscious Admin Dashboard, optional AI/MCP, self-host hardening, and possible native client |
 | V1.0 | Define from sustained use | Reliability, privacy, migrations, export, backup/restore, and complete workflows across the modules actually shipped |
 
 ## Foundation
@@ -35,23 +35,25 @@ Expected capability:
 
 ## V0.1 Invite-only Online Alpha
 
-The current product milestone is defined in [V0.1_SCOPE.md](V0.1_SCOPE.md). Its acceptance path is invited Google access, strict independent user data, usable Today/Money/Plans/Me workflows, correct transfer and balance behavior, suitable export, security tests, and a restored backup.
+The current product milestone is defined in [V0.1_SCOPE.md](V0.1_SCOPE.md). Today and the focused Money category/Void refinements are Product Owner approved. The next proposed issue, before Me/export, scopes permanent deletion of an already-voided transaction; its detailed domain and backup-retention rules need separate approval before implementation. After that gate, continue Me/export, opening-balance effective dates and backdated-entry correctness, safe owner-scoped financial-write idempotency, database backup/restore, and a non-destructive upgrade rehearsal. Evaluate historical running balances only after the correct Finance semantics are defined. Evaluate an installable PWA, secure HTTPS hosting, and reliable persistent storage before inviting real-data use. Owner isolation and safe forward migrations remain permanent requirements.
+
+**Personal Data Ready gate:** Do not use real financial data until opening-balance/backdated correctness, idempotent writes, owner isolation, suitable export, verified backups and restore, non-destructive upgrade, and an appropriately secured persistent deployment have evidence and Product Owner acceptance. A working dashboard or browser preview alone does not pass this gate.
 
 Plans includes only simple checklist Goals. Offline sync, Wishlist, Bluecoins import, Trips, Assets, Split, AI, native apps, public signup, and a full Admin Dashboard are outside V0.1.
 
 ## Later Milestone Boundaries
 
-### V0.2 - Offline Transaction Capture and Wishlist
+### V0.2 - Money Insight, Wishlist, and Offline Capture
 
-Add a reliable offline create-transaction workflow and Wishlist. An accepted offline-sync ADR must define idempotency, pending/error states, recovery, conflict handling, and account/device boundaries before implementation. Wishlist remains desired intent and does not affect balances until linked to an actual FinancialEvent.
+Prioritize API-backed transaction searching/filtering and monthly/category spending charts, using complete server-side Finance semantics rather than a client page of history. Wishlist and reliable offline create-transaction synchronization remain planned; their exact order needs Product Owner approval. An accepted offline-sync ADR must define idempotency, pending/error states, recovery, conflict handling, and account/device boundaries before implementation. Wishlist remains desired intent and does not affect balances until linked to an actual FinancialEvent. Consider Android packaging only if actual PWA use shows it is insufficient.
 
-### V0.3 or Later - Bluecoins and Additional Plans
+### V0.3 - Trips and Richer Plans
 
-Import Bluecoins through the accepted canonical, previewed, mapped, traceable, idempotent, and reconcilable pipeline in ADR-009. Add further Plans functionality only through its own scoped issue. The former Bluecoins-first V0.1 schedule is intentionally replaced by Issue #16; its import safety rules remain.
+Prioritize Trips and richer Plans, subject to separate scope and domain review. The Product Owner no longer requires a general-purpose Bluecoins importer as a product milestone. A one-off personal conversion may be considered separately through a validated LifeOS import format, with a backup, dry run, mapping, reconciliation, and traceability. This changes the retained Bluecoins-first-adapter commitment in ADR-009 and the V0.3 import statement in ADR-013; [proposed ADR-015](adr/ADR-015-personal-import-boundary.md) records the exact supersession for Product Owner approval. Until acceptance, the accepted ADRs remain authoritative where they conflict.
 
 ### Later Capabilities
 
-Trips, Assets, People/Split, AI, MCP, self-host hardening, and native mobile applications remain deferred until separately scoped and approved. Optional AI retains the accepted Tool Gateway and no-AI core. Capacitor is a candidate to evaluate after Web/PWA use, not a current commitment. A future owner-only Admin Dashboard should use aggregate operational metrics without unnecessary private financial data.
+Assets, People/Split, AI assistants, monetization, and advanced modules remain deferred until separately scoped and approved. Recurring income/expense scheduling and broader icon/text UX refinements are deferred. Optional AI retains the accepted Tool Gateway and no-AI core. Native/Android packaging is conditional on PWA experience; Capacitor is only a candidate. A future owner-only Admin Dashboard should use aggregate operational metrics without unnecessary private financial data.
 
 ## V1.0 Outcome
 
@@ -59,7 +61,7 @@ V1.0 criteria will be set from observed use rather than assuming every deferred 
 
 ## Future Money Improvements and Alpha Gates
 
-Product improvements to evaluate after the core V0.1 workflows: gradually reduce excessive explanatory UI text with appropriate accessible icons; recurring scheduled income and expense entries; monthly spending and category charts; API-backed transaction search and filtering. These are backlog ideas, not current implementation commitments.
+The API-backed search/filter and monthly/category charts are now V0.2 priorities. Recurring scheduled income/expense and broad icon/text refinement remain deferred backlog ideas.
 
 Before the private Alpha relies on real personal finance data, review and resolve opening-balance effective dates with correct backdated-entry semantics, and owner-scoped idempotency for financial writes. Current warning text and uncertain-result retry guidance do not close these correctness gates. Historical post-transaction account balances are another deferred Money enhancement.
 
