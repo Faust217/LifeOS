@@ -58,6 +58,12 @@ Offline transaction synchronization is V0.2 work. It needs a separate **accepted
 | --- | --- | --- |
 | [ADR-015](ADR-015-personal-import-boundary.md) | Remove the Bluecoins-first product adapter/milestone commitment while retaining safe import and export rules; allow separately scoped personal conversion | Proposed; accepted ADR-009/013 portions remain authoritative until Product Owner approval |
 
+## Accepted Finance correction decision
+
+| ADR | Decision | Status |
+| --- | --- | --- |
+| [ADR-016](ADR-016-financial-event-soft-delete.md) | Owner-scoped Soft Delete for posted or voided Finance events, preserving linked ledger rows and excluding deleted events from normal views and calculations | Accepted 2026-10-14; [initial physical-deletion draft](history/ADR-016-initial-physical-deletion-draft.md) was never accepted; ADR-004 remains authoritative |
+
 ## Naming
 
 Use the `ADR-` prefix, a zero-padded three-digit number, and a concise slug:

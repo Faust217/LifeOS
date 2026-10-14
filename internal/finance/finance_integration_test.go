@@ -109,6 +109,7 @@ func TestFinanceMigrationAndLedger(t *testing.T) {
 	ctx := context.Background()
 	owner := verifiedTestOwner(t, pool, "11111111-1111-4111-8111-111111111111", "owner-session-test")
 	other := verifiedTestOwner(t, pool, "22222222-2222-4222-8222-222222222222", "other-session-test")
+	upgradeOwner := verifiedTestOwner(t, pool, "33333333-3333-4333-8333-333333333333", "upgrade-session-test")
 	if err := runner.Steps(1); err != nil {
 		t.Fatalf("upgrade populated version 3 to Finance version 4: %v", err)
 	}
@@ -119,7 +120,35 @@ func TestFinanceMigrationAndLedger(t *testing.T) {
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM lifeos_users WHERE id IN ($1, $2)`, owner.String(), other.String()).Scan(&retained); err != nil || retained != 2 {
 		t.Fatalf("upgrade lost identity users: count=%d err=%v", retained, err)
 	}
+	// A pre-existing Finance event and movement must survive the v5/v6 upgrade.
+	const upgradeAccount = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+	const upgradeEvent = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+	if _, err := pool.Exec(ctx, `INSERT INTO finance_accounts (id, owner_id, name, account_type, currency, opening_balance_minor)
+		VALUES ($1, $2, 'Upgrade cash', 'cash', 'MYR', 1000)`, upgradeAccount, upgradeOwner.String()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO financial_events (id, owner_id, kind, amount_minor, currency, occurred_at)
+		VALUES ($1, $2, 'expense', 100, 'MYR', now())`, upgradeEvent, upgradeOwner.String()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO account_movements (id, owner_id, event_id, account_id, amount_minor, currency)
+		VALUES ('cccccccc-cccc-4ccc-8ccc-cccccccccccc', $1, $2, $3, -100, 'MYR')`, upgradeOwner.String(), upgradeEvent, upgradeAccount); err != nil {
+		t.Fatal(err)
+	}
+	if err := runner.Steps(2); err != nil {
+		t.Fatalf("upgrade populated version 4 through Goals to Soft Delete version 6: %v", err)
+	}
+	if version, dirty, err := runner.Version(); err != nil || version != 6 || dirty {
+		t.Fatalf("soft delete migration version=%d dirty=%t err=%v", version, dirty, err)
+	}
 	service := NewService(pool)
+	if got, err := service.Balance(ctx, upgradeOwner, upgradeAccount); err != nil || got.AmountMinor != 900 {
+		t.Fatalf("upgrade event balance=%+v err=%v", got, err)
+	}
+	var upgradeDeleted *time.Time
+	if err := pool.QueryRow(ctx, `SELECT deleted_at FROM financial_events WHERE owner_id = $1 AND id = $2`, upgradeOwner.String(), upgradeEvent).Scan(&upgradeDeleted); err != nil || upgradeDeleted != nil {
+		t.Fatalf("upgraded event deleted_at=%v err=%v", upgradeDeleted, err)
+	}
 	now := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
 	account := func(o identity.OwnerID, name, kind, currencyCode string, opening int64) Account {
 		t.Helper()
@@ -560,6 +589,10 @@ func TestFinanceMigrationAndLedger(t *testing.T) {
 		t.Fatalf("partial multi-allocation accepted=%v", err)
 	}
 
+	// Empty Goals and no deleted events can roll back to v4; populated Finance cannot.
+	if err := runner.Steps(-2); err != nil {
+		t.Fatalf("roll back empty v6/v5 extensions: %v", err)
+	}
 	// A populated down migration refuses to erase financial history.
 	if err := runner.Steps(-1); err == nil {
 		t.Fatal("finance down migration removed existing records")

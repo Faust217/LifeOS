@@ -226,7 +226,7 @@ const balanceSQL = `SELECT a.id, a.currency,
     (a.opening_balance_minor::numeric + COALESCE((
         SELECT SUM(m.amount_minor) FROM account_movements m
         JOIN financial_events e ON e.owner_id = m.owner_id AND e.id = m.event_id
-        WHERE m.owner_id = a.owner_id AND m.account_id = a.id AND e.status = 'posted'
+        WHERE m.owner_id = a.owner_id AND m.account_id = a.id AND e.status = 'posted' AND e.deleted_at IS NULL
     ), 0))::text
     FROM finance_accounts a WHERE a.owner_id = $1 AND a.id = $2`
 
@@ -236,7 +236,7 @@ func (r *repository) categorySpending(ctx context.Context, owner identity.OwnerI
 		SELECT SUM(ca.amount_minor) FROM category_allocations ca
 		JOIN financial_events e ON e.owner_id = ca.owner_id AND e.id = ca.event_id
 		WHERE ca.owner_id = c.owner_id AND ca.category_id = c.id
-		AND e.kind = 'expense' AND e.status = 'posted' AND e.currency = $3
+		AND e.kind = 'expense' AND e.status = 'posted' AND e.deleted_at IS NULL AND e.currency = $3
 	), 0)::text FROM finance_categories c WHERE c.owner_id = $1 AND c.id = $2 AND c.kind = 'expense'`, owner.String(), categoryID, currencyCode).Scan(&amountText)
 	if err != nil {
 		return 0, notFoundOr("category spending", err)
@@ -246,7 +246,7 @@ func (r *repository) categorySpending(ctx context.Context, owner identity.OwnerI
 
 func (r *repository) history(ctx context.Context, owner identity.OwnerID, limit, offset int) ([]Event, error) {
 	rows, err := r.pool.Query(ctx, `SELECT id, kind, amount_minor, currency, occurred_at, note, status, voided_at, void_reason
-		FROM financial_events WHERE owner_id = $1
+		FROM financial_events WHERE owner_id = $1 AND deleted_at IS NULL
 		ORDER BY occurred_at DESC, id DESC LIMIT $2 OFFSET $3`, owner.String(), limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("read history: %w", err)
@@ -417,35 +417,90 @@ func (r *repository) voidEvent(ctx context.Context, owner identity.OwnerID, even
 	}
 	defer tx.Rollback(ctx)
 	var status string
-	err = tx.QueryRow(ctx, `SELECT status FROM financial_events WHERE owner_id = $1 AND id = $2 FOR UPDATE`, owner.String(), eventID).Scan(&status)
+	var deleted bool
+	err = tx.QueryRow(ctx, `SELECT status, deleted_at IS NOT NULL FROM financial_events WHERE owner_id = $1 AND id = $2 FOR UPDATE`, owner.String(), eventID).Scan(&status, &deleted)
 	if err != nil {
 		return notFoundOr("find event", err)
 	}
-	if status != "posted" {
+	if deleted || status != "posted" {
 		return ErrConflict
 	}
+	movements, err := eventMovementSpecs(ctx, tx, owner, eventID)
+	if err != nil {
+		return err
+	}
+	if err := checkRemovalBalances(ctx, tx, owner, movements); err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, `UPDATE financial_events SET status = 'voided', voided_at = now(), void_reason = $3
+		WHERE owner_id = $1 AND id = $2 AND status = 'posted' AND deleted_at IS NULL`, owner.String(), eventID, reason)
+	if err != nil {
+		return fmt.Errorf("void event: %w", err)
+	}
+	return tx.Commit(ctx)
+}
+
+func (r *repository) deleteEvent(ctx context.Context, owner identity.OwnerID, eventID string) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin delete: %w", err)
+	}
+	defer tx.Rollback(ctx)
+	var status string
+	var deleted bool
+	err = tx.QueryRow(ctx, `SELECT status, deleted_at IS NOT NULL FROM financial_events WHERE owner_id = $1 AND id = $2 FOR UPDATE`, owner.String(), eventID).Scan(&status, &deleted)
+	if err != nil {
+		return notFoundOr("find event", err)
+	}
+	if deleted {
+		return tx.Commit(ctx)
+	}
+	if status == "posted" {
+		movements, err := eventMovementSpecs(ctx, tx, owner, eventID)
+		if err != nil {
+			return err
+		}
+		if err := checkRemovalBalances(ctx, tx, owner, movements); err != nil {
+			return err
+		}
+	} else if status != "voided" {
+		return ErrConflict
+	}
+	_, err = tx.Exec(ctx, `UPDATE financial_events SET deleted_at = now()
+		WHERE owner_id = $1 AND id = $2 AND deleted_at IS NULL`, owner.String(), eventID)
+	if err != nil {
+		return fmt.Errorf("delete event: %w", err)
+	}
+	return tx.Commit(ctx)
+}
+
+func eventMovementSpecs(ctx context.Context, tx pgx.Tx, owner identity.OwnerID, eventID string) ([]movementSpec, error) {
 	rows, err := tx.Query(ctx, `SELECT account_id, amount_minor FROM account_movements
 		WHERE owner_id = $1 AND event_id = $2`, owner.String(), eventID)
 	if err != nil {
-		return fmt.Errorf("read void movements: %w", err)
+		return nil, fmt.Errorf("read event movements: %w", err)
 	}
 	var movements []movementSpec
 	for rows.Next() {
 		var movement movementSpec
 		if err := rows.Scan(&movement.accountID, &movement.amount); err != nil {
 			rows.Close()
-			return fmt.Errorf("scan void movement: %w", err)
+			return nil, fmt.Errorf("scan event movement: %w", err)
 		}
 		movements = append(movements, movement)
 	}
 	err = rows.Err()
 	rows.Close()
 	if err != nil {
-		return fmt.Errorf("read void movements: %w", err)
+		return nil, fmt.Errorf("read event movements: %w", err)
 	}
 	if len(movements) == 0 {
-		return ErrConflict
+		return nil, ErrConflict
 	}
+	return movements, nil
+}
+
+func checkRemovalBalances(ctx context.Context, tx pgx.Tx, owner identity.OwnerID, movements []movementSpec) error {
 	if _, err := lockAccounts(ctx, tx, owner, movements, true); err != nil {
 		return err
 	}
@@ -458,12 +513,7 @@ func (r *repository) voidEvent(ctx context.Context, owner identity.OwnerID, even
 			return err
 		}
 	}
-	_, err = tx.Exec(ctx, `UPDATE financial_events SET status = 'voided', voided_at = now(), void_reason = $3
-		WHERE owner_id = $1 AND id = $2 AND status = 'posted'`, owner.String(), eventID, reason)
-	if err != nil {
-		return fmt.Errorf("void event: %w", err)
-	}
-	return tx.Commit(ctx)
+	return nil
 }
 
 func lockAccounts(ctx context.Context, tx pgx.Tx, owner identity.OwnerID, movements []movementSpec, allowArchived bool) (map[string]accountState, error) {

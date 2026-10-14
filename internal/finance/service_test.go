@@ -48,4 +48,7 @@ func TestUnverifiedOwnerFailsClosed(t *testing.T) {
 	if err := service.VoidEvent(context.Background(), identity.OwnerID{}, "", ""); !errors.Is(err, ErrUnauthorized) {
 		t.Fatalf("void with zero owner=%v", err)
 	}
+	if err := service.DeleteEvent(context.Background(), identity.OwnerID{}, ""); !errors.Is(err, ErrUnauthorized) {
+		t.Fatalf("delete with zero owner=%v", err)
+	}
 }

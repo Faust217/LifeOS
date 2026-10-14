@@ -119,6 +119,8 @@ Important financial events support edit/void or soft-delete behavior with audit 
 
 Voiding an event requires explicit confirmation but the owner may leave the reason blank. In that case the server records a clearly labeled generated audit message rather than attributing an explanation to the owner. The original event and its links remain visible as voided; its balance and spending effects no longer count. This does not authorize permanent deletion.
 
+Accepted ADR-016 adds a separate, confirmed **Soft Delete** for posted or already-voided financial events. A deleted event disappears from normal Money/Today views and future normal exports/reports while its event, movements, allocations, and any Void metadata remain internally. A posted Delete atomically removes the event's effects from balances and spending; deleting an already-voided event does not reverse them again. Deletion is not physical erasure or a guarantee about retained backups. Owner scope, forward migrations, and the Personal Data Ready backup/restore gate still apply.
+
 ## Planning and Travel
 
 ### Plan

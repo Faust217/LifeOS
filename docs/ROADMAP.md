@@ -1,8 +1,8 @@
 # LifeOS Roadmap
 
-**Status:** Issue #16 direction approved; ADR-013 and ADR-014 accepted; Product Owner's 2026-10-13 milestone priorities recorded below. Bluecoins import scope change awaits proposed ADR-015 acceptance.
+**Status:** Issue #16 direction approved; ADR-013, ADR-014, and ADR-016 accepted. Issue #29 Soft Delete is implemented and Product Owner approved. Bluecoins import scope change awaits proposed ADR-015 acceptance.
 
-**Updated:** 2026-10-13
+**Updated:** 2026-10-14
 
 ## Roadmap Rule
 
@@ -15,7 +15,7 @@ Unplanned ideas go to a backlog unless they change core semantics. They should n
 | Release | Goal | Major capability |
 | --- | --- | --- |
 | Foundation | Build the base | Repository, governance, Docker, PostgreSQL, migrations, Go module boundaries, OpenAPI, CI, and ADRs |
-| V0.1 Invite-only online Alpha | Prove a useful, durable private mobile-first life workflow | Finish Today and Me/export; correct Finance semantics and idempotency; verify backup/restore and non-destructive upgrades; establish Personal Data Ready gate |
+| V0.1 Invite-only online Alpha | Prove a useful, durable private mobile-first life workflow | Complete Me/export after the approved pre-Me Money gates; correct Finance semantics and idempotency; verify backup/restore and non-destructive upgrades; establish Personal Data Ready gate |
 | V0.2 Insight and capture | Make Money history easier to use and assess offline needs | API-backed transaction search/filter and monthly/category spending charts first; Wishlist and offline sync remain planned, with their order subject to Product Owner approval |
 | V0.3 | Extend Plans after daily-use evidence | Trips and richer Plans capabilities, each requiring separate scope review |
 | Later milestones | Expand only after use proves the need | Assets, People/Split, privacy-conscious Admin Dashboard, optional AI/MCP, self-host hardening, and possible native client |
@@ -35,7 +35,7 @@ Expected capability:
 
 ## V0.1 Invite-only Online Alpha
 
-The current product milestone is defined in [V0.1_SCOPE.md](V0.1_SCOPE.md). Today and the focused Money category/Void refinements are complete. [Issue #29](https://github.com/Faust217/LifeOS/issues/29) proposes permanent deletion of an already-voided transaction before Me/export; its detailed domain and backup-retention rules need separate Product Owner approval before implementation. After that gate, continue Me/export, opening-balance effective dates and backdated-entry correctness, safe owner-scoped financial-write idempotency, database backup/restore, and a non-destructive upgrade rehearsal. Evaluate historical running balances only after the correct Finance semantics are defined. Evaluate an installable PWA, secure HTTPS hosting, and reliable persistent storage before inviting real-data use. Owner isolation and safe forward migrations remain permanent requirements.
+The current product milestone is defined in [V0.1_SCOPE.md](V0.1_SCOPE.md). Today and the focused Money category/Void refinements are complete. The Product Owner accepted [ADR-016](adr/ADR-016-financial-event-soft-delete.md) and approved [Issue #29](https://github.com/Faust217/LifeOS/issues/29) owner-scoped Soft Delete after local verification and visual review. Linked ledger records remain internally. [Issue #30](https://github.com/Faust217/LifeOS/issues/30) proposes compact date-grouped Money history after #29; its order relative to Me/export is not yet approved. Later work includes Me/export, opening-balance effective dates and backdated-entry correctness, safe owner-scoped financial-write idempotency, database backup/restore, and a non-destructive upgrade rehearsal, each under its own scope and approval. Evaluate historical running balances only after the correct Finance semantics are defined. Evaluate an installable PWA, secure HTTPS hosting, and reliable persistent storage before inviting real-data use. Owner isolation and safe forward migrations remain permanent requirements.
 
 **Personal Data Ready gate:** Do not use real financial data until opening-balance/backdated correctness, idempotent writes, owner isolation, suitable export, verified backups and restore, non-destructive upgrade, and an appropriately secured persistent deployment have evidence and Product Owner acceptance. A working dashboard or browser preview alone does not pass this gate.
 

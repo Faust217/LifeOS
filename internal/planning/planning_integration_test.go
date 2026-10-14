@@ -203,19 +203,35 @@ func TestGoalsMigrationServiceAndHTTP(t *testing.T) {
 			t.Fatalf("Goals affected Money: balance=%+v err=%v", balance, err)
 		}
 	}
-	checkBalance()
+	// The v4/v5 migration exercise predates the v6 Finance visibility predicate.
+	// Check the persisted opening position directly until the full schema is present.
+	checkStoredOpening := func() {
+		t.Helper()
+		var opening int64
+		if err := pool.QueryRow(ctx, `SELECT opening_balance_minor FROM finance_accounts WHERE owner_id = $1 AND id = $2`, owner.String(), bank.ID).Scan(&opening); err != nil || opening != 12345 {
+			t.Fatalf("Goals migration changed Money opening position=%d err=%v", opening, err)
+		}
+	}
+	checkStoredOpening()
 	if err := runner.Steps(1); err != nil {
 		t.Fatalf("populated v4 to v5 migration: %v", err)
 	}
 	if version, dirty, err := runner.Version(); err != nil || version != 5 || dirty {
 		t.Fatalf("migration version=%d dirty=%t err=%v", version, dirty, err)
 	}
-	checkBalance()
+	checkStoredOpening()
 	if err := runner.Steps(-1); err != nil {
 		t.Fatalf("empty Goals v5 rollback: %v", err)
 	}
 	if err := runner.Steps(1); err != nil {
 		t.Fatalf("v5 re-upgrade: %v", err)
+	}
+	checkStoredOpening()
+	if err := runner.Steps(1); err != nil {
+		t.Fatalf("upgrade populated Goals and Money to v6: %v", err)
+	}
+	if version, dirty, err := runner.Version(); err != nil || version != 6 || dirty {
+		t.Fatalf("v6 migration version=%d dirty=%t err=%v", version, dirty, err)
 	}
 	checkBalance()
 

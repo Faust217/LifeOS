@@ -296,6 +296,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/events/{eventID}/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Hide an owned posted or voided event from normal LifeOS views
+         * @description Soft Delete retains the event and linked ledger rows internally. A posted event stops affecting balances and spending atomically; a voided event has no second financial effect. Repeating a successful deletion of the same owned event also returns 204. This does not guarantee physical erasure from storage or backups.
+         */
+        post: operations["deleteMoneyEvent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/goals": {
         parameters: {
             query?: never;
@@ -1604,6 +1624,39 @@ export interface operations {
             409: components["responses"]["MoneyConflict"];
             413: components["responses"]["MoneyTooLarge"];
             415: components["responses"]["MoneyUnsupportedMediaType"];
+            422: components["responses"]["MoneyOverflow"];
+            500: components["responses"]["MoneyInternalError"];
+            503: components["responses"]["MoneyUnavailable"];
+        };
+    };
+    deleteMoneyEvent: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured public origin. */
+                Origin: components["parameters"]["MoneyOrigin"];
+                /** @description Session-bound token returned by GET /api/v1/me. */
+                "X-CSRF-Token": components["parameters"]["MoneyCSRF"];
+            };
+            path: {
+                eventID: components["parameters"]["MoneyEventID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Event is deleted from normal views; no response body. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["MoneyBadRequest"];
+            401: components["responses"]["MoneyUnauthorized"];
+            403: components["responses"]["MoneyForbidden"];
+            404: components["responses"]["MoneyNotFound"];
+            409: components["responses"]["MoneyConflict"];
             422: components["responses"]["MoneyOverflow"];
             500: components["responses"]["MoneyInternalError"];
             503: components["responses"]["MoneyUnavailable"];

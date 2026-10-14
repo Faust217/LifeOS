@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -26,7 +27,7 @@ type moneyTestReadiness struct{}
 
 func (moneyTestReadiness) Check(context.Context) health.Result {
 	return health.Result{Ready: true, DatabaseStatus: health.StatusReady,
-		MigrationStatus: health.StatusReady, MigrationVersion: 4, HasVersion: true, ExpectedVersion: 4}
+		MigrationStatus: health.StatusReady, MigrationVersion: 6, HasVersion: true, ExpectedVersion: 6}
 }
 
 func moneyTestSession(t *testing.T, pool *pgxpool.Pool, userID, secret, state string) *http.Cookie {
@@ -140,8 +141,8 @@ func TestParseMinorUnit(t *testing.T) {
 
 func TestMoneyHTTPIntegration(t *testing.T) {
 	pool, runner := financeTestDatabase(t, "LIFEOS_MONEY_API_TEST_DATABASE_URL")
-	if err := runner.Steps(1); err != nil {
-		t.Fatalf("upgrade API test database to v4: %v", err)
+	if err := runner.Steps(3); err != nil {
+		t.Fatalf("upgrade API test database to v6: %v", err)
 	}
 	const ownerID = "11111111-1111-4111-8111-111111111111"
 	const testerID = "22222222-2222-4222-8222-222222222222"
@@ -535,6 +536,58 @@ func TestMoneyHTTPIntegration(t *testing.T) {
 	if len(testerAccounts.Items) != 1 || testerAccounts.Items[0].ID != testerBank.ID {
 		t.Fatalf("tester account leak=%+v", testerAccounts.Items)
 	}
+	deleteBody := `{"kind":"expense","account_id":"` + ownerBank.ID + `","amount_minor":"100","currency":"MYR","occurred_at":` + at + `,"allocations":[{"category_id":"` + food.ID + `","amount_minor":"100"}]}`
+	toDelete := moneyDecode[eventResponse](t, request(http.MethodPost, "/api/v1/events", deleteBody, ownerCookie, ownerCSRF), http.StatusCreated)
+	deletePath := "/api/v1/events/" + toDelete.ID + "/delete"
+	moneyError(t, request(http.MethodPost, deletePath, "", nil, ""), http.StatusUnauthorized, "authentication_required")
+	for _, cookie := range []*http.Cookie{expiredCookie, revokedCookie, disabledCookie} {
+		moneyError(t, request(http.MethodPost, deletePath, "", cookie, "x"), http.StatusUnauthorized, "authentication_required")
+	}
+	moneyError(t, request(http.MethodPost, deletePath, "", testerCookie, testerCSRF), http.StatusNotFound, "not_found")
+	moneyError(t, request(http.MethodPost, deletePath, "", ownerCookie, ""), http.StatusForbidden, "invalid_csrf")
+	moneyError(t, moneyHTTP(t, router, http.MethodPost, deletePath, "", ownerCookie, "https://evil.example", ownerCSRF), http.StatusForbidden, "invalid_origin")
+	moneyError(t, request(http.MethodPost, deletePath+"?unexpected=1", "", ownerCookie, ownerCSRF), http.StatusBadRequest, "invalid_input")
+	moneyError(t, request(http.MethodPost, deletePath, `{}`, ownerCookie, ownerCSRF), http.StatusBadRequest, "invalid_input")
+	moneyError(t, request(http.MethodPost, "/api/v1/events/bad-id/delete", "", ownerCookie, ownerCSRF), http.StatusBadRequest, "invalid_input")
+	moneyError(t, request(http.MethodPost, "/api/v1/events/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/delete", "", ownerCookie, ownerCSRF), http.StatusNotFound, "not_found")
+	beforeDelete := moneyDecode[struct {
+		AmountMinor string `json:"amount_minor"`
+	}](t,
+		request(http.MethodGet, "/api/v1/accounts/"+ownerBank.ID+"/balance", "", ownerCookie, ""), http.StatusOK)
+	beforeAmount, err := strconv.ParseInt(beforeDelete.AmountMinor, 10, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	moneyStatus(t, request(http.MethodPost, deletePath, "", ownerCookie, ownerCSRF), http.StatusNoContent)
+	moneyStatus(t, request(http.MethodPost, deletePath, "", ownerCookie, ownerCSRF), http.StatusNoContent)
+	afterDelete := moneyDecode[struct {
+		AmountMinor string `json:"amount_minor"`
+	}](t,
+		request(http.MethodGet, "/api/v1/accounts/"+ownerBank.ID+"/balance", "", ownerCookie, ""), http.StatusOK)
+	afterAmount, err := strconv.ParseInt(afterDelete.AmountMinor, 10, 64)
+	if err != nil || afterAmount != beforeAmount+100 {
+		t.Fatalf("delete balance before=%d after=%d err=%v", beforeAmount, afterAmount, err)
+	}
+	deletedHistory := moneyDecode[struct {
+		Items []eventResponse `json:"items"`
+	}](t,
+		request(http.MethodGet, "/api/v1/events?limit=100", "", ownerCookie, ""), http.StatusOK)
+	for _, item := range deletedHistory.Items {
+		if item.ID == toDelete.ID {
+			t.Fatal("deleted event visible in guarded history")
+		}
+	}
+	var linkedMovements, linkedAllocations int
+	if err := pool.QueryRow(context.Background(), `SELECT count(*) FROM account_movements WHERE event_id = $1 AND owner_id = $2`, toDelete.ID, ownerID).Scan(&linkedMovements); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(context.Background(), `SELECT count(*) FROM category_allocations WHERE event_id = $1 AND owner_id = $2`, toDelete.ID, ownerID).Scan(&linkedAllocations); err != nil {
+		t.Fatal(err)
+	}
+	if linkedMovements != 1 || linkedAllocations != 1 {
+		t.Fatalf("soft delete lost ledger links: movements=%d allocations=%d", linkedMovements, linkedAllocations)
+	}
+	moneyError(t, request(http.MethodPost, "/api/v1/events/"+toDelete.ID+"/void", `{}`, ownerCookie, ownerCSRF), http.StatusConflict, "conflict")
 	moneyStatus(t, request(http.MethodPost, "/api/v1/auth/logout", "", ownerCookie, ownerCSRF), http.StatusNoContent)
 	moneyError(t, request(http.MethodGet, "/api/v1/accounts", "", ownerCookie, ""), http.StatusUnauthorized, "authentication_required")
 }

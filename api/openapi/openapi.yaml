@@ -436,6 +436,31 @@ paths:
         "422": { $ref: "#/components/responses/MoneyOverflow" }
         "500": { $ref: "#/components/responses/MoneyInternalError" }
         "503": { $ref: "#/components/responses/MoneyUnavailable" }
+  /api/v1/events/{eventID}/delete:
+    post:
+      tags: [Money]
+      summary: Hide an owned posted or voided event from normal LifeOS views
+      description: >-
+        Soft Delete retains the event and linked ledger rows internally. A posted event stops
+        affecting balances and spending atomically; a voided event has no second financial effect.
+        Repeating a successful deletion of the same owned event also returns 204.
+        This does not guarantee physical erasure from storage or backups.
+      operationId: deleteMoneyEvent
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/MoneyEventID" }
+        - { $ref: "#/components/parameters/MoneyOrigin" }
+        - { $ref: "#/components/parameters/MoneyCSRF" }
+      responses:
+        "204": { description: Event is deleted from normal views; no response body. }
+        "400": { $ref: "#/components/responses/MoneyBadRequest" }
+        "401": { $ref: "#/components/responses/MoneyUnauthorized" }
+        "403": { $ref: "#/components/responses/MoneyForbidden" }
+        "404": { $ref: "#/components/responses/MoneyNotFound" }
+        "409": { $ref: "#/components/responses/MoneyConflict" }
+        "422": { $ref: "#/components/responses/MoneyOverflow" }
+        "500": { $ref: "#/components/responses/MoneyInternalError" }
+        "503": { $ref: "#/components/responses/MoneyUnavailable" }
   /api/v1/goals:
     get:
       tags: [Goals]

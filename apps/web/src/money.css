@@ -66,6 +66,7 @@
 .money-text-action, .money-inline-action { width: fit-content; min-height: 44px; border: 0; padding: .4rem 0; color: var(--accent); background: none; font-weight: 700; text-align: left; text-decoration: underline; text-underline-offset: .2rem; }
 .money-text-action { margin-top: auto; }
 .money-text-action:disabled, .money-inline-action:disabled { opacity: .55; cursor: wait; }
+.money-delete-action { display: block; color: #8a402f; }
 .money-archived { border: 1px solid var(--border); border-radius: 1rem; padding: .9rem 1.1rem; background: var(--paper); }
 .money-archived summary { min-height: 44px; padding: .6rem 0; cursor: pointer; font-weight: 700; }
 .money-archived ul { display: grid; gap: .55rem; margin: 1rem 0 0; padding: 0; list-style: none; }

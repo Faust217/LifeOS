@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 
 import {
-  archiveMoneyAccount, archiveMoneyCategory, createMoneyAccount, createMoneyCategory, getMoneyBalance,
+  archiveMoneyAccount, archiveMoneyCategory, createMoneyAccount, createMoneyCategory, deleteMoneyEvent, getMoneyBalance,
   listMoneyAccounts, listMoneyCategories, listMoneyHistory, MoneyApiError,
   postMoneyEvent, postMoneyTransfer, renameMoneyCategory, restoreMoneyAccount, restoreMoneyCategory, voidMoneyEvent,
   type AccountCreate, type CategoryCreate, type EventCreate, type MoneyAccount,
@@ -438,16 +438,32 @@ function TransferForm({ accounts, csrfToken, pending, runMutation, onChooseActio
 
 function HistorySection({ data, page, setPage, csrfToken, pending, runMutation, onReplace, operationError }: { data: MoneyData; page: number; setPage: (page: number) => void; csrfToken: string; pending: boolean; runMutation: RunMutation; onReplace: (kind: TransactionAction, initial: MoneyEvent | null) => void; operationError: string }) {
   const [voidID, setVoidID] = useState<string | null>(null);
+  const [deleteID, setDeleteID] = useState<string | null>(null);
   const [replacementCandidate, setReplacementCandidate] = useState<MoneyEvent | null>(null);
   const [reason, setReason] = useState("");
   const [reasonError, setReasonError] = useState("");
+  useEffect(() => {
+    if (deleteID) document.getElementById(`money-delete-cancel-${deleteID}`)?.focus();
+  }, [deleteID]);
   async function confirmVoid(event: MoneyEvent) {
     const trimmed = reason.trim();
     if (Array.from(trimmed).length > 500) { setReasonError("The optional note must be 500 characters or fewer."); return; }
     if (await runMutation("Transaction voided. Its history remains visible.", () => voidMoneyEvent(csrfToken, event.id, trimmed))) { setVoidID(null); setReason(""); setReasonError(""); setReplacementCandidate(event); }
   }
+  async function confirmDelete(event: MoneyEvent) {
+    if (await runMutation("Transaction deleted from LifeOS views.", () => deleteMoneyEvent(csrfToken, event.id))) {
+      setDeleteID(null);
+      setReplacementCandidate((current) => current?.id === event.id ? null : current);
+      if (page > 0 && data.events.length === 1 && !data.hasNext) setPage(page - 1);
+      window.setTimeout(() => document.getElementById("money-history-title")?.focus(), 0);
+    }
+  }
+  function cancelDelete(eventID: string) {
+    setDeleteID(null);
+    window.setTimeout(() => document.getElementById(`money-delete-${eventID}`)?.focus(), 0);
+  }
   return <section className="money-section" aria-labelledby="money-history-title">
-    <div className="section-heading"><div><p className="eyebrow">RECENT ACTIVITY</p><h2 id="money-history-title">Your transaction history.</h2></div></div>
+    <div className="section-heading"><div><p className="eyebrow">RECENT ACTIVITY</p><h2 id="money-history-title" tabIndex={-1}>Your transaction history.</h2></div></div>
     <p className="money-help">Browse recent activity by page. Search and filters are planned for a later Money enhancement.</p>
     {replacementCandidate && <div className="money-replacement" role="status"><p>The transaction was voided. Your place in history is preserved.</p>{(replacementCandidate.kind === "transfer" || replacementCandidate.allocations.length <= 1) ? <button type="button" className="button button-outline" onClick={() => { onReplace(replacementCandidate.kind, replacementCandidate); setReplacementCandidate(null); }}>Review prefilled replacement</button> : <p>This record has multiple category allocations. Add a new transaction manually to avoid dropping any allocation.</p>}<button type="button" className="money-text-action" onClick={() => setReplacementCandidate(null)}>Dismiss</button></div>}
     {data.events.length === 0 ? <div className="money-empty"><Icon name="today" /><h3>{page === 0 ? "No transactions yet" : "No more transactions"}</h3><p>{page === 0 ? "Recorded income, expenses, and transfers will appear here." : "Go back to the previous page to see your activity."}</p></div> : <ol className="money-history-list">{data.events.map((event) => <li className="money-history-item" key={event.id}>
@@ -458,7 +474,9 @@ function HistorySection({ data, page, setPage, csrfToken, pending, runMutation, 
         {event.kind !== "transfer" && (event.allocations.length > 0 ? <><p><strong>Categories</strong></p><ul>{event.allocations.map((allocation) => <li key={allocation.id}>{categoryName(data.categories, allocation.category_id)}: {formatMinorUnits(allocation.amount_minor, allocation.currency)}</li>)}</ul></> : <p><strong>Category:</strong> Uncategorized</p>)}
         {event.status === "voided" && <p><strong>Void reason:</strong> {event.void_reason === AUTO_VOID_REASON ? "N/A" : event.void_reason || "Unavailable"}</p>}
         {event.status === "posted" && (voidID === event.id ? <div className="money-confirm"><p>Void this transaction? Its balance effects will be removed while its history remains visible.</p><label>Note for voiding (optional)<textarea rows={2} value={reason} onChange={(change) => { setReason(change.target.value); setReasonError(""); }} placeholder="Add a note if useful" aria-invalid={!!reasonError} aria-describedby={reasonError ? "money-void-error" : undefined} /></label><p className="money-help">You can leave this blank. The history will show that no reason was provided.</p>{reasonError && <p id="money-void-error" className="money-field-error" role="alert">{reasonError}</p>}{operationError && <p className="money-field-error" role="alert">{operationError}</p>}<div className="money-confirm-actions"><button type="button" className="button button-outline" disabled={pending} onClick={() => { setVoidID(null); setReason(""); setReasonError(""); }}>Keep transaction</button><button type="button" className="button button-danger" disabled={pending} onClick={() => void confirmVoid(event)}>Confirm void</button></div></div>
-          : <button type="button" className="money-text-action" disabled={pending} onClick={() => { setVoidID(event.id); setReason(""); setReasonError(""); }}>Void transaction</button>)}
+          : <button type="button" className="money-text-action" disabled={pending} onClick={() => { setDeleteID(null); setVoidID(event.id); setReason(""); setReasonError(""); }}>Void transaction</button>)}
+        {deleteID === event.id ? <div className="money-confirm" role="group" aria-label="Confirm transaction deletion"><p>Delete this transaction? It will disappear from LifeOS. If posted, it will stop affecting balances and spending. Its data may remain in internal records and backups. You cannot undo this in the app.</p>{operationError && <p className="money-field-error" role="alert">{operationError}</p>}<div className="money-confirm-actions"><button id={`money-delete-cancel-${event.id}`} type="button" className="button button-outline" disabled={pending} onClick={() => cancelDelete(event.id)}>Keep transaction</button><button type="button" className="button button-danger" disabled={pending} onClick={() => void confirmDelete(event)}>Confirm delete</button></div></div>
+          : <button id={`money-delete-${event.id}`} type="button" className="money-text-action money-delete-action" disabled={pending} onClick={() => { setVoidID(null); setDeleteID(event.id); }}>Delete transaction</button>}
       </details>
     </li>)}</ol>}
     <div className="money-pagination"><button type="button" className="button button-outline" disabled={page === 0 || pending} onClick={() => setPage(page - 1)}>Previous</button><span>Page {page + 1}</span><button type="button" className="button button-outline" disabled={!data.hasNext || pending} onClick={() => setPage(page + 1)}>Next</button></div>

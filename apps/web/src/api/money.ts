@@ -74,3 +74,4 @@ export const postMoneyTransfer = (csrfToken: string, input: TransferCreate) => m
 export const archiveMoneyAccount = (csrfToken: string, id: string) => moneyRequest<void>(`/api/v1/accounts/${encodeURIComponent(id)}/archive`, csrfToken);
 export const restoreMoneyAccount = (csrfToken: string, id: string) => moneyRequest<void>(`/api/v1/accounts/${encodeURIComponent(id)}/restore`, csrfToken);
 export const voidMoneyEvent = (csrfToken: string, id: string, reason = "") => moneyRequest<void>(`/api/v1/events/${encodeURIComponent(id)}/void`, csrfToken, { reason } satisfies components["schemas"]["MoneyVoidRequest"]);
+export const deleteMoneyEvent = (csrfToken: string, id: string) => moneyRequest<void>(`/api/v1/events/${encodeURIComponent(id)}/delete`, csrfToken);

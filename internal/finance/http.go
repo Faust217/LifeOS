@@ -39,6 +39,7 @@ func RegisterRoutes(router chi.Router, auth *identity.Auth, service *Service) {
 	router.MethodFunc(http.MethodPost, "/events", auth.RequireMutation(handler.postEvent))
 	router.MethodFunc(http.MethodPost, "/transfers", auth.RequireMutation(handler.transfer))
 	router.MethodFunc(http.MethodPost, "/events/{eventID}/void", auth.RequireMutation(handler.voidEvent))
+	router.MethodFunc(http.MethodPost, "/events/{eventID}/delete", auth.RequireMutation(handler.deleteEvent))
 }
 
 type accountRequest struct {
@@ -463,6 +464,21 @@ func (h moneyHandler) voidEvent(w http.ResponseWriter, r *http.Request, owner id
 		return
 	}
 	if err := h.service.VoidEvent(r.Context(), owner, chi.URLParam(r, "eventID"), input.Reason); err != nil {
+		writeMoneyError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h moneyHandler) deleteEvent(w http.ResponseWriter, r *http.Request, owner identity.OwnerID) {
+	if _, err := moneyQuery(r); err != nil {
+		writeMoneyError(w, err)
+		return
+	}
+	if !emptyMoneyBody(w, r) {
+		return
+	}
+	if err := h.service.DeleteEvent(r.Context(), owner, chi.URLParam(r, "eventID")); err != nil {
 		writeMoneyError(w, err)
 		return
 	}

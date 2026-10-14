@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { archiveMoneyAccount, archiveMoneyCategory, createMoneyAccount, listMoneyAccounts, listMoneyHistory, MoneyApiError, postMoneyEvent, renameMoneyCategory, restoreMoneyAccount, restoreMoneyCategory, voidMoneyEvent } from "./money";
+import { archiveMoneyAccount, archiveMoneyCategory, createMoneyAccount, deleteMoneyEvent, listMoneyAccounts, listMoneyHistory, MoneyApiError, postMoneyEvent, renameMoneyCategory, restoreMoneyAccount, restoreMoneyCategory, voidMoneyEvent } from "./money";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -27,13 +27,14 @@ describe("Money API boundary", () => {
     expect(accountCall[1].body).not.toContain("owner_id");
   });
 
-  it("uses the contract's empty-body archive/restore and optional void note", async () => {
+  it("uses empty-body archive/restore/delete and an optional void note", async () => {
     const request = vi.fn().mockResolvedValue({ ok: true, status: 204 });
     vi.stubGlobal("fetch", request);
     await archiveMoneyAccount("csrf", "account-1");
     await restoreMoneyAccount("csrf", "account-1");
     await voidMoneyEvent("csrf", "event-1", "Entered twice");
     await voidMoneyEvent("csrf", "event-2");
+    await deleteMoneyEvent("csrf", "event-3");
     expect(request.mock.calls[0][0]).toBe("/api/v1/accounts/account-1/archive");
     expect(request.mock.calls[0][1].body).toBeUndefined();
     expect(request.mock.calls[1][0]).toBe("/api/v1/accounts/account-1/restore");
@@ -41,6 +42,9 @@ describe("Money API boundary", () => {
     expect(request.mock.calls[1][1].body).toBeUndefined();
     expect(JSON.parse(request.mock.calls[2][1].body)).toEqual({ reason: "Entered twice" });
     expect(JSON.parse(request.mock.calls[3][1].body)).toEqual({ reason: "" });
+    expect(request.mock.calls[4][0]).toBe("/api/v1/events/event-3/delete");
+    expect(request.mock.calls[4][1]).toMatchObject({ method: "POST", credentials: "same-origin", headers: { "X-CSRF-Token": "csrf" } });
+    expect(request.mock.calls[4][1].body).toBeUndefined();
   });
 
   it("uses guarded category management routes and explicit empty allocations", async () => {

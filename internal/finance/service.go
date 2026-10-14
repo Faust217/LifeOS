@@ -308,6 +308,18 @@ func (s *Service) VoidEvent(ctx context.Context, owner identity.OwnerID, eventID
 	return s.repo.voidEvent(ctx, owner, eventID, reason)
 }
 
+// DeleteEvent hides an owned event from ordinary reads while retaining its ledger rows.
+// Repeating a successful deletion is safe and does not change balances again.
+func (s *Service) DeleteEvent(ctx context.Context, owner identity.OwnerID, eventID string) error {
+	if !owner.Valid() {
+		return ErrUnauthorized
+	}
+	if !validID(eventID) {
+		return ErrInvalidInput
+	}
+	return s.repo.deleteEvent(ctx, owner, eventID)
+}
+
 func validAccountType(value string) bool {
 	switch value {
 	case "cash", "bank", "ewallet", "savings", "credit_card", "other":
