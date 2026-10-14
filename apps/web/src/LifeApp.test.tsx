@@ -9,6 +9,7 @@ const user = {
   email: "person@example.test",
   is_owner_admin: false,
   csrf_token: "test-only-csrf",
+  time_zone: "Asia/Kuala_Lumpur",
 };
 
 const renderArea = (area: "today" | "money" | "plans" | "me" | null) =>

@@ -1,5 +1,9 @@
-.money-page { gap: 2rem; }
-.money-section { display: grid; gap: 1rem; min-width: 0; }
+.money-page { gap: 1rem; }
+.money-page-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .7rem 1rem; }
+.money-page-header h1 { margin: 0; font-size: clamp(1.85rem, 4vw, 2.35rem); letter-spacing: -.045em; }
+.money-header-actions { display: flex; align-items: center; gap: .5rem; }
+.money-header-actions .button { min-height: 44px; padding: .62rem .85rem; white-space: nowrap; }
+.money-section { display: grid; gap: .75rem; min-width: 0; }
 .money-section .section-heading { margin-bottom: .2rem; }
 .money-feedback { margin: 0; border-radius: 1rem; padding: 1rem 1.2rem; line-height: 1.5; }
 .money-success { color: #185b48; background: #e0f2e7; }
@@ -14,10 +18,8 @@
 .money-state p, .money-empty p { max-width: 50ch; margin: 0; color: var(--muted); line-height: 1.55; }
 .money-state .button { margin-top: 1.25rem; }
 .money-soft-note { color: var(--muted); }
-.money-quick-row { display: flex; align-items: center; gap: 1rem; }
-.money-quick-row span, .money-refreshing { color: var(--muted); font-size: .9rem; }
+.money-refreshing { color: var(--muted); font-size: .9rem; }
 .money-quick-feedback { margin: 0; color: #185b48; font-size: .9rem; font-weight: 650; line-height: 1.35; }
-.money-quick-action { min-height: 48px; }
 .money-onboarding { display: grid; gap: .85rem; border: 1px solid #bad3c0; border-radius: 1.4rem; padding: clamp(1.1rem, 3vw, 1.6rem); background: #eef6ef; }
 .money-onboarding h2, .money-onboarding p { margin: 0; }
 .money-onboarding h2 { font-size: clamp(1.25rem, 3vw, 1.65rem); }
@@ -98,20 +100,42 @@
 .button-danger { color: #fff; background: #9a4934; }
 .button-danger:hover { background: #813a29; }
 
-.money-history-list { display: grid; gap: .75rem; margin: 0; padding: 0; list-style: none; }
-.money-history-item { min-width: 0; border: 1px solid var(--border); border-radius: 1.1rem; padding: 1rem 1.15rem; background: var(--paper); }
-.money-history-main { display: grid; grid-template-columns: 2.5rem minmax(0, 1fr) auto; align-items: center; gap: .8rem; }
-.money-event-icon { display: grid; width: 2.5rem; height: 2.5rem; place-items: center; border-radius: .8rem; color: #176b58; background: #e0f1e8; }
-.money-event-expense { color: #975e37; background: #f8ebdf; }
-.money-event-transfer { color: #456d81; background: #e5eff4; }
-.money-history-copy { display: grid; min-width: 0; gap: .15rem; }
-.money-history-copy strong { overflow-wrap: anywhere; }
-.money-history-copy span { color: var(--muted); font-size: .8rem; }
-.money-history-copy span { overflow-wrap: anywhere; }
-.money-history-amount { overflow-wrap: anywhere; font-size: 1rem; text-align: right; }
+.money-timezone-card { display: grid; gap: .7rem; justify-items: start; border: 1px solid #b5d1bd; border-radius: 1.15rem; padding: 1rem; background: #edf6ef; }
+.money-timezone-card h2, .money-timezone-card p { margin: 0; }
+.money-timezone-card .button { min-height: 44px; }
+.money-timezone-suggestion { display: grid; gap: .1rem; }
+.money-timezone-suggestion span, .money-timezone-selected span { display: block; color: var(--muted); font-size: .8rem; overflow-wrap: anywhere; }
+.money-timezone-form { display: grid; gap: .55rem; min-width: 0; }
+.money-timezone-form label { font-weight: 700; }
+.money-timezone-form input, .money-timezone-form select { width: 100%; min-width: 0; border: 1px solid #b8c9bd; border-radius: .7rem; padding: .65rem; color: var(--ink); background: #fff; font: inherit; }
+.money-timezone-form input { min-height: 46px; }
+.money-timezone-form select { height: min(34dvh, 15rem); }
+.money-timezone-selected { margin: .2rem 0; padding: .65rem .8rem; border-radius: .7rem; background: #edf6ef; overflow-wrap: anywhere; }
+.money-timezone-form .money-confirm-actions { margin-top: .4rem; }
+.money-screen-reader-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.money-view-switch { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .3rem; padding: .3rem; border-radius: .9rem; background: #e5eee7; }
+.money-view-switch button { min-height: 44px; border: 0; border-radius: .7rem; background: transparent; color: #315f51; font: inherit; font-weight: 700; cursor: pointer; }
+.money-view-switch button[aria-pressed="true"] { background: var(--paper); box-shadow: 0 1px 5px #244b3020; }
+.money-datetime-field { display: grid; gap: .4rem; min-width: 0; }
+.money-datetime-field select { width: 100%; }
+.money-history-list { display: grid; gap: .35rem; margin: 0; padding: 0; list-style: none; }
+.money-date-heading { padding: .45rem .2rem .1rem; }
+.money-date-heading:not(:first-child) { margin-top: .45rem; }
+.money-date-heading h3 { margin: 0; color: #426756; font-size: .9rem; font-weight: 750; }
+.money-history-item { min-width: 0; border: 1px solid var(--border); border-radius: .85rem; padding: .65rem .8rem; background: var(--paper); }
+.money-history-main { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: .35rem .65rem; }
+.money-history-copy { display: grid; min-width: 0; gap: .18rem; }
+.money-history-copy strong { color: var(--ink); font-size: .98rem; overflow-wrap: anywhere; }
+.money-history-meta { color: var(--muted); font-size: .86rem; line-height: 1.4; overflow-wrap: anywhere; }
+.money-history-amount { overflow-wrap: anywhere; font-size: 1.05rem; text-align: right; white-space: nowrap; }
 .money-history-amount.is-voided { color: var(--muted); text-decoration: line-through; }
-.money-event-details { margin: .65rem 0 0 3.3rem; color: var(--muted); font-size: .88rem; }
-.money-event-details summary { width: fit-content; min-height: 44px; padding: .6rem 0; color: var(--accent); font-weight: 700; cursor: pointer; }
+.money-event-details { margin: 0; color: var(--muted); font-size: .88rem; }
+.money-event-details summary { display: block; min-height: 44px; color: inherit; cursor: pointer; list-style: none; }
+.money-event-details summary::-webkit-details-marker { display: none; }
+.money-event-details summary:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; border-radius: .5rem; }
+.money-event-details[open] summary { padding-bottom: .7rem; border-bottom: 1px solid var(--border); }
+.money-row-chevron { color: var(--accent) !important; font-size: .85rem !important; }
+.money-event-details[open] .money-row-chevron { display: inline-block; transform: rotate(180deg); }
 .money-event-details p { margin: .6rem 0; line-height: 1.5; }
 .money-event-details ul { display: grid; gap: .35rem; margin: .35rem 0 .85rem; padding-left: 1.2rem; overflow-wrap: anywhere; }
 .money-event-details .money-confirm { margin-top: .75rem; }
@@ -122,21 +146,23 @@
 .money-replacement p { margin: 0; line-height: 1.5; }
 
 @media (max-width: 600px) {
-  .money-page { gap: 1.55rem; }
+  .money-page { gap: .85rem; }
+  .money-page-header { align-items: flex-start; }
+  .money-header-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto; width: 100%; }
   .money-field-grid { grid-template-columns: 1fr; }
   .money-action-tab { flex: 1 1 auto; }
   .money-form-card { padding: 1.25rem; }
-  .money-history-main { grid-template-columns: 2.3rem minmax(0, 1fr); gap: .6rem; }
-  .money-history-amount { grid-column: 2; text-align: left; }
-  .money-event-details { margin-left: 2.9rem; }
+  .money-event-details { margin-left: 0; }
   .money-confirm-actions .button { flex: 1 1 auto; }
   .money-pagination .button { padding: .6rem .75rem; font-size: .84rem; }
-  .money-quick-row span { display: none; }
-  .money-quick-row { position: sticky; top: .5rem; z-index: 15; flex-wrap: wrap; border-radius: .9rem; padding: .45rem 0; background: #f7faf7; }
-  .money-quick-action { width: 100%; }
   .money-transaction-dialog { width: 100%; max-width: 100%; max-height: min(90dvh, 920px); margin: auto 0 0; border-radius: 1.3rem 1.3rem 0 0; }
   .money-accounts-heading { align-items: flex-start; flex-direction: column; gap: .75rem; }
   .money-setup-actions { width: 100%; }
   .money-setup-actions .button { flex: 1 1 auto; }
   .money-dialog-content { padding-bottom: calc(1.3rem + env(safe-area-inset-bottom)); }
+}
+
+@media (max-width: 350px) {
+  .money-history-main { grid-template-columns: minmax(0, 1fr); }
+  .money-history-amount { text-align: right; }
 }

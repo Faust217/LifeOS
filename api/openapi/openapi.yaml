@@ -90,6 +90,31 @@ paths:
               schema: { $ref: "#/components/schemas/CurrentUser" }
         "401":
           description: No active session.
+  /api/v1/me/timezone:
+    put:
+      tags: [Identity]
+      summary: Set the current owner's IANA timezone for transaction dates
+      operationId: updateCurrentUserTimezone
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/MoneyOrigin" }
+        - { $ref: "#/components/parameters/MoneyCSRF" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TimezonePreferenceRequest" }
+      responses:
+        "204":
+          description: Timezone preference saved; existing UTC events are unchanged.
+        "400":
+          description: Invalid or unsupported IANA timezone.
+        "401":
+          description: No active session.
+        "403":
+          description: Origin or CSRF token mismatch.
+        "503":
+          description: Session or preference storage unavailable.
   /api/v1/admin/status:
     get:
       tags: [Identity]
@@ -1138,12 +1163,27 @@ components:
     CurrentUser:
       type: object
       additionalProperties: false
-      required: [id, email, is_owner_admin, csrf_token]
+      required: [id, email, is_owner_admin, csrf_token, time_zone]
       properties:
         id: { type: string, format: uuid }
         email: { type: string, format: email }
         is_owner_admin: { type: boolean }
         csrf_token: { type: string }
+        time_zone:
+          type: [string, "null"]
+          description: Validated IANA timezone, or null until the owner confirms a preference.
+          example: Asia/Kuala_Lumpur
+    TimezonePreferenceRequest:
+      type: object
+      additionalProperties: false
+      required: [time_zone]
+      properties:
+        time_zone:
+          type: string
+          minLength: 3
+          maxLength: 100
+          description: IANA timezone validated by the server; UTC is also allowed.
+          example: Asia/Kuala_Lumpur
     HealthResponse:
       type: object
       additionalProperties: false

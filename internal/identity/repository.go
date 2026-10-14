@@ -28,6 +28,7 @@ type User struct {
 	Email        string
 	Status       string
 	IsOwnerAdmin bool
+	TimeZone     *string
 }
 
 // InvitationState is derived from durable timestamps, so expiry needs no background job.
@@ -261,13 +262,25 @@ func (r *repository) findByGoogleSub(ctx context.Context, sub string) (User, err
 		return User{}, ErrInvalidInput
 	}
 	var user User
-	err := r.pool.QueryRow(ctx, `SELECT u.id, u.email, u.status, u.is_owner_admin
+	err := r.pool.QueryRow(ctx, `SELECT u.id, u.email, u.status, u.is_owner_admin, to_jsonb(u)->>'time_zone'
 		FROM google_identities g JOIN lifeos_users u ON u.id = g.user_id
-		WHERE g.google_sub = $1`, sub).Scan(&user.ID, &user.Email, &user.Status, &user.IsOwnerAdmin)
+		WHERE g.google_sub = $1`, sub).Scan(&user.ID, &user.Email, &user.Status, &user.IsOwnerAdmin, &user.TimeZone)
 	if err != nil {
 		return User{}, err
 	}
 	return user, nil
+}
+
+func (r *repository) updateTimeZone(ctx context.Context, owner OwnerID, zone string) error {
+	tag, err := r.pool.Exec(ctx, `UPDATE lifeos_users SET time_zone = $2, updated_at = now()
+		WHERE id = $1 AND status = 'active'`, owner.String(), zone)
+	if err != nil {
+		return fmt.Errorf("update owner timezone: %w", err)
+	}
+	if tag.RowsAffected() != 1 {
+		return ErrNotAuthorized
+	}
+	return nil
 }
 
 func (r *repository) findPendingInvitationByEmail(ctx context.Context, email string) (string, error) {

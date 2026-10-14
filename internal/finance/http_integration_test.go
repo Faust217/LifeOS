@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Faust217/LifeOS/internal/identity"
 	"github.com/Faust217/LifeOS/internal/platform/config"
@@ -22,6 +23,14 @@ import (
 )
 
 const moneyTestOrigin = "http://127.0.0.1:4173"
+
+func TestMoneyEventDTOUsesUTC(t *testing.T) {
+	event := Event{ID: "test", Kind: "expense", AmountMinor: 100, Currency: "MYR", OccurredAt: time.Date(2026, 10, 14, 1, 20, 0, 0, time.FixedZone("MYT", 8*3600)), Status: "posted"}
+	encoded, err := json.Marshal(eventDTO(event))
+	if err != nil || !strings.Contains(string(encoded), `"occurred_at":"2026-10-13T17:20:00Z"`) {
+		t.Fatalf("event timestamp not normalized to UTC: body=%s err=%v", encoded, err)
+	}
+}
 
 type moneyTestReadiness struct{}
 

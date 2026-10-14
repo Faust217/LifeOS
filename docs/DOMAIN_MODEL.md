@@ -58,6 +58,7 @@ LifeOS user / Owner (one independent data boundary per admitted user)
 - Every user-owned core record is scoped by `owner_id` from day one. The owner is determined from the verified, invited LifeOS identity and protected session, not a client-provided ID.
 - Records carry `created_at` and `updated_at`; audited entities also use void/delete metadata or an audit event.
 - Timestamps are stored in UTC; the owner's timezone is stored separately.
+- The owner confirms a validated IANA timezone preference before Money renders local dates or accepts local datetime input. Existing and future Finance events keep UTC instants; a later preference change can regroup historical date headers without rewriting events or amounts. DST gaps are rejected and repeated wall times require an explicit instant choice.
 - Plan and travel calendar dates may use date-only types where time-of-day is not meaningful.
 - Money uses integer minor units plus currency.
 - State fields use controlled values, constraints, or lookup tables rather than arbitrary text.

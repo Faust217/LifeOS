@@ -60,7 +60,7 @@ PostgreSQL integration tests **skip unless their DSNs are supplied**. Each must 
 
 ## Migrations, browser builds, and auth
 
-Numbered SQL lives in [`db/migrations/`](../db/migrations/); the [migration command](../cmd/lifeos-migrate/README.md) supports `up`, one-step `down`, and `version`. Existing migration files are immutable. Test both a clean chain and an upgrade with existing rows. The v5 down migration intentionally refuses to drop populated Goals; v6 down refuses while any deleted Finance event exists because dropping its marker would reveal that record again. Use a corrective forward migration or a separately approved restore plan. Never use `down` as a casual rollback on personal data.
+Numbered SQL lives in [`db/migrations/`](../db/migrations/); the [migration command](../cmd/lifeos-migrate/README.md) supports `up`, one-step `down`, and `version`. Existing migration files are immutable. Test both a clean chain and an upgrade with existing rows. The v5 down migration intentionally refuses to drop populated Goals; v6 down refuses while any deleted Finance event exists because dropping its marker would reveal that record again; v7 down refuses while any owner has a saved timezone. Use a corrective forward migration or a separately approved restore plan. Never use `down` as a casual rollback on personal data.
 
 If the browser appears stale, check which origin you opened (`5173` Vite versus `4173` Compose), restart the relevant dev/preview server or rebuild the web image, then hard-refresh. Vite development does not serve a previously built Compose image; Compose does not automatically reflect local TS edits. Direct `/plans/goals/{id}` URLs, back, and reload should resolve through the web fallback.
 

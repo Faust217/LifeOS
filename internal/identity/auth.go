@@ -10,9 +10,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
+	_ "time/tzdata"
 
 	"github.com/Faust217/LifeOS/internal/platform/config"
 	"github.com/coreos/go-oidc/v3/oidc"
@@ -85,6 +87,7 @@ func (a *Auth) RegisterRoutes(router chi.Router) {
 	router.Get("/auth/callback", a.callback)
 	router.Post("/auth/logout", a.logout)
 	router.Get("/me", a.me)
+	router.Put("/me/timezone", a.RequireMutation(a.updateTimeZone))
 	router.Get("/admin/status", a.adminStatus)
 }
 
@@ -210,11 +213,38 @@ func (a *Auth) me(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(struct {
-		ID           string `json:"id"`
-		Email        string `json:"email"`
-		IsOwnerAdmin bool   `json:"is_owner_admin"`
-		CSRFToken    string `json:"csrf_token"`
-	}{user.ID, user.Email, user.IsOwnerAdmin, csrfToken(secret)})
+		ID           string  `json:"id"`
+		Email        string  `json:"email"`
+		IsOwnerAdmin bool    `json:"is_owner_admin"`
+		CSRFToken    string  `json:"csrf_token"`
+		TimeZone     *string `json:"time_zone"`
+	}{user.ID, user.Email, user.IsOwnerAdmin, csrfToken(secret), user.TimeZone})
+}
+
+func (a *Auth) updateTimeZone(w http.ResponseWriter, r *http.Request, owner OwnerID) {
+	var input struct {
+		TimeZone string `json:"time_zone"`
+	}
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&input); err != nil || decoder.Decode(&struct{}{}) != io.EOF || !validIANAZone(input.TimeZone) {
+		writeGuardError(w, http.StatusBadRequest, "invalid_timezone", "Choose a valid IANA timezone")
+		return
+	}
+	if err := a.repo.updateTimeZone(r.Context(), owner, input.TimeZone); err != nil {
+		writeSessionError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func validIANAZone(zone string) bool {
+	if len(zone) < 3 || len(zone) > 100 || strings.TrimSpace(zone) != zone ||
+		(zone != "UTC" && !strings.Contains(zone, "/")) || strings.Contains(zone, "..") || strings.HasPrefix(zone, "/") {
+		return false
+	}
+	_, err := time.LoadLocation(zone)
+	return err == nil
 }
 
 func (a *Auth) adminStatus(w http.ResponseWriter, r *http.Request) {
@@ -350,10 +380,10 @@ func (a *Auth) currentUser(r *http.Request) (User, string, error) {
 		return User{}, "", ErrNotAuthorized
 	}
 	var user User
-	err = a.pool.QueryRow(r.Context(), `SELECT u.id, u.email, u.status, u.is_owner_admin
+	err = a.pool.QueryRow(r.Context(), `SELECT u.id, u.email, u.status, u.is_owner_admin, to_jsonb(u)->>'time_zone'
 		FROM lifeos_sessions s JOIN lifeos_users u ON u.id = s.user_id
 		WHERE s.token_hash = $1 AND s.revoked_at IS NULL AND s.expires_at > now()
-		AND u.status = 'active'`, digest(cookie.Value)).Scan(&user.ID, &user.Email, &user.Status, &user.IsOwnerAdmin)
+		AND u.status = 'active'`, digest(cookie.Value)).Scan(&user.ID, &user.Email, &user.Status, &user.IsOwnerAdmin, &user.TimeZone)
 	if err != nil {
 		return User{}, "", err
 	}

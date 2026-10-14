@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { fetchCurrentUser, signOut } from "./auth";
+import { fetchCurrentUser, signOut, updateTimeZone } from "./auth";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -29,5 +29,16 @@ describe("auth API", () => {
   it("treats an already expired session as signed out", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ status: 401, ok: false }));
     await expect(signOut("expired-session-csrf")).resolves.toBeUndefined();
+  });
+
+  it("saves the selected timezone through the guarded current-user API", async () => {
+    const request = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", request);
+    await updateTimeZone("csrf", "Asia/Kuala_Lumpur");
+    expect(request).toHaveBeenCalledWith("/api/v1/me/timezone", {
+      method: "PUT", credentials: "same-origin",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": "csrf" },
+      body: JSON.stringify({ time_zone: "Asia/Kuala_Lumpur" }),
+    });
   });
 });

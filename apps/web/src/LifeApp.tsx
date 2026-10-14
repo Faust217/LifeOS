@@ -79,6 +79,7 @@ export function App() {
       user={session.user}
       onSignOut={() => void handleSignOut()}
       onSessionExpired={refreshSession}
+      onTimeZoneSaved={(timeZone) => setSession((current) => current.status === "ready" ? { ...current, user: { ...current.user, time_zone: timeZone } } : current)}
       signingOut={session.status === "signing-out"}
       signOutError={signOutError}
     />
@@ -154,12 +155,13 @@ function UserAvatar({ email }: { email: string }) {
   return <span className="user-avatar" aria-hidden="true">{email.slice(0, 1).toUpperCase()}</span>;
 }
 
-export function AuthenticatedShell({ area, goalID = null, user, onSignOut, onSessionExpired = () => undefined, signingOut = false, signOutError = "" }: {
+export function AuthenticatedShell({ area, goalID = null, user, onSignOut, onSessionExpired = () => undefined, onTimeZoneSaved = () => undefined, signingOut = false, signOutError = "" }: {
   area: Area | null;
   goalID?: string | null;
   user: CurrentUser;
   onSignOut: () => void;
   onSessionExpired?: () => void;
+  onTimeZoneSaved?: (timeZone: string) => void;
   signingOut?: boolean;
   signOutError?: string;
 }) {
@@ -183,8 +185,8 @@ export function AuthenticatedShell({ area, goalID = null, user, onSignOut, onSes
           <a className="topbar-account" href="/me" aria-label={`Your profile: ${user.email}`}><UserAvatar email={user.email} /><span>{user.email}</span></a>
         </header>
         <main id="main-content" className="page-content" tabIndex={-1}>
-          {area === "today" && <TodayPage onSessionExpired={onSessionExpired} />}
-          {area === "money" && <MoneyPage csrfToken={user.csrf_token} onSessionExpired={onSessionExpired} />}
+          {area === "today" && <TodayPage timeZone={user.time_zone} onSessionExpired={onSessionExpired} />}
+          {area === "money" && <MoneyPage csrfToken={user.csrf_token} timeZone={user.time_zone} onTimeZoneSaved={onTimeZoneSaved} onSessionExpired={onSessionExpired} />}
           {area === "plans" && <GoalsPage goalID={goalID} csrfToken={user.csrf_token} onSessionExpired={onSessionExpired} />}
           {area === "me" && <MePage user={user} onSignOut={onSignOut} signingOut={signingOut} signOutError={signOutError} />}
           {area === null && <NotFoundPage />}

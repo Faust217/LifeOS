@@ -6,7 +6,7 @@ import {
   MoneyApiError, type MoneyAccount, type MoneyBalance, type MoneyCategory, type MoneyEvent,
 } from "./api/money";
 import { Icon } from "./Icons";
-import { formatMinorUnits } from "./moneyAmount";
+import { formatLocalDate, formatMinorUnits } from "./moneyAmount";
 import "./today.css";
 
 type MoneySnapshot = {
@@ -51,7 +51,7 @@ export function activeGoalsOnly(goals: Goal[]): Goal[] {
   return goals.filter((goal) => !goal.archived_at && !goal.completed_at);
 }
 
-export function TodayPage({ onSessionExpired }: { onSessionExpired: () => void }) {
+export function TodayPage({ timeZone, onSessionExpired }: { timeZone: string | null; onSessionExpired: () => void }) {
   const [money, setMoney] = useState<ReadState<MoneySnapshot>>({ status: "loading" });
   const [goals, setGoals] = useState<ReadState<Goal[]>>({ status: "loading" });
   const sequence = useRef(0);
@@ -111,7 +111,7 @@ export function TodayPage({ onSessionExpired }: { onSessionExpired: () => void }
       {money.status === "error" && <p role="alert">Recent activity is unavailable while Money is loading.</p>}
       {money.status === "ready" && (money.data.events.length === 0
         ? <p className="today-empty">No transactions yet. Income, expenses, and transfers will appear here after you record them in <a href="/money">Money</a>.</p>
-        : <ol className="today-activity-list">{money.data.events.map((event) => <li key={event.id}><div><strong>{eventLabel(event, money.data.categories)}{event.status === "voided" ? " · Voided" : ""}</strong><span>{eventAccounts(event, money.data.accounts)} · {new Date(event.occurred_at).toLocaleDateString()}{event.kind !== "transfer" && event.allocations.length === 0 ? " · Uncategorized" : ""}</span></div><strong className={event.status === "voided" ? "is-voided" : ""}>{event.kind === "expense" ? "−" : event.kind === "income" ? "+" : "↔ "}{formatMinorUnits(event.amount_minor, event.currency)}</strong></li>)}</ol>)}
+        : <>{!timeZone && <p className="today-empty">Confirm your timezone in <a href="/money">Money</a> to see local transaction dates.</p>}<ol className="today-activity-list">{money.data.events.map((event) => <li key={event.id}><div><strong>{eventLabel(event, money.data.categories)}{event.status === "voided" ? " · Voided" : ""}</strong><span>{eventAccounts(event, money.data.accounts)}{timeZone ? ` · ${formatLocalDate(event.occurred_at, timeZone)}` : " · Date hidden until timezone is confirmed"}{event.kind !== "transfer" && event.allocations.length === 0 ? " · Uncategorized" : ""}</span></div><strong className={event.status === "voided" ? "is-voided" : ""}>{event.kind === "expense" ? "−" : event.kind === "income" ? "+" : "↔ "}{formatMinorUnits(event.amount_minor, event.currency)}</strong></li>)}</ol></>)}
     </section>
   </div>;
 }

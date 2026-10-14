@@ -23,6 +23,8 @@ go run ./cmd/lifeos-migrate down
 
 The initial Foundation baseline intentionally creates no LifeOS domain table. Migration 000004 introduces the first owner-scoped Finance tables. Its down migration refuses to remove populated financial history; use a reviewed forward correction or verified backup instead of dropping data.
 
+Migration 000007 adds a nullable owner IANA timezone without rewriting UTC financial events. Its down migration refuses to discard any saved timezone preference.
+
 ## Failure and Dirty-State Recovery
 
 Before a destructive, long-running, or otherwise risky migration, create and verify a PostgreSQL backup. A safe down migration is not a substitute for a backup when data could be lost.

@@ -141,7 +141,7 @@ func categoryDTO(category Category) categoryResponse {
 
 func eventDTO(event Event) eventResponse {
 	result := eventResponse{ID: event.ID, Kind: event.Kind, AmountMinor: strconv.FormatInt(event.AmountMinor, 10),
-		Currency: event.Currency, OccurredAt: event.OccurredAt, Note: event.Note, Status: event.Status,
+		Currency: event.Currency, OccurredAt: event.OccurredAt.UTC(), Note: event.Note, Status: event.Status,
 		VoidedAt: event.VoidedAt, VoidReason: event.VoidReason,
 		Movements:   make([]movementResponse, 0, len(event.Movements)),
 		Allocations: make([]allocationResponse, 0, len(event.Allocations))}

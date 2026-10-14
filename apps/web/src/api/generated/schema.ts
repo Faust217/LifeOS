@@ -72,6 +72,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/timezone": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set the current owner's IANA timezone for transaction dates */
+        put: operations["updateCurrentUserTimezone"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/status": {
         parameters: {
             query?: never;
@@ -724,6 +741,18 @@ export interface components {
             email: string;
             is_owner_admin: boolean;
             csrf_token: string;
+            /**
+             * @description Validated IANA timezone, or null until the owner confirms a preference.
+             * @example Asia/Kuala_Lumpur
+             */
+            time_zone: string | null;
+        };
+        TimezonePreferenceRequest: {
+            /**
+             * @description IANA timezone validated by the server; UTC is also allowed.
+             * @example Asia/Kuala_Lumpur
+             */
+            time_zone: string;
         };
         HealthResponse: {
             /** @constant */
@@ -1103,6 +1132,61 @@ export interface operations {
             };
             /** @description No active session. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    updateCurrentUserTimezone: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured public origin. */
+                Origin: components["parameters"]["MoneyOrigin"];
+                /** @description Session-bound token returned by GET /api/v1/me. */
+                "X-CSRF-Token": components["parameters"]["MoneyCSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TimezonePreferenceRequest"];
+            };
+        };
+        responses: {
+            /** @description Timezone preference saved; existing UTC events are unchanged. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid or unsupported IANA timezone. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No active session. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Origin or CSRF token mismatch. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Session or preference storage unavailable. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

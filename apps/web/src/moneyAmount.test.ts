@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { currencyDigits, formatMinorUnits, minorUnitsToInput, parseAmountToMinor, toOccurredAt } from "./moneyAmount";
+import { currencyDigits, formatLocalDate, formatLocalTime, formatLocalTimeWithZone, formatMinorUnits, localDateKey, localDateTimeValue, matchingInstants, minorUnitsToInput, parseAmountToMinor, timeZoneLabel, toOccurredAt } from "./moneyAmount";
 
 describe("exact Money amounts", () => {
   it("parses common currency amounts without floating-point arithmetic", () => {
@@ -42,11 +42,33 @@ describe("exact Money amounts", () => {
 
 describe("Money date input", () => {
   it("converts a valid local date and time to an API timestamp", () => {
-    expect(new Date(toOccurredAt("2020-01-15T12:30")).getTime()).toBe(new Date("2020-01-15T12:30").getTime());
+    expect(toOccurredAt("2020-01-15T12:30", "Asia/Kuala_Lumpur")).toBe("2020-01-15T04:30:00.000Z");
   });
 
   it("rejects impossible and malformed dates", () => {
-    expect(() => toOccurredAt("2026-02-30T12:00")).toThrow();
-    expect(() => toOccurredAt("2026-01-01")).toThrow();
+    expect(() => toOccurredAt("2026-02-30T12:00", "UTC")).toThrow();
+    expect(() => toOccurredAt("2026-01-01", "UTC")).toThrow();
+  });
+
+  it("groups existing UTC events by the saved timezone, independent of the device", () => {
+    expect(localDateKey("2026-10-13T17:30:00Z", "Asia/Kuala_Lumpur")).toBe("2026-10-14");
+    expect(localDateKey("2026-10-13T17:30:00Z", "America/New_York")).toBe("2026-10-13");
+    expect(localDateTimeValue(new Date("2026-10-13T17:30:00Z"), "Asia/Kuala_Lumpur")).toBe("2026-10-14T01:30");
+    expect(formatLocalDate("2026-10-13T17:30:00Z", "Asia/Kuala_Lumpur")).toContain("October 14");
+    expect(formatLocalTime("2026-10-13T17:30:00Z", "Asia/Kuala_Lumpur")).toBe("01:30");
+    expect(formatLocalTime("2026-10-13T17:30:00Z", "Asia/Kuala_Lumpur")).not.toMatch(/UTC|GMT/);
+    expect(timeZoneLabel("Asia/Kuala_Lumpur", new Date("2026-10-13T17:30:00Z"))).toBe("Kuala Lumpur (UTC+8)");
+  });
+
+  it("rejects DST gaps and requires an explicit choice for repeated wall times", () => {
+    expect(() => matchingInstants("2024-03-10T02:30", "America/New_York")).toThrow(/does not exist/);
+    const matches = matchingInstants("2024-11-03T01:30", "America/New_York");
+    expect(matches).toEqual(["2024-11-03T05:30:00.000Z", "2024-11-03T06:30:00.000Z"]);
+    expect(() => toOccurredAt("2024-11-03T01:30", "America/New_York")).toThrow(/occurs twice/);
+    expect(toOccurredAt("2024-11-03T01:30", "America/New_York", matches[1])).toBe(matches[1]);
+    expect(formatLocalTime(matches[0], "America/New_York")).toBe(formatLocalTime(matches[1], "America/New_York"));
+    expect(formatLocalTimeWithZone(matches[0], "America/New_York")).not.toBe(formatLocalTimeWithZone(matches[1], "America/New_York"));
+    expect(timeZoneLabel("America/New_York", new Date(matches[0]))).toBe("New York (UTC-4)");
+    expect(timeZoneLabel("America/New_York", new Date(matches[1]))).toBe("New York (UTC-5)");
   });
 });

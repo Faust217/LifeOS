@@ -154,6 +154,13 @@ func authTestDatabase(t *testing.T) *pgxpool.Pool {
 	if err := pool.QueryRow(ctx, "SELECT id FROM lifeos_users WHERE id = $1", upgradeUserID).Scan(&retainedID); err != nil || retainedID != upgradeUserID {
 		t.Fatalf("auth migration lost pre-existing user: id=%q err=%v", retainedID, err)
 	}
+	if err := runner.Migrate(7); err != nil {
+		t.Fatalf("upgrade identity fixture to timezone version 7: %v", err)
+	}
+	var legacyZone *string
+	if err := pool.QueryRow(ctx, "SELECT time_zone FROM lifeos_users WHERE id = $1", upgradeUserID).Scan(&legacyZone); err != nil || legacyZone != nil {
+		t.Fatalf("populated owner lost or timezone fabricated during v7 upgrade: zone=%v err=%v", legacyZone, err)
+	}
 	if _, err := pool.Exec(ctx, "DELETE FROM lifeos_users WHERE id = $1", upgradeUserID); err != nil {
 		t.Fatalf("remove disposable upgrade fixture: %v", err)
 	}
@@ -334,6 +341,51 @@ func TestOIDCAndSessionIntegration(t *testing.T) {
 		t.Fatalf("tester callback status=%d body=%s", testerCallback.Code, testerCallback.Body.String())
 	}
 	testerCookie := sessionFrom(t, testerCallback)
+	t.Run("owner timezone preference", func(t *testing.T) {
+		request := func(cookie *http.Cookie, origin, csrf, body string) *httptest.ResponseRecorder {
+			recorder := httptest.NewRecorder()
+			r := httptest.NewRequest(http.MethodPut, "/api/v1/me/timezone", strings.NewReader(body))
+			if cookie != nil {
+				r.AddCookie(cookie)
+			}
+			if origin != "" {
+				r.Header.Set("Origin", origin)
+			}
+			if csrf != "" {
+				r.Header.Set("X-CSRF-Token", csrf)
+			}
+			r.Header.Set("Content-Type", "application/json")
+			router.ServeHTTP(recorder, r)
+			return recorder
+		}
+		valid := `{"time_zone":"America/New_York"}`
+		if got := request(nil, "http://127.0.0.1:4173", "", valid).Code; got != http.StatusUnauthorized {
+			t.Fatalf("anonymous=%d", got)
+		}
+		if got := request(ownerCookie, "https://evil.example", csrfToken(ownerCookie.Value), valid).Code; got != http.StatusForbidden {
+			t.Fatalf("origin=%d", got)
+		}
+		if got := request(ownerCookie, "http://127.0.0.1:4173", "wrong", valid).Code; got != http.StatusForbidden {
+			t.Fatalf("csrf=%d", got)
+		}
+		for _, body := range []string{`{"time_zone":"Local"}`, `{"time_zone":"Invalid/Nowhere"}`, `{"time_zone":"../etc/passwd"}`, `{"time_zone":"Asia/Kuala_Lumpur","extra":true}`, `{}`} {
+			if got := request(ownerCookie, "http://127.0.0.1:4173", csrfToken(ownerCookie.Value), body).Code; got != http.StatusBadRequest {
+				t.Fatalf("invalid %s=%d", body, got)
+			}
+		}
+		if got := request(ownerCookie, "http://127.0.0.1:4173", csrfToken(ownerCookie.Value), valid).Code; got != http.StatusNoContent {
+			t.Fatalf("save=%d", got)
+		}
+		var current struct {
+			TimeZone *string `json:"time_zone"`
+		}
+		if err := json.Unmarshal(withCookie(router, "/api/v1/me", ownerCookie).Body.Bytes(), &current); err != nil || current.TimeZone == nil || *current.TimeZone != "America/New_York" {
+			t.Fatalf("owner timezone=%+v err=%v", current, err)
+		}
+		if err := json.Unmarshal(withCookie(router, "/api/v1/me", testerCookie).Body.Bytes(), &current); err != nil || current.TimeZone != nil {
+			t.Fatalf("tester inherited timezone=%+v err=%v", current, err)
+		}
+	})
 	if got := withCookie(router, "/api/v1/admin/status", testerCookie).Code; got != http.StatusForbidden {
 		t.Fatalf("non-admin access status=%d", got)
 	}
@@ -435,6 +487,12 @@ func TestOIDCAndSessionIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer runner.Close()
+	if _, err := pool.Exec(ctx, "UPDATE lifeos_users SET time_zone = NULL"); err != nil {
+		t.Fatalf("clear disposable timezone fixture before rollback check: %v", err)
+	}
+	if err := runner.Migrate(3); err != nil {
+		t.Fatalf("return disposable schema to auth version 3: %v", err)
+	}
 	if err := runner.Steps(-1); err == nil {
 		t.Fatal("down migration removed authentication history")
 	}

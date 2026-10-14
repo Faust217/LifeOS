@@ -286,6 +286,9 @@ func TestFinanceSoftDelete(t *testing.T) {
 	checkSpending(0)
 
 	// The v6 down migration must refuse to reveal already deleted rows.
+	if err := runner.Steps(-1); err != nil {
+		t.Fatalf("rollback empty timezone preference v7 on disposable database: %v", err)
+	}
 	if err := runner.Steps(-1); err == nil {
 		t.Fatal("down migration exposed deleted rows")
 	}
