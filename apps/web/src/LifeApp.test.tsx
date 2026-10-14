@@ -41,6 +41,15 @@ describe("LifeOS application shell", () => {
     expect(money).not.toContain("MYR 0.00");
     expect(plans).toContain("Loading your Goals");
     expect(plans).not.toContain("Build a reading habit");
+    expect(plans).toContain("<h1>Plans</h1>");
+    expect(plans).not.toContain("Give your goals room to grow");
+  });
+
+  it("keeps Today compact without the former promotional hero", () => {
+    const today = renderArea("today");
+    expect(today).toContain("<h1>Today</h1>");
+    expect(today).not.toContain("A clearer view of your day");
+    expect(today).toContain("Recent transactions");
   });
 
   it("shows only the confirmed user's profile and a real sign-out control", () => {

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Goal } from "./api/goals";
 import type { MoneyAccount, MoneyCategory, MoneyEvent } from "./api/money";
-import { activeGoalsOnly, eventAccounts, eventLabel } from "./TodayPage";
+import { activeGoalsOnly, activityDateTime, eventAccounts, eventLabel } from "./TodayPage";
 
 const fromID = "11111111-1111-4111-8111-111111111111";
 const toID = "22222222-2222-4222-8222-222222222222";
@@ -55,5 +55,11 @@ describe("Today read-only projections", () => {
     expect(activeGoalsOnly([goal, completed, archived])).toEqual([goal]);
     expect(goal.completed_count).toBe(1);
     expect(goal.total_count).toBe(3);
+  });
+
+  it("uses the saved LifeOS timezone for concise recent-activity dates", () => {
+    const now = new Date("2026-10-14T04:00:00Z");
+    expect(activityDateTime("2026-10-13T17:30:00Z", "Asia/Kuala_Lumpur", now)).toBe("01:30");
+    expect(activityDateTime("2026-10-13T17:30:00Z", "America/New_York", now)).toBe("Oct 13 · 13:30");
   });
 });

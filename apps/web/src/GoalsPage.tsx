@@ -22,6 +22,7 @@ function titleValue(value: string): string {
 export function GoalsPage({ goalID = null, csrfToken, onSessionExpired }: { goalID?: string | null; csrfToken: string; onSessionExpired: () => void }) {
   const [view, setView] = useState<View>({ status: "loading" });
   const [title, setTitle] = useState("");
+  const [showCreate, setShowCreate] = useState(false);
   const [createError, setCreateError] = useState("");
   const [readError, setReadError] = useState("");
   const [notice, setNotice] = useState("");
@@ -29,6 +30,17 @@ export function GoalsPage({ goalID = null, csrfToken, onSessionExpired }: { goal
   const [refreshing, setRefreshing] = useState(false);
   const pendingRef = useRef(false);
   const requestSequence = useRef(0);
+  const createButtonRef = useRef<HTMLButtonElement>(null);
+  const titleInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { if (showCreate) titleInputRef.current?.focus(); }, [showCreate]);
+
+  function openCreate() { setShowCreate(true); setCreateError(""); }
+  function closeCreate() {
+    setShowCreate(false);
+    setCreateError("");
+    window.setTimeout(() => createButtonRef.current?.focus(), 0);
+  }
 
   const refresh = useCallback(async (): Promise<boolean> => {
     const request = ++requestSequence.current;
@@ -83,6 +95,7 @@ export function GoalsPage({ goalID = null, csrfToken, onSessionExpired }: { goal
       const clean = titleValue(title);
       await mutate(() => createGoal(csrfToken, clean), "Goal created. Add a first step whenever you are ready.");
       setTitle("");
+      closeCreate();
     } catch (error) { setCreateError(errorMessage(error)); }
   }
 
@@ -92,7 +105,7 @@ export function GoalsPage({ goalID = null, csrfToken, onSessionExpired }: { goal
   const selected = goalID ? goals?.find((goal) => goal.id.toLowerCase() === goalID.toLowerCase()) : undefined;
   return <div className="page-stack goals-page">
     {goalID && <a className="goal-back-link" href="/plans">← All Goals</a>}
-    <header className="page-heading"><p className="eyebrow">PLANS · YOUR NEXT STEPS</p><h1>{selected ? selected.title : "Give your goals room to grow."}</h1><p>{goalID ? "Keep the next steps together and see your progress." : "Start with one intention, then make it practical with a simple checklist. Goals never change your Money balance."}</p></header>
+    <header className="goals-heading"><h1>Plans</h1>{goals && !goalID && goals.length > 0 && !showCreate && <button ref={createButtonRef} className="button button-primary" type="button" onClick={openCreate}>+ New goal</button>}</header>
     {view.status === "loading" && <section className="goals-state" role="status" aria-live="polite"><span className="loading-orb" aria-hidden="true" /><h2>Loading your Goals…</h2><p>Checking your latest steps.</p></section>}
     {view.status === "error" && <section className="goals-state" role="alert"><Icon name="shield" /><h2>Goals could not load.</h2><p>{view.message}</p><button className="button button-primary" type="button" onClick={() => void refresh()}>Try again</button></section>}
     {goals && goalID && !selected && <section className="goals-state" role="alert"><h2>Goal not found.</h2><p>It may have been removed or belongs to another account.</p><a className="button button-outline" href="/plans">Return to Goals</a></section>}
@@ -103,16 +116,15 @@ export function GoalsPage({ goalID = null, csrfToken, onSessionExpired }: { goal
       <GoalCard goal={selected} csrfToken={csrfToken} pending={pending} mutate={mutate} />
     </>}
     {goals && !goalID && <>
-      <section className="goal-create-card" aria-labelledby="goal-create-title"><div><p className="eyebrow">A FRESH START</p><h2 id="goal-create-title">What matters next?</h2><p>Give your Goal a short name. You can add steps, rename it, or archive it later.</p></div>
-        <form onSubmit={(event) => void submitGoal(event)}><label htmlFor="goal-new-title">Goal title</label><div className="goal-create-row"><input id="goal-new-title" value={title} onChange={(event) => { setTitle(event.target.value); setCreateError(""); }} maxLength={160} required placeholder="Build a reading habit" aria-invalid={!!createError} aria-describedby={createError ? "goal-create-error" : undefined} disabled={pending} /><button className="button button-primary" type="submit" disabled={pending}>{pending ? "Saving…" : "Create Goal"}</button></div>{createError && <p id="goal-create-error" className="goal-error" role="alert">{createError}</p>}</form>
-      </section>
+      {showCreate && <section className="goal-create-card" aria-labelledby="goal-create-title"><h2 id="goal-create-title">New goal</h2>
+        <form onSubmit={(event) => void submitGoal(event)}><label htmlFor="goal-new-title">Goal title</label><input ref={titleInputRef} id="goal-new-title" value={title} onChange={(event) => { setTitle(event.target.value); setCreateError(""); }} maxLength={160} required placeholder="Build a reading habit" aria-invalid={!!createError} aria-describedby={createError ? "goal-create-error" : undefined} disabled={pending} /><p className="goal-soft-note">Add checklist steps after creating the Goal.</p>{createError && <p id="goal-create-error" className="goal-error" role="alert">{createError}</p>}<div className="goal-create-actions"><button className="button button-outline" type="button" disabled={pending} onClick={closeCreate}>Cancel</button><button className="button button-primary" type="submit" disabled={pending}>{pending ? "Saving…" : "Create Goal"}</button></div></form>
+      </section>}
       {notice && <p className="goal-notice" role="status">{notice}</p>}
       {readError && <div className="goal-read-error"><p role="alert">{readError}</p><button type="button" className="button button-outline" onClick={() => void refresh()}>Refresh Goals</button></div>}
       {refreshing && <p className="goal-refreshing" role="status">Refreshing Goals…</p>}
-      <section className="goal-list-section" aria-labelledby="goal-list-title"><div className="section-heading"><div><p className="eyebrow">YOUR GOALS</p><h2 id="goal-list-title">Small steps add up.</h2></div></div>
-        {active.length === 0 ? <div className="goals-empty"><Icon name="plans" /><h3>No active Goals yet.</h3><p>Create one above to begin with a single step. Your checklist stays private to you.</p></div>
-          : <div className="goal-list goal-overview-list">{active.map((goal) => <GoalSummary key={goal.id} goal={goal} />)}</div>}
-      </section>
+      {goals.length === 0 && !showCreate && <section className="goals-empty"><Icon name="plans" /><h2>No Goals yet</h2><p>Create a Goal and add checklist steps as you go.</p><button ref={createButtonRef} className="button button-primary" type="button" onClick={openCreate}>+ New goal</button></section>}
+      {active.length > 0 && <section className="goal-list-section" aria-labelledby="goal-list-title"><h2 id="goal-list-title">Goals</h2><div className="goal-list goal-overview-list">{active.map((goal) => <GoalSummary key={goal.id} goal={goal} />)}</div></section>}
+      {goals.length > 0 && active.length === 0 && <p className="goal-soft-note">No active Goals. You can start a new one or review your archived Goals.</p>}
       {archived.length > 0 && <details className="goal-archive-list"><summary>Archived Goals ({archived.length})</summary><div className="goal-list goal-overview-list">{archived.map((goal) => <GoalSummary key={goal.id} goal={goal} />)}</div></details>}
     </>}
   </div>;

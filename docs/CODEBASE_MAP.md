@@ -1,6 +1,6 @@
 # LifeOS Codebase Map
 
-**Current code:** Issues #26–#30 are complete. Issue #30 compact Money history and owner timezone passed Product Owner visual review. This is a navigation guide; [Architecture](ARCHITECTURE.md), [Domain Model](DOMAIN_MODEL.md), and accepted [ADRs](adr/README.md) define the rules.
+**Current code:** Issues #26–#30 are complete. Issue #31 Today/Plans UI polish has Product Owner approval for delivery. This is a navigation guide; [Architecture](ARCHITECTURE.md), [Domain Model](DOMAIN_MODEL.md), and accepted [ADRs](adr/README.md) define the rules.
 
 ## Start here
 
@@ -69,6 +69,26 @@ flowchart LR
 For inputs, outputs, errors, and tests at each function, read the [Goals](../learning/journal/2026-10-12-goals-checklists.md), [Money UI](../learning/journal/2026-10-09-money-ui.md), [Money API](../learning/journal/2026-10-09-money-api.md), [OIDC/session](../learning/journal/2026-10-09-google-oidc-sessions.md), and [owner boundary](../learning/journal/2026-10-09-owner-authorization-boundary.md) learning entries.
 
 Today reads the existing server-calculated balance for every account, four recent event records as a list only, and the Goal list's completed/total counts. It never computes financial totals from the paginated event list. See the [Issue #26 learning entry](../learning/journal/2026-10-13-today-dashboard.md) for its exact read flow.
+
+Issue #31 changes these view paths without changing the API or domain rules:
+
+```mermaid
+flowchart LR
+  A[TodayPage.refresh] --> B[loadMoneySnapshot / listGoals]
+  B --> C[api/money.ts / api/goals.ts]
+  C --> D[Auth.RequireRead]
+  D --> E[Finance/Planning handlers and services]
+  E --> F[owner-scoped repositories / PostgreSQL]
+  F --> G[server balances, UTC events, Goal progress]
+  G --> H[TodayPage / activityDateTime in saved zone]
+  I[GoalsPage.openCreate / submitGoal] --> J[api/goals.ts createGoal]
+  J --> K[Auth.RequireMutation / goalHandler.createGoal]
+  K --> L[Service.CreateGoal / repository.createGoal]
+  L --> M[(owner Goal row)]
+  M --> N[GoalsPage.mutate / refresh]
+```
+
+The compact Today sections still read per-account server balances, four recent events, and the server's checklist counts. `activityDateTime` shortens dates using the saved LifeOS timezone and never affects UTC storage. `GoalsPage.openCreate` reveals the existing creation flow; `closeCreate` keeps the title draft and restores trigger focus, while `submitGoal` clears it only after a successful create. Read and mutation errors preserve retry paths. See the [Issue #31 learning entry](../learning/journal/2026-10-14-today-plans-ui-polish.md) for inputs, outputs, errors, and browser evidence.
 
 Issue #27 adds `CategoryPanel` rename/archive/restore through `api/money.ts` and `moneyHandler`/`Service`/owner-scoped repository functions. `EntryForm.submit` sends explicit `allocations: []` for Uncategorized; `postSingleAccountEvent` accepts zero allocations and requires exact totals for nonempty allocations. `repository.post` still writes the event and account movement atomically, while history and Today label the empty allocation list. The actual function paths, errors, and tests are in the [Issue #27 learning entry](../learning/journal/2026-10-13-money-categories-uncategorized.md).
 
