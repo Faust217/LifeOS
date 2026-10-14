@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-10-14
 
-**Current milestone:** Issues #26–#29 completed and closed; ADR-016 accepted; Issue #30 date-grouped Money history and owner timezone approved by the Product Owner for delivery
+**Current milestone:** Issues #26–#29 completed and closed; ADR-016 accepted; Issue #30 date-grouped Money history and owner timezone closed; Issue #31 Today/Plans UI polish proposed only
 
 **Product milestone:** Invite-only online V0.1 Alpha approved in Issue #16; identity, owner boundary, Money, and Goals workflows implemented
 
@@ -154,7 +154,7 @@ The recommended order is represented by the issue numbers. Issues #3 and #4 may 
 
 ## Next Work Requiring Explicit Authorization
 
-1. After [Issue #30](https://github.com/Faust217/LifeOS/issues/30), scope the Today/Plans UI polish as a separate issue requiring Product Owner authorization before implementation. Scope Me/export, opening-balance/backdated correctness, financial-write idempotency, backup/restore, and the non-destructive upgrade path through separate authorization. Personal Data Ready still requires a rehearsed restore and safe upgrade before real financial data. Foundation #8–#15 GitHub review/closure remains separate.
+1. [Issue #31](https://github.com/Faust217/LifeOS/issues/31) proposes compact Today and Plans/Goals presentation after closed Issue #30. Await Product Owner authorization before implementation; retain existing APIs and domain behavior. Scope Me/export, opening-balance/backdated correctness, financial-write idempotency, backup/restore, and the non-destructive upgrade path through separate authorization. Personal Data Ready still requires a rehearsed restore and safe upgrade before real financial data. Foundation #8–#15 GitHub review/closure remains separate.
 2. Establish and explicitly accept the Personal Data Ready gate before real financial data: Finance correctness, idempotency, export, owner isolation, backups and verified restore, forward upgrades, and secure persistent operation. Do not deploy or migrate the personal database without separate approval.
 3. Before any Internet-facing Alpha use, review HTTPS/TLS, secrets, database transport, operational limits, PWA installation, persistent storage, and tested recovery. Before V0.2 offline synchronization, accept a focused ADR for reliability, recovery, conflicts, and account/device boundaries. Product Owner acceptance of proposed ADR-015 is required to remove the accepted Bluecoins product-adapter commitment.
 
