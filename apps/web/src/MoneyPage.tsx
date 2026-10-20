@@ -8,8 +8,7 @@ import {
   type MoneyBalance, type MoneyCategory, type MoneyEvent, type TransferCreate,
 } from "./api/money";
 import { Icon } from "./Icons";
-import { updateTimeZone } from "./api/auth";
-import { currencyDigits, formatLocalDate, formatLocalTime, formatLocalTimeWithZone, formatMinorUnits, localDateKey, localDateTimeValue, matchingInstants, minorUnitsToInput, parseAmountToMinor, timeZoneLabel, toOccurredAt } from "./moneyAmount";
+import { currencyDigits, formatLocalDate, formatLocalTime, formatLocalTimeWithZone, formatMinorUnits, localDateKey, localDateTimeValue, matchingInstants, minorUnitsToInput, parseAmountToMinor, toOccurredAt } from "./moneyAmount";
 import "./money.css";
 
 const PAGE_SIZE = 10;
@@ -51,79 +50,8 @@ function historyAccounts(event: MoneyEvent, accounts: MoneyAccount[]): string {
   return `${accountName(accounts, from?.account_id ?? "")} → ${accountName(accounts, to?.account_id ?? "")}`;
 }
 
-function browserTimeZone(): string {
-  try { return Intl.DateTimeFormat().resolvedOptions().timeZone ?? ""; }
-  catch { return ""; }
-}
-
-function TimeZoneSetting({ timeZone, csrfToken, openRequest, onRequestOpen, onSaved }: { timeZone: string | null; csrfToken: string; openRequest: number; onRequestOpen: () => void; onSaved: (zone: string) => void }) {
-  const [suggestedZone] = useState(browserTimeZone);
-  const [draft, setDraft] = useState(timeZone ?? suggestedZone);
-  const [search, setSearch] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-  const dialogRef = useRef<HTMLDialogElement>(null);
-  const searchRef = useRef<HTMLInputElement>(null);
-  const returnFocusRef = useRef<HTMLElement | null>(null);
-  const zones = useMemo(() => {
-    const preferred = timeZone ?? suggestedZone;
-    const all = [...new Set(["UTC", ...Intl.supportedValuesOf("timeZone"), ...(preferred ? [preferred] : [])])].sort();
-    return preferred ? [preferred, ...all.filter((zone) => zone !== preferred)] : all;
-  }, [suggestedZone, timeZone]);
-  const filteredZones = useMemo(() => zones.filter((zone) => `${zone} ${zone.replaceAll("_", " ").replaceAll("/", " ")}`.toLowerCase().includes(search.trim().toLowerCase())), [zones, search]);
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (openRequest === 0 || !dialog) return;
-    if (!dialog.open) {
-      returnFocusRef.current = document.activeElement as HTMLElement;
-      setDraft(timeZone ?? suggestedZone);
-      setSearch("");
-      setError("");
-      dialog.showModal();
-      searchRef.current?.focus();
-    }
-  }, [openRequest]);
-  function closed() {
-    window.setTimeout(() => {
-      if (dialogRef.current?.open) return;
-      const target = returnFocusRef.current;
-      if (target?.isConnected) target.focus();
-      else document.querySelector<HTMLElement>(".money-settings-action")?.focus();
-    }, 0);
-  }
-  async function save(zone: string) {
-    if (!zone) { setError("Choose a timezone from the list."); return; }
-    setError(""); setSaving(true);
-    try {
-      await updateTimeZone(csrfToken, zone);
-      const dialogWasOpen = !!dialogRef.current?.open;
-      onSaved(zone);
-      if (dialogWasOpen) dialogRef.current?.close();
-      else window.setTimeout(() => document.querySelector<HTMLElement>(".money-quick-action")?.focus(), 0);
-    } catch (cause) { setError(messageOf(cause)); }
-    finally { setSaving(false); }
-  }
-  return <>
-    {!timeZone && <section className="money-timezone-card" aria-labelledby="money-timezone-title"><h2 id="money-timezone-title">Set your transaction timezone</h2><p>Use the same dates and times on every device.</p>{suggestedZone ? <><p className="money-timezone-suggestion">Suggested: <strong>{timeZoneLabel(suggestedZone)}</strong><span>{suggestedZone}</span></p><button type="button" className="button button-primary" disabled={saving} onClick={() => void save(suggestedZone)}>{saving ? "Saving…" : "Confirm timezone"}</button></> : <p>Choose your timezone to start recording transactions.</p>}<button type="button" className="button button-outline" disabled={saving} onClick={onRequestOpen}>Choose another timezone</button>{error && <p role="alert" className="money-field-error">{error}</p>}</section>}
-    <dialog ref={dialogRef} className="money-transaction-dialog money-timezone-dialog" aria-labelledby="money-settings-title" onCancel={(event) => { if (saving) event.preventDefault(); }} onClose={closed} onClick={(event) => { if (event.target === dialogRef.current && !saving) dialogRef.current.close(); }}>
-      <div className="money-dialog-content"><div className="money-dialog-head"><h2 id="money-settings-title">Money settings</h2><button type="button" className="money-dialog-close" aria-label="Close Money settings" disabled={saving} onClick={() => dialogRef.current?.close()}>×</button></div>
-        <form className="money-timezone-form" onSubmit={(event) => { event.preventDefault(); void save(draft); }}>
-          <p className="money-help">Transaction dates use your LifeOS timezone on every device. Changing it may regroup older dates; saved UTC times and amounts do not change.</p>
-          <p className="money-timezone-selected"><strong>Selected:</strong> {draft ? timeZoneLabel(draft) : "Choose a timezone"}{draft && <span>{draft}</span>}</p>
-          <label htmlFor="money-timezone-search">Search city or IANA timezone</label><input ref={searchRef} id="money-timezone-search" type="search" value={search} onChange={(event) => { const query = event.target.value; setSearch(query); if (draft && !`${draft} ${draft.replaceAll("_", " ").replaceAll("/", " ")}`.toLowerCase().includes(query.trim().toLowerCase())) setDraft(""); }} placeholder="Try Kuala Lumpur or New York" autoComplete="off" />
-          <label htmlFor="money-timezone-list">Timezone</label><select id="money-timezone-list" size={7} value={filteredZones.includes(draft) ? draft : ""} onChange={(event) => setDraft(event.target.value)} aria-describedby="money-timezone-count"><option value="" disabled>Choose from the list</option>{filteredZones.map((zone) => <option key={zone} value={zone}>{timeZoneLabel(zone)} · {zone}</option>)}</select>
-          <p id="money-timezone-count" className="money-help">{filteredZones.length ? `${filteredZones.length} matching timezones` : "No matching timezone. Try another city or IANA name."}</p>
-          {error && <p role="alert" className="money-field-error">{error}</p>}
-          <div className="money-confirm-actions"><button type="button" className="button button-outline" disabled={saving} onClick={() => dialogRef.current?.close()}>Cancel</button><button type="submit" className="button button-primary" disabled={saving || !draft}>{saving ? "Saving…" : timeZone ? "Save timezone" : "Confirm timezone"}</button></div>
-        </form>
-      </div>
-    </dialog>
-  </>;
-}
-
-export function MoneyPage({ csrfToken, timeZone, onTimeZoneSaved, onSessionExpired }: { csrfToken: string; timeZone: string | null; onTimeZoneSaved: (zone: string) => void; onSessionExpired: () => void }) {
+export function MoneyPage({ csrfToken, timeZone, onSessionExpired }: { csrfToken: string; timeZone: string | null; onSessionExpired: () => void }) {
   const [panel, setPanel] = useState<"overview" | "transactions">("transactions");
-  const [settingsRequest, setSettingsRequest] = useState(0);
   const [page, setPage] = useState(0);
   const [view, setView] = useState<MoneyView>({ status: "loading" });
   const [setupAction, setSetupAction] = useState<"account" | "category">("account");
@@ -263,7 +191,7 @@ export function MoneyPage({ csrfToken, timeZone, onTimeZoneSaved, onSessionExpir
     <div className="page-stack money-page">
       <header className="money-page-header">
         <h1>Money</h1>
-        {data && timeZone && <div className="money-header-actions"><button type="button" className="button button-primary money-quick-action" onClick={() => openTransaction()} disabled={pending}>+ Add transaction</button><button type="button" className="button button-outline money-settings-action" onClick={() => setSettingsRequest((value) => value + 1)}>Settings</button></div>}
+        {data && timeZone && <div className="money-header-actions"><button type="button" className="button button-primary money-quick-action" onClick={() => openTransaction()} disabled={pending}>+ Add transaction</button><a className="button button-outline money-settings-action" href="/me#timezone">Settings</a></div>}
       </header>
       {notice && <p className="money-quick-feedback" role="status">{notice}</p>}
 
@@ -274,7 +202,7 @@ export function MoneyPage({ csrfToken, timeZone, onTimeZoneSaved, onSessionExpir
       {view.status === "error" && <section className="money-state" role="alert"><Icon name="shield" /><h2>Money could not load.</h2><p>{view.message}</p><button className="button button-primary" type="button" onClick={() => void loadMoney(page)}>Try again</button></section>}
 
       {data && <>
-        <TimeZoneSetting timeZone={timeZone} csrfToken={csrfToken} openRequest={settingsRequest} onRequestOpen={() => setSettingsRequest((value) => value + 1)} onSaved={onTimeZoneSaved} />
+        {!timeZone && <section className="money-timezone-card"><h2>Set your transaction timezone</h2><p>Use the same dates and times on every device.</p><a className="button button-primary" href="/me#timezone">Confirm timezone in Me</a></section>}
         {timeZone && <nav className="money-view-switch" aria-label="Money views"><button type="button" aria-pressed={panel === "overview"} disabled={pending} onClick={() => setPanel("overview")}>Overview</button><button type="button" aria-pressed={panel === "transactions"} disabled={pending} onClick={() => setPanel("transactions")}>Transactions</button></nav>}
         {timeZone && (!hasActiveAccount || (page === 0 && data.events.length === 0)) && <section className="money-onboarding" aria-label="Get started with Money"><p className="eyebrow">GET STARTED</p><h2>Three small steps to your first record.</h2><ol><li className={hasActiveAccount ? "is-done" : ""}><span>1. Account</span>{hasActiveAccount ? "Ready" : <button type="button" onClick={() => chooseSetup("account")}>Create an account</button>}</li><li className={hasExpenseCategory ? "is-done" : ""}><span>2. Category (optional)</span>{hasExpenseCategory ? "Ready" : <button type="button" onClick={() => chooseSetup("category")}>Add a category</button>}</li><li className={data.events.length > 0 ? "is-done" : ""}><span>3. First transaction</span>{data.events.length > 0 ? "Ready" : <button type="button" onClick={() => openTransaction("expense")}>Record an expense</button>}</li></ol><p>Categories are optional: you can record income or expenses as Uncategorized. Opening balance is the amount at the point you start tracking; older entries can distort the current balance until dated opening balances are supported.</p></section>}
         {(!timeZone || panel === "overview") && <AccountOverview data={data} csrfToken={csrfToken} pending={pending} runMutation={runMutation} operationError={operationError} onAddAccount={() => chooseSetup("account")} onCategories={() => chooseSetup("category")} />}

@@ -6,12 +6,17 @@ export interface CurrentUser {
   time_zone: string | null;
 }
 
+export class SessionExpiredError extends Error {
+  constructor() { super("Please sign in again."); }
+}
+
 export async function updateTimeZone(csrfToken: string, timeZone: string): Promise<void> {
   const response = await fetch("/api/v1/me/timezone", {
     method: "PUT", credentials: "same-origin",
     headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken },
     body: JSON.stringify({ time_zone: timeZone }),
   });
+  if (response.status === 401) throw new SessionExpiredError();
   if (!response.ok) throw new Error(response.status === 400 ? "Choose a valid IANA timezone." : "Unable to save timezone. Please retry.");
 }
 

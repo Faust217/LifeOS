@@ -4,6 +4,26 @@
  */
 
 export interface paths {
+    "/api/v1/me/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Download a complete bounded owner snapshot
+         * @description Read-only operation guarded by session, exact Origin and CSRF. No owner or pagination inputs. One REPEATABLE READ READ ONLY snapshot; Soft Deleted events and dependents are excluded, visible voided history is retained. Artifact is completed before response and the same session is revalidated. 64 MiB raw/output, 120-second generation and write deadlines, one request per owner and two per API process. All responses are private/no-store.
+         */
+        post: operations["downloadOwnerExport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/start": {
         parameters: {
             query?: never;
@@ -542,6 +562,11 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        OwnerExportRequest: {
+            /** @enum {string} */
+            format: "json" | "finance_csv";
+        };
+        LifeOSOwnerExport: components["schemas"]["lifeos-export-v1.schema"];
         GoalTitleRequest: {
             title: string;
         };
@@ -781,6 +806,251 @@ export interface components {
             code: "database_unavailable" | "migration_status_unavailable" | "migration_not_ready" | "migration_dirty";
             message: string;
         };
+        Account: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** @enum {string} */
+            account_type: "cash" | "bank" | "ewallet" | "savings" | "credit_card" | "other";
+            currency: string;
+            opening_balance_minor: string;
+            /** Format: date-time */
+            archived_at: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        Category: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** @enum {string} */
+            kind: "expense" | "income";
+            /** Format: date-time */
+            archived_at: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        Event: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            kind: "expense" | "income" | "transfer";
+            amount_minor: string;
+            currency: string;
+            /** Format: date-time */
+            occurred_at: string;
+            note: string;
+            /** @enum {string} */
+            status: "posted" | "voided";
+            /** Format: date-time */
+            voided_at: string | null;
+            /** @description Stored audit text; may be server-generated. Author provenance is not inferred. */
+            void_reason: string | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        Movement: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            event_id: string;
+            /** Format: uuid */
+            account_id: string;
+            amount_minor: string;
+            currency: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        Allocation: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            event_id: string;
+            /** Format: uuid */
+            category_id: string;
+            /** @enum {string} */
+            kind: "expense" | "income";
+            amount_minor: string;
+            currency: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        "$defs-Goal": {
+            /** Format: uuid */
+            id: string;
+            title: string;
+            /** Format: date-time */
+            completed_at: string | null;
+            /** Format: date-time */
+            archived_at: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        ChecklistItem: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            goal_id: string;
+            title: string;
+            /** Format: date-time */
+            completed_at: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        /**
+         * LifeOSOwnerExport
+         * @description lifeos-export-v1 normal owner snapshot, independent of API/database versions. Soft Deleted Finance data and authentication secrets are excluded.
+         */
+        "lifeos-export-v1.schema": {
+            /** @constant */
+            format: "lifeos-export-v1";
+            /** @constant */
+            format_version: 1;
+            /** Format: date-time */
+            created_at: string;
+            owner: {
+                /** Format: uuid */
+                id: string;
+                /** Format: email */
+                email: string;
+                /** Format: date-time */
+                created_at: string;
+                /** Format: date-time */
+                updated_at: string;
+            };
+            preferences: {
+                time_zone: string | null;
+            };
+            finance: {
+                accounts: components["schemas"]["Account"][];
+                categories: components["schemas"]["Category"][];
+                events: components["schemas"]["Event"][];
+                movements: components["schemas"]["Movement"][];
+                allocations: components["schemas"]["Allocation"][];
+            };
+            planning: {
+                goals: components["schemas"]["$defs-Goal"][];
+                checklist_items: components["schemas"]["ChecklistItem"][];
+            };
+            record_counts: {
+                accounts: number;
+                categories: number;
+                events: number;
+                movements: number;
+                allocations: number;
+                goals: number;
+                checklist_items: number;
+            };
+            $defs: {
+                Account: {
+                    /** Format: uuid */
+                    id: string;
+                    name: string;
+                    /** @enum {string} */
+                    account_type: "cash" | "bank" | "ewallet" | "savings" | "credit_card" | "other";
+                    currency: string;
+                    opening_balance_minor: string;
+                    /** Format: date-time */
+                    archived_at: string | null;
+                    /** Format: date-time */
+                    created_at: string;
+                    /** Format: date-time */
+                    updated_at: string;
+                };
+                Category: {
+                    /** Format: uuid */
+                    id: string;
+                    name: string;
+                    /** @enum {string} */
+                    kind: "expense" | "income";
+                    /** Format: date-time */
+                    archived_at: string | null;
+                    /** Format: date-time */
+                    created_at: string;
+                    /** Format: date-time */
+                    updated_at: string;
+                };
+                Event: {
+                    /** Format: uuid */
+                    id: string;
+                    /** @enum {string} */
+                    kind: "expense" | "income" | "transfer";
+                    amount_minor: string;
+                    currency: string;
+                    /** Format: date-time */
+                    occurred_at: string;
+                    note: string;
+                    /** @enum {string} */
+                    status: "posted" | "voided";
+                    /** Format: date-time */
+                    voided_at: string | null;
+                    /** @description Stored audit text; may be server-generated. Author provenance is not inferred. */
+                    void_reason: string | null;
+                    /** Format: date-time */
+                    created_at: string;
+                };
+                Movement: {
+                    /** Format: uuid */
+                    id: string;
+                    /** Format: uuid */
+                    event_id: string;
+                    /** Format: uuid */
+                    account_id: string;
+                    amount_minor: string;
+                    currency: string;
+                    /** Format: date-time */
+                    created_at: string;
+                };
+                Allocation: {
+                    /** Format: uuid */
+                    id: string;
+                    /** Format: uuid */
+                    event_id: string;
+                    /** Format: uuid */
+                    category_id: string;
+                    /** @enum {string} */
+                    kind: "expense" | "income";
+                    amount_minor: string;
+                    currency: string;
+                    /** Format: date-time */
+                    created_at: string;
+                };
+                Goal: {
+                    /** Format: uuid */
+                    id: string;
+                    title: string;
+                    /** Format: date-time */
+                    completed_at: string | null;
+                    /** Format: date-time */
+                    archived_at: string | null;
+                    /** Format: date-time */
+                    created_at: string;
+                    /** Format: date-time */
+                    updated_at: string;
+                };
+                ChecklistItem: {
+                    /** Format: uuid */
+                    id: string;
+                    /** Format: uuid */
+                    goal_id: string;
+                    title: string;
+                    /** Format: date-time */
+                    completed_at: string | null;
+                    /** Format: date-time */
+                    created_at: string;
+                    /** Format: date-time */
+                    updated_at: string;
+                };
+            };
+        };
     };
     responses: {
         /** @description Owner-scoped Goal and current checklist progress. */
@@ -996,6 +1266,81 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    downloadOwnerExport: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured public origin. */
+                Origin: components["parameters"]["MoneyOrigin"];
+                /** @description Session-bound token returned by GET /api/v1/me. */
+                "X-CSRF-Token": components["parameters"]["MoneyCSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OwnerExportRequest"];
+            };
+        };
+        responses: {
+            /** @description Completed JSON or Finance CSV ZIP attachment; never a partial artifact. */
+            200: {
+                headers: {
+                    /** @description Attachment with a fixed server-generated UTC filename. */
+                    "Content-Disposition"?: string;
+                    /** @description Exact artifact bytes, at most 64 MiB. */
+                    "Content-Length"?: number;
+                    "Cache-Control"?: "private, no-store, max-age=0";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["lifeos-export-v1.schema"];
+                    "application/zip": string;
+                };
+            };
+            400: components["responses"]["MoneyBadRequest"];
+            401: components["responses"]["MoneyUnauthorized"];
+            403: components["responses"]["MoneyForbidden"];
+            /** @description Only POST is supported. */
+            405: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            415: components["responses"]["MoneyUnsupportedMediaType"];
+            /** @description export_limit_exceeded; no partial file is returned. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MoneyErrorResponse"];
+                };
+            };
+            /** @description export_busy; per-owner or per-process concurrency slot is occupied. */
+            429: {
+                headers: {
+                    "Retry-After"?: 5;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MoneyErrorResponse"];
+                };
+            };
+            500: components["responses"]["MoneyInternalError"];
+            /** @description export_timeout, export_unavailable or session_unavailable; retry safely. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MoneyErrorResponse"];
+                };
+            };
+        };
+    };
     startSignIn: {
         parameters: {
             query?: never;

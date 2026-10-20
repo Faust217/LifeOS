@@ -7,6 +7,8 @@ servers:
   - url: http://127.0.0.1:8080
     description: Default local API
 tags:
+  - name: Export
+    description: Private, complete normal owner-data downloads.
   - name: Operations
     description: Unversioned process and dependency health endpoints.
   - name: Identity
@@ -17,6 +19,69 @@ tags:
     description: Owner-scoped, non-financial checklist Goals.
 security: []
 paths:
+  /api/v1/me/export:
+    post:
+      tags: [Export]
+      summary: Download a complete bounded owner snapshot
+      description: >-
+        Read-only operation guarded by session, exact Origin and CSRF. No owner or
+        pagination inputs. One REPEATABLE READ READ ONLY snapshot; Soft Deleted
+        events and dependents are excluded, visible voided history is retained.
+        Artifact is completed before response and the same session is revalidated.
+        64 MiB raw/output, 120-second generation and write deadlines, one request
+        per owner and two per API process. All responses are private/no-store.
+      operationId: downloadOwnerExport
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/MoneyOrigin" }
+        - { $ref: "#/components/parameters/MoneyCSRF" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OwnerExportRequest" }
+      responses:
+        "200":
+          description: Completed JSON or Finance CSV ZIP attachment; never a partial artifact.
+          headers:
+            Content-Disposition:
+              description: Attachment with a fixed server-generated UTC filename.
+              schema: { type: string }
+            Content-Length:
+              description: Exact artifact bytes, at most 64 MiB.
+              schema: { type: integer, minimum: 1, maximum: 67108864 }
+            Cache-Control:
+              schema: { type: string, const: "private, no-store, max-age=0" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LifeOSOwnerExport" }
+            application/zip:
+              schema: { type: string, format: binary }
+        "400": { $ref: "#/components/responses/MoneyBadRequest" }
+        "401": { $ref: "#/components/responses/MoneyUnauthorized" }
+        "403": { $ref: "#/components/responses/MoneyForbidden" }
+        "405":
+          description: Only POST is supported.
+        "415": { $ref: "#/components/responses/MoneyUnsupportedMediaType" }
+        "422":
+          description: export_limit_exceeded; no partial file is returned.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MoneyErrorResponse" }
+        "429":
+          description: export_busy; per-owner or per-process concurrency slot is occupied.
+          headers:
+            Retry-After:
+              schema: { type: integer, const: 5 }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MoneyErrorResponse" }
+        "500": { $ref: "#/components/responses/MoneyInternalError" }
+        "503":
+          description: export_timeout, export_unavailable or session_unavailable; retry safely.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MoneyErrorResponse" }
   /api/v1/auth/start:
     get:
       tags: [Identity]
@@ -907,6 +972,14 @@ components:
         type: string
         minLength: 1
   schemas:
+    OwnerExportRequest:
+      type: object
+      additionalProperties: false
+      required: [format]
+      properties:
+        format: { type: string, enum: [json, finance_csv] }
+    LifeOSOwnerExport:
+      $ref: "../export/lifeos-export-v1.schema.json"
     GoalTitleRequest:
       type: object
       additionalProperties: false

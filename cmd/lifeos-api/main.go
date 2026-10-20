@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Faust217/LifeOS/internal/exporting"
 	"github.com/Faust217/LifeOS/internal/finance"
 	"github.com/Faust217/LifeOS/internal/identity"
 	"github.com/Faust217/LifeOS/internal/planning"
@@ -58,6 +59,7 @@ func run() error {
 		auth.RegisterRoutes(apiRouter)
 		finance.RegisterRoutes(apiRouter, auth, finance.NewService(postgres.Pool()))
 		planning.RegisterRoutes(apiRouter, auth, planning.NewService(postgres.Pool()))
+		exporting.RegisterRoutes(apiRouter, auth, exporting.NewService(postgres.Pool()))
 		authHandler = apiRouter
 	}
 	address := net.JoinHostPort(applicationConfig.API.Bind.String(), fmt.Sprintf("%d", applicationConfig.API.Port))

@@ -3,6 +3,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchCurrentUser, signOut, type CurrentUser } from "./api/auth";
 import { Icon } from "./Icons";
 import { GoalsPage } from "./GoalsPage";
+import { TimeZoneSetting } from "./TimeZoneSetting";
+import { OwnerExport } from "./OwnerExport";
+import { timeZoneLabel } from "./moneyAmount";
+import "./me.css";
 import { MoneyPage } from "./MoneyPage";
 import { TodayPage } from "./TodayPage";
 import { goalIDFromPath, primaryAreas, resolveArea, type Area } from "./navigation";
@@ -186,9 +190,9 @@ export function AuthenticatedShell({ area, goalID = null, user, onSignOut, onSes
         </header>
         <main id="main-content" className="page-content" tabIndex={-1}>
           {area === "today" && <TodayPage timeZone={user.time_zone} onSessionExpired={onSessionExpired} />}
-          {area === "money" && <MoneyPage csrfToken={user.csrf_token} timeZone={user.time_zone} onTimeZoneSaved={onTimeZoneSaved} onSessionExpired={onSessionExpired} />}
+          {area === "money" && <MoneyPage csrfToken={user.csrf_token} timeZone={user.time_zone} onSessionExpired={onSessionExpired} />}
           {area === "plans" && <GoalsPage goalID={goalID} csrfToken={user.csrf_token} onSessionExpired={onSessionExpired} />}
-          {area === "me" && <MePage user={user} onSignOut={onSignOut} signingOut={signingOut} signOutError={signOutError} />}
+          {area === "me" && <MePage user={user} onSignOut={onSignOut} signingOut={signingOut} signOutError={signOutError} onTimeZoneSaved={onTimeZoneSaved} onSessionExpired={onSessionExpired} />}
           {area === null && <NotFoundPage />}
         </main>
       </div>
@@ -208,19 +212,27 @@ function PageHeading({ eyebrow, title, description }: { eyebrow: string; title: 
   );
 }
 
-function MePage({ user, onSignOut, signingOut, signOutError }: { user: CurrentUser; onSignOut: () => void; signingOut: boolean; signOutError: string }) {
+function MePage({ user, onSignOut, signingOut, signOutError, onTimeZoneSaved, onSessionExpired }: { user: CurrentUser; onSignOut: () => void; signingOut: boolean; signOutError: string; onTimeZoneSaved: (zone: string) => void; onSessionExpired: () => void }) {
+  const [settingsRequest, setSettingsRequest] = useState(0);
+  useEffect(() => {
+    if (window.location.hash === "#timezone") {
+      document.getElementById("timezone")?.scrollIntoView({ block: "start" });
+      document.querySelector<HTMLButtonElement>("#timezone button")?.focus({ preventScroll: true });
+    }
+  }, []);
   return (
-    <div className="page-stack">
-      <PageHeading eyebrow="ME" title="Your space, your way." description="The account behind your private LifeOS space." />
+    <div className="page-stack me-page">
+      <header className="me-heading"><h1>Me</h1></header>
       <section className="profile-card" aria-labelledby="profile-title">
-        <div className="profile-top"><UserAvatar email={user.email} /><div><p className="eyebrow">YOUR PROFILE</p><h2 id="profile-title">Account details</h2></div></div>
+        <div className="profile-top"><UserAvatar email={user.email} /><h2 id="profile-title">Profile</h2></div>
         <dl className="profile-details">
           <div><dt>Email address</dt><dd>{user.email}</dd></div>
           <div><dt>Access</dt><dd>{user.is_owner_admin ? "Owner administrator" : "Invited member"}</dd></div>
           <div><dt>LifeOS ID</dt><dd className="id-value">{user.id}</dd></div>
         </dl>
       </section>
-      <section className="privacy-card" aria-labelledby="privacy-title"><span className="icon-tile icon-tile-privacy"><Icon name="shield" /></span><div><h2 id="privacy-title">Private by design</h2><p>Your LifeOS account keeps your information separate from other members. Data-management tools will be added in a later milestone.</p></div></section>
+      <section id="timezone" className="me-card" aria-labelledby="timezone-title"><h2 id="timezone-title">Timezone</h2>{user.time_zone && <><p>{timeZoneLabel(user.time_zone)}</p><p className="me-help">{user.time_zone}</p><button type="button" className="button button-outline timezone-settings-action" onClick={() => setSettingsRequest((value) => value + 1)}>Change timezone</button></>}<TimeZoneSetting timeZone={user.time_zone} csrfToken={user.csrf_token} openRequest={settingsRequest} onRequestOpen={() => setSettingsRequest((value) => value + 1)} onSaved={onTimeZoneSaved} onSessionExpired={onSessionExpired} /></section>
+      <OwnerExport csrfToken={user.csrf_token} onSessionExpired={onSessionExpired} />
       <section className="signout-card" aria-labelledby="session-title"><div><h2 id="session-title">Your session</h2><p>Sign out when you’re finished using this device.</p></div><button className="button button-outline" type="button" onClick={onSignOut} disabled={signingOut}><Icon name="logout" />{signingOut ? "Signing out…" : "Sign out"}</button></section>
       {signOutError && <p className="inline-error" role="alert">{signOutError}</p>}
     </div>

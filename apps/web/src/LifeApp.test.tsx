@@ -59,6 +59,10 @@ describe("LifeOS application shell", () => {
     expect(html).toContain("Invited member");
     expect(html).toContain("Sign out</button>");
     expect(html).not.toContain(user.csrf_token);
+    expect(html).toContain("<h1>Me</h1>");
+    expect(html).toContain("Export my data");
+    expect(html).toContain("Download Finance CSV (ZIP)");
+    expect(html).toContain("Change timezone");
   });
 
   it("keeps unknown direct URLs inside a recoverable authenticated shell", () => {

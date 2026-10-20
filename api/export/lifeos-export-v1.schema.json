@@ -1,0 +1,533 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LifeOSOwnerExport",
+  "description": "lifeos-export-v1 normal owner snapshot, independent of API/database versions. Soft Deleted Finance data and authentication secrets are excluded.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "format_version",
+    "created_at",
+    "owner",
+    "preferences",
+    "finance",
+    "planning",
+    "record_counts"
+  ],
+  "properties": {
+    "format": {
+      "type": "string",
+      "const": "lifeos-export-v1"
+    },
+    "format_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "owner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "email",
+        "created_at",
+        "updated_at"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "email": {
+          "type": "string",
+          "format": "email"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        }
+      }
+    },
+    "preferences": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "time_zone"
+      ],
+      "properties": {
+        "time_zone": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "finance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "accounts",
+        "categories",
+        "events",
+        "movements",
+        "allocations"
+      ],
+      "properties": {
+        "accounts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Account"
+          }
+        },
+        "categories": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Category"
+          }
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Event"
+          }
+        },
+        "movements": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Movement"
+          }
+        },
+        "allocations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Allocation"
+          }
+        }
+      }
+    },
+    "planning": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "goals",
+        "checklist_items"
+      ],
+      "properties": {
+        "goals": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Goal"
+          }
+        },
+        "checklist_items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ChecklistItem"
+          }
+        }
+      }
+    },
+    "record_counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "accounts",
+        "categories",
+        "events",
+        "movements",
+        "allocations",
+        "goals",
+        "checklist_items"
+      ],
+      "properties": {
+        "accounts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "categories": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "events": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "movements": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "allocations": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "goals": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "checklist_items": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  },
+  "$defs": {
+    "Account": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "account_type",
+        "currency",
+        "opening_balance_minor",
+        "archived_at",
+        "created_at",
+        "updated_at"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "name": {
+          "type": "string"
+        },
+        "account_type": {
+          "type": "string",
+          "enum": [
+            "cash",
+            "bank",
+            "ewallet",
+            "savings",
+            "credit_card",
+            "other"
+          ]
+        },
+        "currency": {
+          "type": "string",
+          "pattern": "^[A-Z]{3}$"
+        },
+        "opening_balance_minor": {
+          "type": "string",
+          "pattern": "^-?(0|[1-9][0-9]*)$"
+        },
+        "archived_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        }
+      }
+    },
+    "Category": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "kind",
+        "archived_at",
+        "created_at",
+        "updated_at"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "expense",
+            "income"
+          ]
+        },
+        "archived_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        }
+      }
+    },
+    "Event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "amount_minor",
+        "currency",
+        "occurred_at",
+        "note",
+        "status",
+        "voided_at",
+        "void_reason",
+        "created_at"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "expense",
+            "income",
+            "transfer"
+          ]
+        },
+        "amount_minor": {
+          "type": "string",
+          "pattern": "^-?(0|[1-9][0-9]*)$"
+        },
+        "currency": {
+          "type": "string"
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "note": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "posted",
+            "voided"
+          ]
+        },
+        "voided_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "void_reason": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Stored audit text; may be server-generated. Author provenance is not inferred."
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        }
+      }
+    },
+    "Movement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "event_id",
+        "account_id",
+        "amount_minor",
+        "currency",
+        "created_at"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "event_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "account_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "amount_minor": {
+          "type": "string",
+          "pattern": "^-?(0|[1-9][0-9]*)$"
+        },
+        "currency": {
+          "type": "string"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        }
+      }
+    },
+    "Allocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "event_id",
+        "category_id",
+        "kind",
+        "amount_minor",
+        "currency",
+        "created_at"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "event_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "category_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "expense",
+            "income"
+          ]
+        },
+        "amount_minor": {
+          "type": "string",
+          "pattern": "^-?(0|[1-9][0-9]*)$"
+        },
+        "currency": {
+          "type": "string"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        }
+      }
+    },
+    "Goal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "completed_at",
+        "archived_at",
+        "created_at",
+        "updated_at"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "title": {
+          "type": "string"
+        },
+        "completed_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "archived_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        }
+      }
+    },
+    "ChecklistItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "goal_id",
+        "title",
+        "completed_at",
+        "created_at",
+        "updated_at"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "goal_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "title": {
+          "type": "string"
+        },
+        "completed_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        }
+      }
+    }
+  }
+}

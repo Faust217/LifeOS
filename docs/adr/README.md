@@ -64,6 +64,12 @@ Offline transaction synchronization is V0.2 work. It needs a separate **accepted
 | --- | --- | --- |
 | [ADR-016](ADR-016-financial-event-soft-delete.md) | Owner-scoped Soft Delete for posted or voided Finance events, preserving linked ledger rows and excluding deleted events from normal views and calculations | Accepted 2026-10-14; [initial physical-deletion draft](history/ADR-016-initial-physical-deletion-draft.md) was never accepted; ADR-004 remains authoritative |
 
+## Accepted export decision
+
+| ADR | Decision | Status |
+| --- | --- | --- |
+| [ADR-017](ADR-017-owner-data-export.md) | Versioned owner JSON/Finance CSV, shared read snapshot and bounded guarded downloads | Accepted 2026-10-20 for local [Issue #32](https://github.com/Faust217/LifeOS/issues/32) implementation; Product Owner visual/export-file review passed and final delivery authorized |
+
 ## Naming
 
 Use the `ADR-` prefix, a zero-padded three-digit number, and a concise slug:
