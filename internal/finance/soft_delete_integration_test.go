@@ -21,11 +21,11 @@ func TestFinanceSoftDelete(t *testing.T) {
 	}
 	service := NewService(pool)
 	now := time.Date(2026, 10, 14, 9, 0, 0, 0, time.UTC)
-	bank, err := service.CreateAccount(ctx, owner, AccountInput{Name: "Bank", Type: "bank", Currency: "MYR", OpeningBalanceMinor: 10000})
+	bank, err := legacyTestAccount(ctx, service, owner, AccountInput{Name: "Bank", Type: "bank", Currency: "MYR", OpeningBalanceMinor: 10000})
 	if err != nil {
 		t.Fatal(err)
 	}
-	savings, err := service.CreateAccount(ctx, owner, AccountInput{Name: "Savings", Type: "savings", Currency: "MYR", OpeningBalanceMinor: 2000})
+	savings, err := legacyTestAccount(ctx, service, owner, AccountInput{Name: "Savings", Type: "savings", Currency: "MYR", OpeningBalanceMinor: 2000})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +138,7 @@ func TestFinanceSoftDelete(t *testing.T) {
 	checkSpending(0)
 	checkStored(transfer.ID, "posted", 2, 0, "")
 
-	usd, err := service.CreateAccount(ctx, owner, AccountInput{Name: "Dollar cash", Type: "cash", Currency: "USD", OpeningBalanceMinor: 1000})
+	usd, err := legacyTestAccount(ctx, service, owner, AccountInput{Name: "Dollar cash", Type: "cash", Currency: "USD", OpeningBalanceMinor: 1000})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -230,7 +230,7 @@ func TestFinanceSoftDelete(t *testing.T) {
 		t.Fatalf("race status=%s void=%v scan=%v", raceStatus, voidErr, err)
 	}
 
-	maxAccount, err := service.CreateAccount(ctx, owner, AccountInput{Name: "Maximum", Type: "bank", Currency: "MYR", OpeningBalanceMinor: math.MaxInt64})
+	maxAccount, err := legacyTestAccount(ctx, service, owner, AccountInput{Name: "Maximum", Type: "bank", Currency: "MYR", OpeningBalanceMinor: math.MaxInt64})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -286,6 +286,9 @@ func TestFinanceSoftDelete(t *testing.T) {
 	checkSpending(0)
 
 	// The v6 down migration must refuse to reveal already deleted rows.
+	if err := runner.Steps(-1); err != nil {
+		t.Fatalf("rollback undated account fields v8 on disposable database: %v", err)
+	}
 	if err := runner.Steps(-1); err != nil {
 		t.Fatalf("rollback empty timezone preference v7 on disposable database: %v", err)
 	}

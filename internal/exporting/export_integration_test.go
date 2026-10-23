@@ -12,11 +12,13 @@ import (
 	"io"
 	"log/slog"
 	"math"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -177,7 +179,9 @@ func TestOwnerExportIntegration(t *testing.T) {
 	p := planning.NewService(pool)
 	account := func(o identity.OwnerID, name, code string, amount int64) finance.Account {
 		t.Helper()
-		a, err := f.CreateAccount(ctx, o, finance.AccountInput{Name: name, Type: "bank", Currency: code, OpeningBalanceMinor: amount})
+		id := fmt.Sprintf("%08x-aaaa-4aaa-8aaa-%012x", len(name)+len(code), time.Now().UnixNano()&0xffffffffffff)
+		_, err := pool.Exec(ctx, `INSERT INTO finance_accounts(id,owner_id,name,account_type,currency,opening_balance_minor) VALUES($1,$2,$3,'bank',$4,$5)`, id, o.String(), name, code, amount)
+		a := finance.Account{ID: id, Name: name, Type: "bank", Currency: code, OpeningBalanceMinor: amount}
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -577,6 +581,144 @@ func TestOwnerExportIntegration(t *testing.T) {
 		}
 		t.Logf("complete CSV ZIP artifact: %d bytes", len(data))
 	})
+	t.Run("v2 dates and v1 compatibility", func(t *testing.T) {
+		at := now.Add(time.Microsecond)
+		preview, err := f.PreviewOpeningBalance(ctx, owner, bank.ID, at, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if preview.BeforeCount+preview.OnOrAfterCount < 10000 || *preview.BalanceAfterMinor != preview.BalanceBeforeMinor {
+			t.Fatal("preview used incomplete history", preview)
+		}
+		amount, err := strconv.ParseInt(*preview.ChosenOpeningMinor, 10, 64)
+		if err != nil {
+			t.Fatal(err)
+		}
+		revision, _ := strconv.ParseInt(preview.BalanceRevision, 10, 64)
+		reached, release := make(chan struct{}), make(chan struct{})
+		service.afterCollection = func(name string) error {
+			if name == "accounts" {
+				close(reached)
+				<-release
+			}
+			return nil
+		}
+		type result struct {
+			a   *Artifact
+			err error
+		}
+		snapshot := make(chan result, 1)
+		go func() { a, e := service.Generate(ctx, owner, "json", 2); snapshot <- result{a, e} }()
+		<-reached
+		if _, err = f.ConfirmOpeningBalance(ctx, owner, bank.ID, at, amount, revision, false); err != nil {
+			close(release)
+			t.Fatal(err)
+		}
+		close(release)
+		old := <-snapshot
+		service.afterCollection = nil
+		if old.err != nil {
+			t.Fatal(old.err)
+		}
+		oldRoot := readJSON(old.a.Data)
+		old.a.Close()
+		oldAccount := findRecord(t, oldRoot["finance"].(map[string]any)["accounts"], bank.ID)
+		if oldAccount["opening_balance_at"] != nil || oldAccount["opening_balance_minor"] != "10000" {
+			t.Fatal("conversion mixed export snapshot", oldAccount)
+		}
+		for _, format := range []string{"json", "finance_csv"} {
+			status, headers, body := request(0, "POST", "/api/v1/me/export", `{"format":"`+format+`"}`, origin, csrf[0])
+			if status != 409 || headers.Get("Content-Disposition") != "" || !bytes.Contains(body, []byte("export_version_incompatible")) {
+				t.Fatalf("v1 silently redefined: %d %s", status, body)
+			}
+			status, headers, body = request(0, "POST", "/api/v1/me/export", `{"format":"`+format+`","export_version":2}`, origin, csrf[0])
+			if status != 200 || !strings.Contains(headers.Get("Content-Disposition"), "-v2-") {
+				t.Fatalf("v2 failed: %d %s", status, body)
+			}
+			if format == "json" {
+				root := readJSON(body)
+				if root["format"] != "lifeos-export-v2" || root["format_version"] != float64(2) {
+					t.Fatal("wrong v2 identity")
+				}
+				fin := root["finance"].(map[string]any)
+				a := findRecord(t, fin["accounts"], bank.ID)
+				if len(a) != 11 || a["opening_balance_basis"] != "known_balance_before_instant" || a["opening_balance_at"] != at.Format(time.RFC3339Nano) || a["opening_balance_minor"] != *preview.ChosenOpeningMinor || a["opening_balance_confirmed_at"] == nil {
+					t.Fatalf("wrong account: %v", a)
+				}
+				legacy := findRecord(t, fin["accounts"], saving.ID)
+				if legacy["opening_balance_at"] != nil || legacy["opening_balance_confirmed_at"] != nil || legacy["opening_balance_basis"] != "legacy_all_movements" {
+					t.Fatal("legacy semantics changed")
+				}
+				// All pre-date events remain exported; reconstruct using complete movements and each account's own date.
+				sums := map[string]*big.Int{}
+				events := map[string]map[string]any{}
+				accounts := map[string]map[string]any{}
+				for _, v := range fin["accounts"].([]any) {
+					r := v.(map[string]any)
+					accounts[r["id"].(string)] = r
+					sums[r["id"].(string)], _ = new(big.Int).SetString(r["opening_balance_minor"].(string), 10)
+				}
+				for _, v := range fin["events"].([]any) {
+					r := v.(map[string]any)
+					events[r["id"].(string)] = r
+				}
+				for _, v := range fin["movements"].([]any) {
+					r := v.(map[string]any)
+					e := events[r["event_id"].(string)]
+					a := accounts[r["account_id"].(string)]
+					occurrence, _ := time.Parse(time.RFC3339Nano, e["occurred_at"].(string))
+					if e["status"] != "posted" {
+						continue
+					}
+					if a["opening_balance_at"] != nil {
+						anchor, _ := time.Parse(time.RFC3339Nano, a["opening_balance_at"].(string))
+						if occurrence.Before(anchor) {
+							continue
+						}
+					}
+					n, _ := new(big.Int).SetString(r["amount_minor"].(string), 10)
+					sums[r["account_id"].(string)].Add(sums[r["account_id"].(string)], n)
+				}
+				balance, err := f.Balance(ctx, owner, bank.ID)
+				if err != nil || sums[bank.ID].String() != strconv.FormatInt(balance.AmountMinor, 10) {
+					t.Fatal("v2 could not reconstruct balance", err)
+				}
+				_ = findRecord(t, fin["events"], expense.ID)
+				if bytes.Contains(body, []byte("balance_revision")) || bytes.Contains(body, []byte("assertion_choice")) || bytes.Contains(body, []byte(deleted.ID)) {
+					t.Fatal("internal/deleted record leaked")
+				}
+			} else {
+				files := unzip(t, body)
+				rows := csvRows(t, files["accounts.csv"])
+				if strings.Join(rows[0], ",") != "account_id,name,account_type,currency,opening_balance_minor,opening_balance_decimal,opening_balance_basis,opening_balance_at_utc,opening_balance_confirmed_at_utc,archived_at_utc,created_at_utc,updated_at_utc" {
+					t.Fatal("v2 CSV account order")
+				}
+				for _, name := range []string{"categories", "events", "movements", "allocations"} {
+					file := name
+					if name == "events" {
+						file = "transactions"
+					}
+					if strings.Join(csvRows(t, files[file+".csv"])[0], ",") != strings.Join(csvHeaders[name], ",") {
+						t.Fatal("other CSV header changed")
+					}
+				}
+				if !bytes.Contains(files["manifest.json"], []byte("lifeos-finance-csv-v2")) || !bytes.Contains(files["README.txt"], []byte("opening_balance_at")) {
+					t.Fatal("v2 explanation absent")
+				}
+			}
+		}
+		// Unconverted owners retain v1; unsupported versions are rejected before file release.
+		_, _ = export(1, "json")
+		for _, version := range []string{"0", "3", "null"} {
+			status, h, _ := request(0, "POST", "/api/v1/me/export", `{"format":"json","export_version":`+version+`}`, origin, csrf[0])
+			if status != 400 {
+				t.Fatalf("invalid version accepted %s: %d", version, status)
+			}
+			if h.Get("Content-Disposition") != "" {
+				t.Fatal("invalid request released artifact")
+			}
+		}
+	})
 	t.Run("session revoked before finished artifact release", func(t *testing.T) {
 		service.afterCollection = func(name string) error {
 			if name == "allocations" {
@@ -585,7 +727,7 @@ func TestOwnerExportIntegration(t *testing.T) {
 			}
 			return nil
 		}
-		status, h, _ := request(0, "POST", "/api/v1/me/export", `{"format":"json"}`, origin, csrf[0])
+		status, h, _ := request(0, "POST", "/api/v1/me/export", `{"format":"json","export_version":2}`, origin, csrf[0])
 		service.afterCollection = nil
 		if status != 401 || h.Get("Content-Disposition") != "" {
 			t.Fatal("revoked artifact released")

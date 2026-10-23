@@ -16,13 +16,14 @@ import (
 )
 
 var (
-	ErrUnauthorized     = errors.New("verified owner required")
-	ErrInvalidInput     = errors.New("invalid finance input")
-	ErrNotFound         = errors.New("finance record not found")
-	ErrArchived         = errors.New("account or category is archived")
-	ErrCurrencyMismatch = errors.New("account currency mismatch")
-	ErrOverflow         = errors.New("money arithmetic overflow")
-	ErrConflict         = errors.New("finance event cannot be changed")
+	ErrExportVersionIncompatible = errors.New("account data requires export v2")
+	ErrUnauthorized              = errors.New("verified owner required")
+	ErrInvalidInput              = errors.New("invalid finance input")
+	ErrNotFound                  = errors.New("finance record not found")
+	ErrArchived                  = errors.New("account or category is archived")
+	ErrCurrencyMismatch          = errors.New("account currency mismatch")
+	ErrOverflow                  = errors.New("money arithmetic overflow")
+	ErrConflict                  = errors.New("finance event cannot be changed")
 )
 
 type Account struct {
@@ -32,6 +33,9 @@ type Account struct {
 	Currency            string
 	OpeningBalanceMinor int64
 	ArchivedAt          *time.Time
+	OpeningBalanceAt    *time.Time
+	OpeningConfirmedAt  *time.Time
+	BalanceRevision     int64
 }
 
 type Category struct {
@@ -80,6 +84,7 @@ type AccountInput struct {
 	Type                string
 	Currency            string
 	OpeningBalanceMinor int64
+	OpeningBalanceAt    *time.Time
 }
 
 type CategoryInput struct {
@@ -119,9 +124,11 @@ func (s *Service) CreateAccount(ctx context.Context, owner identity.OwnerID, inp
 		return Account{}, ErrUnauthorized
 	}
 	input.Name = strings.TrimSpace(input.Name)
-	if input.Name == "" || len(input.Name) > 120 || !validCurrency(input.Currency) || !validAccountType(input.Type) {
+	if input.Name == "" || len(input.Name) > 120 || !validCurrency(input.Currency) || !validAccountType(input.Type) || !validOpeningInstant(input.OpeningBalanceAt) {
 		return Account{}, ErrInvalidInput
 	}
+	at := input.OpeningBalanceAt.UTC().Truncate(time.Microsecond)
+	input.OpeningBalanceAt = &at
 	return s.repo.createAccount(ctx, owner, input)
 }
 
@@ -203,7 +210,7 @@ func (s *Service) postSingleAccountEvent(ctx context.Context, owner identity.Own
 	}
 	return s.repo.post(ctx, owner, postSpec{
 		kind: kind, amount: input.AmountMinor, currency: input.Currency,
-		occurredAt: input.OccurredAt.UTC(), note: input.Note,
+		occurredAt: input.OccurredAt.UTC().Truncate(time.Microsecond), note: input.Note,
 		movements:   []movementSpec{{accountID: input.AccountID, amount: amount}},
 		allocations: input.Allocations,
 	})
@@ -219,7 +226,7 @@ func (s *Service) Transfer(ctx context.Context, owner identity.OwnerID, input Tr
 	}
 	return s.repo.post(ctx, owner, postSpec{
 		kind: "transfer", amount: input.AmountMinor, currency: input.Currency,
-		occurredAt: input.OccurredAt.UTC(), note: input.Note,
+		occurredAt: input.OccurredAt.UTC().Truncate(time.Microsecond), note: input.Note,
 		movements: []movementSpec{{accountID: input.FromAccountID, amount: -input.AmountMinor}, {accountID: input.ToAccountID, amount: input.AmountMinor}},
 	})
 }

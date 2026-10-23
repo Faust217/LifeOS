@@ -7,6 +7,7 @@ import {
   type AccountCreate, type CategoryCreate, type EventCreate, type MoneyAccount,
   type MoneyBalance, type MoneyCategory, type MoneyEvent, type TransferCreate,
 } from "./api/money";
+import { OpeningBalanceSheet, type OpeningBalanceDraft } from "./OpeningBalanceSheet";
 import { Icon } from "./Icons";
 import { currencyDigits, formatLocalDate, formatLocalTime, formatLocalTimeWithZone, formatMinorUnits, localDateKey, localDateTimeValue, matchingInstants, minorUnitsToInput, parseAmountToMinor, toOccurredAt } from "./moneyAmount";
 import "./money.css";
@@ -51,6 +52,8 @@ function historyAccounts(event: MoneyEvent, accounts: MoneyAccount[]): string {
 }
 
 export function MoneyPage({ csrfToken, timeZone, onSessionExpired }: { csrfToken: string; timeZone: string | null; onSessionExpired: () => void }) {
+  const [balanceAccount, setBalanceAccount] = useState<MoneyAccount | null>(null);
+  const openingDrafts = useRef<Record<string, OpeningBalanceDraft>>({});
   const [panel, setPanel] = useState<"overview" | "transactions">("transactions");
   const [page, setPage] = useState(0);
   const [view, setView] = useState<MoneyView>({ status: "loading" });
@@ -189,6 +192,7 @@ export function MoneyPage({ csrfToken, timeZone, onSessionExpired }: { csrfToken
   const hasExpenseCategory = data?.categories.some((category) => !category.archived_at && category.kind === "expense") ?? false;
   return (
     <div className="page-stack money-page">
+      {balanceAccount && (timeZone ? <OpeningBalanceSheet account={balanceAccount} csrfToken={csrfToken} timeZone={timeZone} draft={openingDrafts.current[balanceAccount.id]} onDraft={(draft) => { openingDrafts.current[balanceAccount.id] = draft; }} onClose={() => setBalanceAccount(null)} onSaved={() => { delete openingDrafts.current[balanceAccount.id]; setBalanceAccount(null); setNotice("Balance date confirmed."); void loadMoney(page); }} onSessionExpired={onSessionExpired} /> : <section className="money-state"><p>Confirm your timezone in Me before choosing a balance date.</p><a className="button button-primary" href="/me#timezone">Open timezone settings</a><button type="button" className="money-text-action" onClick={() => setBalanceAccount(null)}>Cancel</button></section>)}
       <header className="money-page-header">
         <h1>Money</h1>
         {data && timeZone && <div className="money-header-actions"><button type="button" className="button button-primary money-quick-action" onClick={() => openTransaction()} disabled={pending}>+ Add transaction</button><a className="button button-outline money-settings-action" href="/me#timezone">Settings</a></div>}
@@ -204,12 +208,12 @@ export function MoneyPage({ csrfToken, timeZone, onSessionExpired }: { csrfToken
       {data && <>
         {!timeZone && <section className="money-timezone-card"><h2>Set your transaction timezone</h2><p>Use the same dates and times on every device.</p><a className="button button-primary" href="/me#timezone">Confirm timezone in Me</a></section>}
         {timeZone && <nav className="money-view-switch" aria-label="Money views"><button type="button" aria-pressed={panel === "overview"} disabled={pending} onClick={() => setPanel("overview")}>Overview</button><button type="button" aria-pressed={panel === "transactions"} disabled={pending} onClick={() => setPanel("transactions")}>Transactions</button></nav>}
-        {timeZone && (!hasActiveAccount || (page === 0 && data.events.length === 0)) && <section className="money-onboarding" aria-label="Get started with Money"><p className="eyebrow">GET STARTED</p><h2>Three small steps to your first record.</h2><ol><li className={hasActiveAccount ? "is-done" : ""}><span>1. Account</span>{hasActiveAccount ? "Ready" : <button type="button" onClick={() => chooseSetup("account")}>Create an account</button>}</li><li className={hasExpenseCategory ? "is-done" : ""}><span>2. Category (optional)</span>{hasExpenseCategory ? "Ready" : <button type="button" onClick={() => chooseSetup("category")}>Add a category</button>}</li><li className={data.events.length > 0 ? "is-done" : ""}><span>3. First transaction</span>{data.events.length > 0 ? "Ready" : <button type="button" onClick={() => openTransaction("expense")}>Record an expense</button>}</li></ol><p>Categories are optional: you can record income or expenses as Uncategorized. Opening balance is the amount at the point you start tracking; older entries can distort the current balance until dated opening balances are supported.</p></section>}
-        {(!timeZone || panel === "overview") && <AccountOverview data={data} csrfToken={csrfToken} pending={pending} runMutation={runMutation} operationError={operationError} onAddAccount={() => chooseSetup("account")} onCategories={() => chooseSetup("category")} />}
+        {timeZone && (!hasActiveAccount || (page === 0 && data.events.length === 0)) && <section className="money-onboarding" aria-label="Get started with Money"><p className="eyebrow">GET STARTED</p><h2>Three small steps to your first record.</h2><ol><li className={hasActiveAccount ? "is-done" : ""}><span>1. Account</span>{hasActiveAccount ? "Ready" : <button type="button" onClick={() => chooseSetup("account")}>Create an account</button>}</li><li className={hasExpenseCategory ? "is-done" : ""}><span>2. Category (optional)</span>{hasExpenseCategory ? "Ready" : <button type="button" onClick={() => chooseSetup("category")}>Add a category</button>}</li><li className={data.events.length > 0 ? "is-done" : ""}><span>3. First transaction</span>{data.events.length > 0 ? "Ready" : <button type="button" onClick={() => openTransaction("expense")}>Record an expense</button>}</li></ol><p>Categories are optional: you can record income or expenses as Uncategorized. For existing accounts, confirm a balance date in Overview before relying on older entries. New accounts use the balance and date you confirm.</p></section>}
+        {(!timeZone || panel === "overview") && <AccountOverview onBalanceDate={setBalanceAccount} data={data} csrfToken={csrfToken} pending={pending} runMutation={runMutation} operationError={operationError} onAddAccount={() => chooseSetup("account")} onCategories={() => chooseSetup("category")} />}
         {timeZone && panel === "transactions" && <HistorySection data={data} timeZone={timeZone} page={page} setPage={setPage} csrfToken={csrfToken} pending={pending} runMutation={runMutation} onReplace={openTransaction} operationError={operationError} />}
         <dialog ref={setupDialogRef} className="money-transaction-dialog money-setup-dialog" aria-labelledby="money-setup-dialog-title" onCancel={(event) => { if (pending) event.preventDefault(); }} onClose={() => { if (!setupDialogRef.current?.open) closeSetup(); }} onClick={(event) => { if (event.target === setupDialogRef.current) closeSetup(); }}>
           <div className="money-dialog-content"><div className="money-dialog-head"><h2 id="money-setup-dialog-title">{setupAction === "account" ? "Add account" : "Categories"}</h2><button type="button" className="money-dialog-close" onClick={closeSetup} disabled={pending} aria-label="Close setup panel">×</button></div>
-            <div className="money-setup-pane" hidden={setupAction !== "account"}><AccountForm csrfToken={csrfToken} pending={pending} runMutation={runMutation} operationError={operationError} onSaved={closeSetup} /></div>
+            <div className="money-setup-pane" hidden={setupAction !== "account"}><AccountForm open={setupOpen && setupAction === "account"} timeZone={timeZone} csrfToken={csrfToken} pending={pending} runMutation={runMutation} operationError={operationError} onSaved={closeSetup} /></div>
             <div className="money-setup-pane" hidden={setupAction !== "category"}><CategoryPanel categories={data.categories} csrfToken={csrfToken} pending={pending} runMutation={runMutation} operationError={operationError} /></div>
           </div>
         </dialog>
@@ -226,7 +230,7 @@ export function MoneyPage({ csrfToken, timeZone, onSessionExpired }: { csrfToken
   );
 }
 
-function AccountOverview({ data, csrfToken, pending, runMutation, operationError, onAddAccount, onCategories }: { data: MoneyData; csrfToken: string; pending: boolean; runMutation: RunMutation; operationError: string; onAddAccount: () => void; onCategories: () => void }) {
+function AccountOverview({ onBalanceDate, data, csrfToken, pending, runMutation, operationError, onAddAccount, onCategories }: { onBalanceDate: (account: MoneyAccount) => void; data: MoneyData; csrfToken: string; pending: boolean; runMutation: RunMutation; operationError: string; onAddAccount: () => void; onCategories: () => void }) {
   const [archiveID, setArchiveID] = useState<string | null>(null);
   const [restoreID, setRestoreID] = useState<string | null>(null);
   const [localNotice, setLocalNotice] = useState("");
@@ -243,6 +247,7 @@ function AccountOverview({ data, csrfToken, pending, runMutation, operationError
             <h3>{account.name}</h3>
             <p className="money-balance-label">{account.type === "credit_card" && BigInt(data.balances[account.id].amount_minor) < 0n ? "Amount owed · liability" : "Current balance"}</p>
             <p className="money-balance">{formatMinorUnits(data.balances[account.id].amount_minor, account.currency)}</p>
+            {!account.opening_balance_at && <button type="button" className="money-text-action" disabled={pending} onClick={() => onBalanceDate(account)}>Confirm balance date</button>}
             {archiveID === account.id ? <div className="money-confirm" role="group" aria-label={`Archive ${account.name}`}><p>Archive this account? Its history and balance will stay available, but you cannot post new activity to it.</p>{BigInt(data.balances[account.id].amount_minor) !== 0n && <p><strong>This account has a nonzero balance of {formatMinorUnits(data.balances[account.id].amount_minor, account.currency)}.</strong> Archiving does not settle or transfer it.</p>}{operationError && <p className="money-field-error" role="alert">{operationError}</p>}<div className="money-confirm-actions"><button type="button" className="button button-outline" onClick={() => setArchiveID(null)} disabled={pending}>Keep account</button><button type="button" className="button button-danger" disabled={pending} onClick={() => void runMutation("Account archived.", () => archiveMoneyAccount(csrfToken, account.id)).then((saved) => { if (saved) { setArchiveID(null); setLocalNotice(`${account.name} archived. History and balance are preserved.`); } })}>Confirm archive</button></div></div>
               : <button className="money-text-action" type="button" onClick={() => setArchiveID(account.id)} disabled={pending}>Archive account</button>}
           </article>)}
@@ -254,30 +259,49 @@ function AccountOverview({ data, csrfToken, pending, runMutation, operationError
   );
 }
 
-function AccountForm({ csrfToken, pending, runMutation, operationError, onSaved }: { csrfToken: string; pending: boolean; runMutation: RunMutation; operationError: string; onSaved: () => void }) {
+function AccountForm({ open, timeZone, csrfToken, pending, runMutation, operationError, onSaved }: { open: boolean; timeZone: string | null; csrfToken: string; pending: boolean; runMutation: RunMutation; operationError: string; onSaved: () => void }) {
+  const [currentInstant, setCurrentInstant] = useState(() => new Date().toISOString());
+  const [historical, setHistorical] = useState(false);
+  const [when, setWhen] = useState(() => timeZone ? localDateTimeValue(new Date(), timeZone) : "");
+  const [chosenInstant, setChosenInstant] = useState("");
   const [name, setName] = useState("");
   const [type, setType] = useState<AccountCreate["type"]>("bank");
   const [currency, setCurrency] = useState("MYR");
   const [opening, setOpening] = useState("0");
   const [error, setError] = useState("");
+  useEffect(() => {
+    if (open && !name && opening === "0" && !historical) {
+      const now = new Date();
+      setCurrentInstant(now.toISOString());
+      if (timeZone) setWhen(localDateTimeValue(now, timeZone));
+    }
+  }, [open, timeZone, name, opening, historical]);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
     try {
       if (!name.trim() || name.trim().length > 120) throw new Error("Enter an account name of up to 120 characters.");
       const opening_balance_minor = parseAmountToMinor(opening, currency, true);
-      const input: AccountCreate = { name: name.trim(), type, currency, opening_balance_minor };
+      if (!timeZone) throw new Error("Confirm your timezone in Me first.");
+      const opening_balance_at = historical ? toOccurredAt(when, timeZone, chosenInstant || undefined) : currentInstant;
+      const input: AccountCreate = { name: name.trim(), type, currency, opening_balance_minor, opening_balance_at };
       if (await runMutation("Account created.", () => createMoneyAccount(csrfToken, input))) { setName(""); setOpening("0"); onSaved(); }
     } catch (cause) { setError(messageOf(cause)); }
   }
   return <form className="money-form" onSubmit={(event) => void submit(event)}>
-    <div><p className="eyebrow">NEW ACCOUNT</p><h3>Give your money a home.</h3><p>Opening balance is the amount at the point you start tracking. Entering older transactions later can distort your current balance until dated opening balances are supported.</p></div>
-    <fieldset disabled={pending}><div className="money-field-grid">
+    <div><p className="eyebrow">NEW ACCOUNT</p><h3>Add an account</h3><p>Enter its balance at the date shown. Earlier transactions stay in history without being counted twice.</p></div>
+    {!timeZone && <p><a href="/me#timezone">Confirm your timezone in Me</a> before adding an account.</p>}
+    <fieldset disabled={pending || !timeZone}><div className="money-field-grid">
       <label>Account name<input required maxLength={120} value={name} onChange={(event) => setName(event.target.value)} placeholder="Everyday bank" aria-invalid={!!error && !name.trim()} aria-describedby={error ? "money-account-error" : undefined} /></label>
       <label>Account type<select value={type} onChange={(event) => setType(event.target.value as AccountCreate["type"])}><option value="bank">Bank</option><option value="cash">Cash</option><option value="ewallet">E-wallet</option><option value="savings">Savings</option><option value="credit_card">Credit card</option><option value="other">Other</option></select></label>
       <label>Currency code<input required maxLength={3} pattern="[A-Z]{3}" autoCapitalize="characters" value={currency} onChange={(event) => setCurrency(event.target.value.toUpperCase())} aria-describedby="money-currency-help" /></label>
-      <label>Opening balance<input required inputMode="decimal" value={opening} onChange={(event) => setOpening(event.target.value)} placeholder="0.00" aria-invalid={!!error && !!name.trim()} aria-describedby={error ? "money-account-error" : undefined} /></label>
-    </div><p id="money-currency-help" className="money-help">Use an ISO code such as MYR, USD, or JPY. For a credit card, enter an amount owed as a negative opening balance.</p>
+      <label>{historical ? "Balance at this date" : "Balance now"}<input required inputMode="decimal" value={opening} onChange={(event) => setOpening(event.target.value)} placeholder="0.00" aria-invalid={!!error && !!name.trim()} aria-describedby={error ? "money-account-error" : undefined} /></label>
+    </div><p id="money-currency-help" className="money-help">Use an ISO code such as MYR, USD, or JPY. For a credit card, enter an amount owed as a negative balance.</p>
+      {timeZone && <>
+        <label className="money-choice"><input type="checkbox" checked={historical} onChange={(event) => setHistorical(event.target.checked)} />Use an earlier balance date</label>
+        {historical && <DateTimeField when={when} onChange={(value) => { setWhen(value); setChosenInstant(""); }} timeZone={timeZone} chosen={chosenInstant} onChosen={setChosenInstant} invalid={false} errorID="money-account-error" />}
+        <p className="money-help money-opening-review">{(() => { try { const at = historical ? toOccurredAt(when, timeZone, chosenInstant || undefined) : currentInstant; return `Confirm ${formatMinorUnits(parseAmountToMinor(opening, currency, true), currency)} on ${formatLocalDate(at, timeZone)} · ${formatLocalTimeWithZone(at, timeZone)} (${timeZone}).`; } catch { return "Choose a valid balance and date before saving."; } })()}</p>
+      </>}
       {error && <p id="money-account-error" className="money-field-error" role="alert">{error}</p>}
       {operationError && <p className="money-field-error" role="alert">{operationError}</p>}
       <button className="button button-primary" type="submit" disabled={pending}>{pending ? "Saving…" : "Create account"}</button></fieldset>

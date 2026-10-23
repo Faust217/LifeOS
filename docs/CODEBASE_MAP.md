@@ -1,6 +1,6 @@
 # LifeOS Codebase Map
 
-**Current code:** Issues #26–#31 are complete, pushed and closed. Issue #32 Me / Owner Data Export is implemented and Product Owner approved under accepted ADR-017; see [Export Design](EXPORT_DESIGN.md). This is a navigation guide; [Architecture](ARCHITECTURE.md), [Domain Model](DOMAIN_MODEL.md), and accepted [ADRs](adr/README.md) define the rules.
+**Current code:** Issues #26–#31 are complete, pushed and closed. Issue #32 Me / Owner Data Export is implemented and Product Owner approved under accepted ADR-017; see [Export Design](EXPORT_DESIGN.md). Issue #33 known-balance dates and v2 exports are implemented under accepted ADR-018 and Product Owner accepted for final delivery on 2026-10-23. This is a navigation guide; [Architecture](ARCHITECTURE.md), [Domain Model](DOMAIN_MODEL.md), and accepted [ADRs](adr/README.md) define the rules.
 
 ## Start here
 
@@ -26,7 +26,7 @@
 | Me **implemented; Issue #32 approved** | [`MePage`](../apps/web/src/LifeApp.tsx), shared [`TimeZoneSetting`](../apps/web/src/TimeZoneSetting.tsx), [`me.css`](../apps/web/src/me.css); Money links here | Existing `fetchCurrentUser`, `signOut`, `updateTimeZone` in [`api/auth.ts`](../apps/web/src/api/auth.ts) | Existing `Auth.me`, `Auth.logout`, `Auth.updateTimeZone` | Existing session/timezone rules | Existing Identity repository | Existing v2/v3/v7; no migration | Auth/web regression suites and real guarded Edge 320/390/1280px checks |
 | Google sign-in/invitations **implemented locally** | [`SignedOutScreen`](../apps/web/src/LifeApp.tsx), [`App`](../apps/web/src/LifeApp.tsx) | [`api/auth.ts`](../apps/web/src/api/auth.ts) | [`identity/auth.go`](../internal/identity/auth.go) `Auth.start`, `Auth.callback`, `Auth.me` | Admission/session in `Auth` | [`identity/repository.go`](../internal/identity/repository.go) | [`000002_identity_foundation.up.sql`](../db/migrations/000002_identity_foundation.up.sql), [`000003_auth_sessions.up.sql`](../db/migrations/000003_auth_sessions.up.sql) | [`auth_integration_test.go`](../internal/identity/auth_integration_test.go), [`repository_integration_test.go`](../internal/identity/repository_integration_test.go) |
 | Owner boundary **implemented** | Session-gated [`AuthenticatedShell`](../apps/web/src/LifeApp.tsx) | Same-origin calls in `api/auth.ts`, `api/money.ts`, `api/goals.ts` | [`Auth.RequireRead`/`RequireMutation`](../internal/identity/auth.go) wrap Money/Goals routes | Finance/Planning `Service` methods accept `OwnerID` | Finance/Planning SQL filters owner and related IDs | Owner columns and foreign keys in v2/v4/v5 | [`owner_scope_integration_test.go`](../internal/identity/owner_scope_integration_test.go), Finance/Planning integration tests |
-| Owner Export **implemented; Issue #32 approved** | [`OwnerExport.downloadExport`](../apps/web/src/OwnerExport.tsx) | [`downloadOwnerExport`](../apps/web/src/api/export.ts) | [`handler.download`](../internal/exporting/http.go), `Auth.RequireMutation` and `Auth.RevalidateOwner` | [`Service.Generate`](../internal/exporting/service.go), JSON/CSV sinks | Module-owned [`identity.ExportProfile`](../internal/identity/export.go), [`finance.WriteExport`](../internal/finance/export.go), [`planning.WriteExport`](../internal/planning/export.go); shared [`exportdata.WriteRows`](../internal/platform/exportdata/records.go) | One read-only repeatable-read snapshot of v7; no schema change | [`export_integration_test.go`](../internal/exporting/export_integration_test.go), [`csv_test.go`](../internal/exporting/csv_test.go), web export/schema tests, native Edge downloads |
+| Owner Export **implemented; Issue #32 approved** | [`OwnerExport.downloadExport`](../apps/web/src/OwnerExport.tsx) | [`downloadOwnerExport`](../apps/web/src/api/export.ts) | [`handler.download`](../internal/exporting/http.go), `Auth.RequireMutation` and `Auth.RevalidateOwner` | [`Service.Generate`](../internal/exporting/service.go), JSON/CSV sinks | Module-owned [`identity.ExportProfile`](../internal/identity/export.go), [`finance.WriteExport`](../internal/finance/export.go), [`planning.WriteExport`](../internal/planning/export.go); shared [`exportdata.WriteRows`](../internal/platform/exportdata/records.go) | One read-only repeatable-read snapshot; #33 adds v8 metadata and explicit native v2 alongside unchanged v1 | [`export_integration_test.go`](../internal/exporting/export_integration_test.go), [`csv_test.go`](../internal/exporting/csv_test.go), web export/schema tests, native Edge downloads |
 | Backup UI, offline sync, Wishlist **future** | N/A | N/A | N/A | N/A | N/A | N/A | N/A |
 
 The Google login was manually verified locally in Issue #19. The isolated Goals browser test used a synthetic session with normal guards and does not substitute for a new live Google or public deployment check.
@@ -179,8 +179,49 @@ flowchart TD
 | Snapshot → `internal/identity/export.go` `ExportProfile` | Read active owner/profile/timezone → `internal/finance/export.go` `WriteExport`; missing owner/invalid zone fails closed. |
 | Same transaction/owner → Finance `WriteExport`, `internal/planning/export.go` `WriteExport` | Explicit complete projections → `internal/platform/exportdata/records.go` `WriteRows`; check retained ledger shape, omit deleted events/children, preserve archives and Void text. Planning is N/A for Finance-only CSV. |
 | Query/owner → `WriteRows` | PostgreSQL rows in stable order → sink `Begin`, `Row`, `End`; timestamps become UTC microsecond strings, money stays integer text, row/query/write errors abort. |
-| Record → `internal/exporting/json.go` `jsonSink.Row` or `internal/exporting/csv.go` `csvSink.Row` | Exact v1 fields or fixed guarded CSV headers; `decimalAmount` uses currency scale plus digit operations → `Finish`; writer/ZIP/cap failures return no artifact. |
+| Record → `internal/exporting/json.go` `jsonSink.Row` or `internal/exporting/csv.go` `csvSink.Row` | Explicit v1/v2 fields or fixed guarded CSV headers; `decimalAmount` uses currency scale plus digit operations → `Finish`; writer/ZIP/cap failures return no artifact. |
 | Completed buffer → `handler.download` / `internal/identity/export.go` `Auth.RevalidateOwner` | Commit read transaction, recheck same cookie's active owner/session → private fixed attachment with separate write deadline; `Artifact.Close` releases capacity after network completion/error. |
 | Complete HTTP bytes → `downloadOwnerExport` / `OwnerExport.downloadExport` | Validate MIME/name/length and bounded stream → Blob plus automatic download/explicit Save file. Abort/truncation never creates a successful file; 401 refreshes shell auth. URLs expire after five minutes or release on replacement/unmount/cancel. |
 
 Database writes are **N/A** for export: PostgreSQL enforces a read-only transaction. No new export repository owns another module's SQL: dedicated module projections use the caller's shared transaction. Timezone saving remains `apps/web/src/TimeZoneSetting.tsx` `save` → `api/auth.ts` `updateTimeZone` → `internal/identity/auth.go` `Auth.updateTimeZone` → `internal/identity/repository.go` `repository.updateTimeZone`; the shell updates the same preference used by Money and Today. Detailed errors, reading order and tests are in [the learning journal](../learning/journal/2026-10-20-me-owner-data-export.md).
+
+## Issue #33: dated account balances (Product Owner accepted)
+
+Accepted [ADR-018](adr/ADR-018-opening-balance-effective-instant.md) and new migration [`000008_account_opening_balance_instant.up.sql`](../db/migrations/000008_account_opening_balance_instant.up.sql) add nullable effective/confirmation instants, a balance revision and internal owner/account conversion evidence. Published v1–v7 stay unchanged. Null dates retain legacy values and all-movements calculations until explicit confirmation. Dated accounts include only posted visible movements at/after their own UTC instant; earlier expenses remain spending. No historical running-balance UI, generic idempotency or Edit is implemented.
+
+```mermaid
+flowchart TD
+  A[AccountForm.submit] --> B[api/money.ts createMoneyAccount]
+  B --> G[Auth.RequireMutation]
+  G --> C[moneyHandler.createAccount]
+  C --> D[Service.CreateAccount]
+  D --> E[repository.createAccount]
+  E --> P[(PostgreSQL v8 accounts)]
+  F[OpeningBalanceSheet.review] --> H[previewOpeningBalance]
+  H --> I[moneyHandler.previewOpeningBalance]
+  I --> J[Service.PreviewOpeningBalance]
+  J --> K[readOpeningAccount / previewOpening]
+  K --> P
+  L[OpeningBalanceSheet.confirm] --> M[confirmOpeningBalance]
+  M --> N[moneyHandler.confirmOpeningBalance]
+  N --> O[Service.ConfirmOpeningBalance]
+  O --> Q[Account lock / revision check / recompute]
+  Q --> R[(Account and confirmation evidence atomically)]
+  P --> S[accountDTO / complete preview]
+  R --> S
+  S --> T[MoneyPage.loadMoney]
+  T --> U[Balance / history and Today reads]
+```
+
+Both preview and confirmation routes use `Auth.RequireMutation`; the diagram abbreviates the guard on the latter paths. Preview has no writes. Exact function details and error tests are in the [Issue #33 journal](../learning/journal/2026-10-20-opening-balance-effective-instant.md).
+
+| Input → Function | Process → Output → Next function |
+| --- | --- |
+| Amount/date → `apps/web/src/MoneyPage.tsx` `AccountForm.submit` | Saved-zone `toOccurredAt`/`parseAmountToMinor` → `api/money.ts` `createMoneyAccount`; new form suggests now, earlier date optional, amount/date visible before Save. |
+| Cookie/CSRF/JSON → `internal/finance/http.go` `moneyHandler.createAccount` | Guard/strict DTO → `Service.CreateAccount` in `service.go` → `repository.createAccount` in `repository.go`; validate saved zone via Identity projection, UTC microseconds and int64, insert account assertion without a FinancialEvent → `accountDTO` → refresh. |
+| Legacy date/optional amount → `apps/web/src/OpeningBalanceSheet.tsx` `review` | `api/money.ts` `previewOpeningBalance` → `internal/finance/opening_http.go` `moneyHandler.previewOpeningBalance` → `opening_balance.go` `Service.PreviewOpeningBalance`; complete read-only repeatable-read sums via `readOpeningAccount`/`previewOpening` → exact suggested/chosen/before/after/delta/revision. |
+| Reviewed amount/revision/ack → `OpeningBalanceSheet.confirm` | `confirmOpeningBalance` → `moneyHandler.confirmOpeningBalance` → `Service.ConfirmOpeningBalance`; account lock, recompute, conflict/overflow/ack check, atomic metadata/evidence → `accountDTO` → `MoneyPage.loadMoney`. Lost/malformed response re-reads account before considering another confirmation; drafts survive errors/cancel within Money. |
+| Event → Finance `repository.post`, `voidEvent`, `deleteEvent` | Stable `lockAccounts`, occurrence-vs-account-date checks, complete `balanceInTx`/`balanceSQL`, exact removal arithmetic, then `bumpBalanceRevisions`; all ledger/metadata changes commit together. No changes to history/spending visibility predicates. |
+| Export click → `OwnerExport.downloadExport` | `downloadOwnerExport` requests version2 → `exporting.Service.Generate` → Finance `WriteExport`; v2 account projection or explicit incompatible-v1 error → versioned JSON/CSV sinks. Existing snapshot/release-time guard and limits apply. |
+
+Tests: `internal/finance/opening_balance_integration_test.go`, `opening_http_test.go`, Finance/Money/Soft Delete suites, `internal/exporting/export_integration_test.go`, independent v1/v2 JSON Schema golden checks and API web tests. The populated-v7 upgrade, complete >10k-event conversion preview, concurrent post/Void/Delete/conversion/export, rollback and responsive real guarded API checks use only new disposable databases. Published migrations, accepted older ADRs and v1 golden contracts remain intact; ADR-015 stays Proposed.

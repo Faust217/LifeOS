@@ -9,9 +9,26 @@ import (
 )
 
 // WriteExport owns Finance SQL and deliberately avoids paginated UI services.
-func WriteExport(ctx context.Context, tx pgx.Tx, owner identity.OwnerID, sink exportdata.Sink) error {
+func WriteExport(ctx context.Context, tx pgx.Tx, owner identity.OwnerID, sink exportdata.Sink, versions ...int) error {
 	if !owner.Valid() {
 		return ErrUnauthorized
+	}
+	version := 1
+	if len(versions) > 0 {
+		version = versions[0]
+	}
+	if version == 1 {
+		var anchored bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM finance_accounts WHERE owner_id=$1 AND opening_balance_at IS NOT NULL)`, owner.String()).Scan(&anchored); err != nil {
+			return err
+		}
+		if anchored {
+			return ErrExportVersionIncompatible
+		}
+	}
+	accountQuery := `SELECT id::text,name,account_type,currency,opening_balance_minor::text,archived_at,created_at,updated_at FROM finance_accounts WHERE owner_id=$1 ORDER BY created_at,id`
+	if version == 2 {
+		accountQuery = `SELECT id::text,name,account_type,currency,opening_balance_minor::text,archived_at,created_at,updated_at,CASE WHEN opening_balance_at IS NULL THEN 'legacy_all_movements' ELSE 'known_balance_before_instant' END AS opening_balance_basis,opening_balance_at,opening_balance_confirmed_at FROM finance_accounts WHERE owner_id=$1 ORDER BY created_at,id`
 	}
 	// Validate the retained ledger's event shape with exact numeric accumulators.
 	var invalid bool
@@ -31,7 +48,7 @@ func WriteExport(ctx context.Context, tx pgx.Tx, owner identity.OwnerID, sink ex
 		return ErrInvalidInput
 	}
 	queries := []struct{ name, sql string }{
-		{"accounts", `SELECT id::text,name,account_type,currency,opening_balance_minor::text,archived_at,created_at,updated_at FROM finance_accounts WHERE owner_id=$1 ORDER BY created_at,id`},
+		{"accounts", accountQuery},
 		{"categories", `SELECT id::text,name,kind,archived_at,created_at,updated_at FROM finance_categories WHERE owner_id=$1 ORDER BY created_at,id`},
 		{"events", `SELECT e.id::text,e.kind,e.amount_minor::text,e.currency,e.occurred_at,e.note,e.status,e.voided_at,e.void_reason,e.created_at,
  CASE WHEN e.kind<>'transfer' THEN (SELECT m.account_id::text FROM account_movements m WHERE m.owner_id=e.owner_id AND m.event_id=e.id LIMIT 1) END AS _account_id,

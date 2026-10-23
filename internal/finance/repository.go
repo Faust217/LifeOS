@@ -33,8 +33,9 @@ type postSpec struct {
 }
 
 type accountState struct {
-	currency string
-	archived sql.NullTime
+	currency  string
+	archived  sql.NullTime
+	openingAt *time.Time
 }
 
 func (r *repository) createAccount(ctx context.Context, owner identity.OwnerID, input AccountInput) (Account, error) {
@@ -42,13 +43,23 @@ func (r *repository) createAccount(ctx context.Context, owner identity.OwnerID, 
 	if err != nil {
 		return Account{}, err
 	}
-	_, err = r.pool.Exec(ctx, `INSERT INTO finance_accounts
-		(id, owner_id, name, account_type, currency, opening_balance_minor)
-		VALUES ($1, $2, $3, $4, $5, $6)`, id, owner.String(), input.Name, input.Type, input.Currency, input.OpeningBalanceMinor)
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return Account{}, fmt.Errorf("create account: %w", err)
+		return Account{}, err
 	}
-	return Account{ID: id, Name: input.Name, Type: input.Type, Currency: input.Currency, OpeningBalanceMinor: input.OpeningBalanceMinor}, nil
+	defer tx.Rollback(ctx)
+	if err = requireOpeningZone(ctx, tx, owner); err != nil {
+		return Account{}, err
+	}
+	_, err = tx.Exec(ctx, `INSERT INTO finance_accounts(id,owner_id,name,account_type,currency,opening_balance_minor,opening_balance_at,opening_balance_confirmed_at,balance_revision) VALUES($1,$2,$3,$4,$5,$6,$7,clock_timestamp(),1)`, id, owner.String(), input.Name, input.Type, input.Currency, input.OpeningBalanceMinor, input.OpeningBalanceAt)
+	if err != nil {
+		return Account{}, err
+	}
+	account, err := readOpeningAccount(ctx, tx, owner, id, false)
+	if err != nil {
+		return Account{}, err
+	}
+	return account, tx.Commit(ctx)
 }
 
 func (r *repository) createCategory(ctx context.Context, owner identity.OwnerID, input CategoryInput) (Category, error) {
@@ -154,7 +165,7 @@ func (r *repository) restoreCategory(ctx context.Context, owner identity.OwnerID
 }
 
 func (r *repository) listAccounts(ctx context.Context, owner identity.OwnerID) ([]Account, error) {
-	rows, err := r.pool.Query(ctx, `SELECT id, name, account_type, currency, opening_balance_minor, archived_at
+	rows, err := r.pool.Query(ctx, `SELECT id, name, account_type, currency, opening_balance_minor, archived_at, opening_balance_at, opening_balance_confirmed_at, balance_revision
 		FROM finance_accounts WHERE owner_id = $1 ORDER BY created_at, id`, owner.String())
 	if err != nil {
 		return nil, fmt.Errorf("list accounts: %w", err)
@@ -164,7 +175,7 @@ func (r *repository) listAccounts(ctx context.Context, owner identity.OwnerID) (
 	for rows.Next() {
 		var account Account
 		var archived sql.NullTime
-		if err := rows.Scan(&account.ID, &account.Name, &account.Type, &account.Currency, &account.OpeningBalanceMinor, &archived); err != nil {
+		if err := rows.Scan(&account.ID, &account.Name, &account.Type, &account.Currency, &account.OpeningBalanceMinor, &archived, &account.OpeningBalanceAt, &account.OpeningConfirmedAt, &account.BalanceRevision); err != nil {
 			return nil, fmt.Errorf("scan account: %w", err)
 		}
 		if archived.Valid {
@@ -199,14 +210,14 @@ func (r *repository) listCategories(ctx context.Context, owner identity.OwnerID)
 
 func (r *repository) archiveAccount(ctx context.Context, owner identity.OwnerID, accountID string) error {
 	var id string
-	err := r.pool.QueryRow(ctx, `UPDATE finance_accounts SET archived_at = now(), updated_at = now()
+	err := r.pool.QueryRow(ctx, `UPDATE finance_accounts SET archived_at = now(), updated_at = now(),balance_revision=balance_revision+1
 		WHERE owner_id = $1 AND id = $2 AND archived_at IS NULL RETURNING id`, owner.String(), accountID).Scan(&id)
 	return notFoundOr("archive account", err)
 }
 
 func (r *repository) restoreAccount(ctx context.Context, owner identity.OwnerID, accountID string) error {
 	var id string
-	err := r.pool.QueryRow(ctx, `UPDATE finance_accounts SET archived_at = NULL, updated_at = now()
+	err := r.pool.QueryRow(ctx, `UPDATE finance_accounts SET archived_at = NULL, updated_at = now(),balance_revision=balance_revision+1
 		WHERE owner_id = $1 AND id = $2 AND archived_at IS NOT NULL RETURNING id`, owner.String(), accountID).Scan(&id)
 	return notFoundOr("restore account", err)
 }
@@ -227,6 +238,7 @@ const balanceSQL = `SELECT a.id, a.currency,
         SELECT SUM(m.amount_minor) FROM account_movements m
         JOIN financial_events e ON e.owner_id = m.owner_id AND e.id = m.event_id
         WHERE m.owner_id = a.owner_id AND m.account_id = a.id AND e.status = 'posted' AND e.deleted_at IS NULL
+        AND (a.opening_balance_at IS NULL OR e.occurred_at >= a.opening_balance_at)
     ), 0))::text
     FROM finance_accounts a WHERE a.owner_id = $1 AND a.id = $2`
 
@@ -338,6 +350,9 @@ func (r *repository) post(ctx context.Context, owner identity.OwnerID, spec post
 		if state.currency != spec.currency {
 			return Event{}, ErrCurrencyMismatch
 		}
+		if state.openingAt != nil && spec.occurredAt.Before(*state.openingAt) {
+			continue
+		}
 		current, err := balanceInTx(ctx, tx, owner, movement.accountID)
 		if err != nil {
 			return Event{}, err
@@ -404,6 +419,9 @@ func (r *repository) post(ctx context.Context, owner identity.OwnerID, spec post
 		event.Allocations = append(event.Allocations, Allocation{ID: allocationID, CategoryID: planned.CategoryID,
 			AmountMinor: planned.AmountMinor, Currency: spec.currency})
 	}
+	if err := bumpBalanceRevisions(ctx, tx, owner, spec.movements); err != nil {
+		return Event{}, err
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return Event{}, fmt.Errorf("commit financial event: %w", err)
 	}
@@ -418,7 +436,8 @@ func (r *repository) voidEvent(ctx context.Context, owner identity.OwnerID, even
 	defer tx.Rollback(ctx)
 	var status string
 	var deleted bool
-	err = tx.QueryRow(ctx, `SELECT status, deleted_at IS NOT NULL FROM financial_events WHERE owner_id = $1 AND id = $2 FOR UPDATE`, owner.String(), eventID).Scan(&status, &deleted)
+	var occurredAt time.Time
+	err = tx.QueryRow(ctx, `SELECT status, deleted_at IS NOT NULL, occurred_at FROM financial_events WHERE owner_id = $1 AND id = $2 FOR UPDATE`, owner.String(), eventID).Scan(&status, &deleted, &occurredAt)
 	if err != nil {
 		return notFoundOr("find event", err)
 	}
@@ -429,13 +448,16 @@ func (r *repository) voidEvent(ctx context.Context, owner identity.OwnerID, even
 	if err != nil {
 		return err
 	}
-	if err := checkRemovalBalances(ctx, tx, owner, movements); err != nil {
+	if err := checkRemovalBalances(ctx, tx, owner, movements, occurredAt); err != nil {
 		return err
 	}
 	_, err = tx.Exec(ctx, `UPDATE financial_events SET status = 'voided', voided_at = now(), void_reason = $3
 		WHERE owner_id = $1 AND id = $2 AND status = 'posted' AND deleted_at IS NULL`, owner.String(), eventID, reason)
 	if err != nil {
 		return fmt.Errorf("void event: %w", err)
+	}
+	if err := bumpBalanceRevisions(ctx, tx, owner, movements); err != nil {
+		return err
 	}
 	return tx.Commit(ctx)
 }
@@ -448,28 +470,36 @@ func (r *repository) deleteEvent(ctx context.Context, owner identity.OwnerID, ev
 	defer tx.Rollback(ctx)
 	var status string
 	var deleted bool
-	err = tx.QueryRow(ctx, `SELECT status, deleted_at IS NOT NULL FROM financial_events WHERE owner_id = $1 AND id = $2 FOR UPDATE`, owner.String(), eventID).Scan(&status, &deleted)
+	var occurredAt time.Time
+	err = tx.QueryRow(ctx, `SELECT status, deleted_at IS NOT NULL, occurred_at FROM financial_events WHERE owner_id = $1 AND id = $2 FOR UPDATE`, owner.String(), eventID).Scan(&status, &deleted, &occurredAt)
 	if err != nil {
 		return notFoundOr("find event", err)
 	}
 	if deleted {
 		return tx.Commit(ctx)
 	}
+	movements, err := eventMovementSpecs(ctx, tx, owner, eventID)
+	if err != nil {
+		return err
+	}
 	if status == "posted" {
-		movements, err := eventMovementSpecs(ctx, tx, owner, eventID)
-		if err != nil {
+		if err = checkRemovalBalances(ctx, tx, owner, movements, occurredAt); err != nil {
 			return err
 		}
-		if err := checkRemovalBalances(ctx, tx, owner, movements); err != nil {
+	} else if status == "voided" {
+		if _, err = lockAccounts(ctx, tx, owner, movements, true); err != nil {
 			return err
 		}
-	} else if status != "voided" {
+	} else {
 		return ErrConflict
 	}
 	_, err = tx.Exec(ctx, `UPDATE financial_events SET deleted_at = now()
 		WHERE owner_id = $1 AND id = $2 AND deleted_at IS NULL`, owner.String(), eventID)
 	if err != nil {
 		return fmt.Errorf("delete event: %w", err)
+	}
+	if err := bumpBalanceRevisions(ctx, tx, owner, movements); err != nil {
+		return err
 	}
 	return tx.Commit(ctx)
 }
@@ -500,16 +530,20 @@ func eventMovementSpecs(ctx context.Context, tx pgx.Tx, owner identity.OwnerID, 
 	return movements, nil
 }
 
-func checkRemovalBalances(ctx context.Context, tx pgx.Tx, owner identity.OwnerID, movements []movementSpec) error {
-	if _, err := lockAccounts(ctx, tx, owner, movements, true); err != nil {
+func checkRemovalBalances(ctx context.Context, tx pgx.Tx, owner identity.OwnerID, movements []movementSpec, occurredAt time.Time) error {
+	states, err := lockAccounts(ctx, tx, owner, movements, true)
+	if err != nil {
 		return err
 	}
 	for _, movement := range movements {
+		if at := states[movement.accountID].openingAt; at != nil && occurredAt.Before(*at) {
+			continue
+		}
 		current, err := balanceInTx(ctx, tx, owner, movement.accountID)
 		if err != nil {
 			return err
 		}
-		if _, err := addMoney(current, -movement.amount); err != nil {
+		if _, err := subtractMoney(current, movement.amount); err != nil {
 			return err
 		}
 	}
@@ -528,8 +562,8 @@ func lockAccounts(ctx context.Context, tx pgx.Tx, owner identity.OwnerID, moveme
 			return nil, ErrInvalidInput
 		}
 		var state accountState
-		err := tx.QueryRow(ctx, `SELECT currency, archived_at FROM finance_accounts
-			WHERE owner_id = $1 AND id = $2 FOR UPDATE`, owner.String(), id).Scan(&state.currency, &state.archived)
+		err := tx.QueryRow(ctx, `SELECT currency, archived_at, opening_balance_at FROM finance_accounts
+			WHERE owner_id = $1 AND id = $2 FOR UPDATE`, owner.String(), id).Scan(&state.currency, &state.archived, &state.openingAt)
 		if err != nil {
 			return nil, notFoundOr("find account", err)
 		}

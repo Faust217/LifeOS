@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Faust217/LifeOS/internal/finance"
 	"github.com/Faust217/LifeOS/internal/identity"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
@@ -87,7 +88,8 @@ func (h handler) download(w http.ResponseWriter, r *http.Request, owner identity
 		return
 	}
 	var input struct {
-		Format string `json:"format"`
+		Format        string          `json:"format"`
+		ExportVersion json.RawMessage `json:"export_version,omitempty"`
 	}
 	d := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024))
 	d.DisallowUnknownFields()
@@ -95,12 +97,26 @@ func (h handler) download(w http.ResponseWriter, r *http.Request, owner identity
 		exportError(w, 400, "invalid_export_request", "Choose JSON or Finance CSV without filters or owner overrides.")
 		return
 	}
-	artifact, err := h.service.Generate(r.Context(), owner, input.Format)
+	version := 1
+	if input.ExportVersion != nil {
+		switch string(input.ExportVersion) {
+		case "1":
+			version = 1
+		case "2":
+			version = 2
+		default:
+			exportError(w, 400, "invalid_export_request", "Choose export version 1 or 2.")
+			return
+		}
+	}
+	artifact, err := h.service.Generate(r.Context(), owner, input.Format, version)
 	if err != nil {
 		if r.Context().Err() != nil {
 			return
 		}
 		switch {
+		case errors.Is(err, finance.ErrExportVersionIncompatible):
+			exportError(w, 409, "export_version_incompatible", "Dated account balances require export version 2.")
 		case errors.Is(err, ErrBusy):
 			w.Header().Set("Retry-After", "5")
 			exportError(w, 429, "export_busy", "An export is already running. Retry shortly.")

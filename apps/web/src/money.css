@@ -166,3 +166,11 @@
   .money-history-main { grid-template-columns: minmax(0, 1fr); }
   .money-history-amount { text-align: right; }
 }
+
+.money-form .money-choice { display: flex; align-items: flex-start; gap: .65rem; min-height: 44px; padding-block: .6rem; }
+.money-choice input[type="checkbox"] { width: 1.2rem; height: 1.2rem; flex: 0 0 auto; margin-top: .1rem; }
+.money-opening-summary { display: grid; gap: .7rem; margin: 0; }
+.money-opening-summary div { display: grid; gap: .2rem; }
+.money-opening-summary dt { color: var(--muted); }
+.money-opening-summary dd { margin: 0; font-weight: 650; overflow-wrap: anywhere; }
+.money-opening-review { overflow-wrap: anywhere; }

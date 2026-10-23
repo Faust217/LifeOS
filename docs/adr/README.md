@@ -70,6 +70,12 @@ Offline transaction synchronization is V0.2 work. It needs a separate **accepted
 | --- | --- | --- |
 | [ADR-017](ADR-017-owner-data-export.md) | Versioned owner JSON/Finance CSV, shared read snapshot and bounded guarded downloads | Accepted 2026-10-20 for local [Issue #32](https://github.com/Faust217/LifeOS/issues/32) implementation; Product Owner visual/export-file review passed and final delivery authorized |
 
+## Accepted opening-balance decision
+
+| ADR | Decision | Status |
+| --- | --- | --- |
+| [ADR-018](ADR-018-opening-balance-effective-instant.md) | Known-balance instant, explicit legacy conversion and versioned export compatibility | Accepted 2026-10-20; #33 visual/export review passed and final delivery authorized 2026-10-23 |
+
 ## Naming
 
 Use the `ADR-` prefix, a zero-padded three-digit number, and a concise slug:

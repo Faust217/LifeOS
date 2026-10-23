@@ -19,6 +19,68 @@ tags:
     description: Owner-scoped, non-financial checklist Goals.
 security: []
 paths:
+  /api/v1/accounts/{accountID}/opening-balance/preview:
+    post:
+      tags: [Money]
+      summary: Preview a dated account balance without changing it
+      operationId: previewOpeningBalance
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/MoneyAccountID" }
+        - { $ref: "#/components/parameters/MoneyOrigin" }
+        - { $ref: "#/components/parameters/MoneyCSRF" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MoneyOpeningPreviewRequest" }
+      responses:
+        "200":
+          description: Complete owner-scoped preview with account revision; no database write.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MoneyOpeningPreview" }
+        "400": { $ref: "#/components/responses/MoneyBadRequest" }
+        "401": { $ref: "#/components/responses/MoneyUnauthorized" }
+        "403": { $ref: "#/components/responses/MoneyForbidden" }
+        "404": { $ref: "#/components/responses/MoneyNotFound" }
+        "409": { $ref: "#/components/responses/MoneyConflict" }
+        "413": { $ref: "#/components/responses/MoneyTooLarge" }
+        "415": { $ref: "#/components/responses/MoneyUnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/MoneyOverflow" }
+        "500": { $ref: "#/components/responses/MoneyInternalError" }
+        "503": { $ref: "#/components/responses/MoneyUnavailable" }
+  /api/v1/accounts/{accountID}/opening-balance/confirm:
+    post:
+      tags: [Money]
+      summary: Confirm a reviewed dated account balance once
+      operationId: confirmOpeningBalance
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/MoneyAccountID" }
+        - { $ref: "#/components/parameters/MoneyOrigin" }
+        - { $ref: "#/components/parameters/MoneyCSRF" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MoneyOpeningConfirmRequest" }
+      responses:
+        "200":
+          description: Complete owner-scoped confirmed account; repeat/stale confirmations conflict without another change.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MoneyAccount" }
+        "400": { $ref: "#/components/responses/MoneyBadRequest" }
+        "401": { $ref: "#/components/responses/MoneyUnauthorized" }
+        "403": { $ref: "#/components/responses/MoneyForbidden" }
+        "404": { $ref: "#/components/responses/MoneyNotFound" }
+        "409": { $ref: "#/components/responses/MoneyConflict" }
+        "413": { $ref: "#/components/responses/MoneyTooLarge" }
+        "415": { $ref: "#/components/responses/MoneyUnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/MoneyOverflow" }
+        "500": { $ref: "#/components/responses/MoneyInternalError" }
+        "503": { $ref: "#/components/responses/MoneyUnavailable" }
   /api/v1/me/export:
     post:
       tags: [Export]
@@ -54,12 +116,31 @@ paths:
               schema: { type: string, const: "private, no-store, max-age=0" }
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/LifeOSOwnerExport" }
+              schema:
+                oneOf:
+                  - { $ref: "#/components/schemas/LifeOSOwnerExport" }
+                  - { $ref: "#/components/schemas/LifeOSOwnerExportV2" }
             application/zip:
               schema: { type: string, format: binary }
         "400": { $ref: "#/components/responses/MoneyBadRequest" }
         "401": { $ref: "#/components/responses/MoneyUnauthorized" }
         "403": { $ref: "#/components/responses/MoneyForbidden" }
+        "409":
+          description: export_version_incompatible; use explicit v2 for dated account balances.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [error]
+                properties:
+                  error:
+                    type: object
+                    additionalProperties: false
+                    required: [code, message]
+                    properties:
+                      code: { type: string, const: export_version_incompatible }
+                      message: { type: string }
         "405":
           description: Only POST is supported.
         "415": { $ref: "#/components/responses/MoneyUnsupportedMediaType" }
@@ -978,6 +1059,9 @@ components:
       required: [format]
       properties:
         format: { type: string, enum: [json, finance_csv] }
+        export_version: { type: integer, enum: [1, 2], default: 1, description: "Omitted means v1; dated accounts require explicit v2." }
+    LifeOSOwnerExportV2:
+      $ref: "../export/lifeos-export-v2.schema.json"
     LifeOSOwnerExport:
       $ref: "../export/lifeos-export-v1.schema.json"
     GoalTitleRequest:
@@ -1074,16 +1158,55 @@ components:
     MoneyAccountCreate:
       type: object
       additionalProperties: false
-      required: [name, type, currency, opening_balance_minor]
+      required: [opening_balance_at, name, type, currency, opening_balance_minor]
       properties:
         name: { type: string, minLength: 1, maxLength: 120 }
         type: { type: string, enum: [cash, bank, ewallet, savings, credit_card, other] }
         currency: { $ref: "#/components/schemas/MoneyCurrency" }
         opening_balance_minor: { $ref: "#/components/schemas/MoneyMinorUnits" }
+        opening_balance_at: { type: string, format: date-time, description: "Explicit confirmed balance instant, no later than server time; saved owner timezone required." }
+    MoneyOpeningPreviewRequest:
+      type: object
+      additionalProperties: false
+      required: [opening_balance_at]
+      properties:
+        opening_balance_at: { type: string, format: date-time }
+        opening_balance_minor: { type: string, pattern: '^-?(0|[1-9][0-9]*)$', description: "Omit to suggest preserving the recorded balance." }
+    MoneyOpeningConfirmRequest:
+      type: object
+      additionalProperties: false
+      required: [opening_balance_at, opening_balance_minor, balance_revision, acknowledge_change]
+      properties:
+        opening_balance_at: { type: string, format: date-time }
+        opening_balance_minor: { type: string, pattern: '^-?(0|[1-9][0-9]*)$' }
+        balance_revision: { type: string, pattern: '^(0|[1-9][0-9]*)$' }
+        acknowledge_change: { type: boolean, description: "Must be true when the reviewed current balance changes." }
+    MoneyOpeningPreview:
+      type: object
+      additionalProperties: false
+      required: [account_id, currency, previous_balance_basis, resulting_balance_basis, opening_balance_at, previous_opening_balance_minor, balance_before_minor, suggested_opening_balance_minor, suggested_representable, chosen_opening_balance_minor, balance_after_minor, balance_change_minor, before_count, before_net_minor, on_or_after_count, on_or_after_net_minor, balance_revision]
+      properties:
+        account_id: { type: string, format: uuid }
+        currency: { type: string }
+        opening_balance_at: { type: string, format: date-time }
+        previous_balance_basis: { type: string, const: legacy_all_movements }
+        resulting_balance_basis: { type: string, const: known_balance_before_instant }
+        previous_opening_balance_minor: { type: string }
+        balance_before_minor: { type: string }
+        suggested_opening_balance_minor: { type: string, description: "Exact integer text; may exceed int64 when suggestion is unavailable." }
+        suggested_representable: { type: boolean }
+        chosen_opening_balance_minor: { type: [string, "null"] }
+        balance_after_minor: { type: [string, "null"] }
+        balance_change_minor: { type: [string, "null"], description: "Exact wide difference, not a new stored monetary fact." }
+        before_count: { type: integer, minimum: 0 }
+        before_net_minor: { type: string }
+        on_or_after_count: { type: integer, minimum: 0 }
+        on_or_after_net_minor: { type: string }
+        balance_revision: { type: string }
     MoneyAccount:
       type: object
       additionalProperties: false
-      required: [id, name, type, currency, opening_balance_minor]
+      required: [opening_balance_at, opening_balance_confirmed_at, opening_balance_basis, balance_revision, id, name, type, currency, opening_balance_minor]
       properties:
         id: { type: string, format: uuid }
         name: { type: string }
@@ -1091,6 +1214,10 @@ components:
         currency: { $ref: "#/components/schemas/MoneyCurrency" }
         opening_balance_minor: { $ref: "#/components/schemas/MoneyMinorUnits" }
         archived_at: { type: string, format: date-time }
+        opening_balance_at: { type: [string, "null"], format: date-time }
+        opening_balance_confirmed_at: { type: [string, "null"], format: date-time }
+        opening_balance_basis: { type: string, enum: [legacy_all_movements, known_balance_before_instant] }
+        balance_revision: { type: string, pattern: '^(0|[1-9][0-9]*)$' }
     MoneyAccountsResponse:
       type: object
       additionalProperties: false

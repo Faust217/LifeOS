@@ -76,9 +76,12 @@ An `Account` represents a place or instrument that holds an asset or liability p
 | --- | --- |
 | `account_type` | `cash`, `bank`, `ewallet`, `credit_card`, `savings`, future optional `receivable`, or `other` |
 | `currency` | Primary ISO 4217 currency for the account |
-| `opening_balance` | Starting net position when the account is introduced or imported |
+| `opening_balance` | Original undated legacy position, or the owner's known position immediately before the confirmed effective instant |
+| `opening_balance_at` | Nullable UTC instant; null preserves legacy all-movements semantics. Confirmed dates are explicit owner assertions, never inferred from creation time. |
 | sign convention | Positive is an asset position; credit-card debt is a negative liability position. An ordinary account can also be negative when recorded activity exceeds its balance; LifeOS records the fact rather than authorizing an overdraft. |
 | archive behavior | Historical accounts are archived rather than hard-deleted |
+
+Accepted [ADR-018](adr/ADR-018-opening-balance-effective-instant.md) distinguishes undated legacy accounts (original opening plus all eligible movements) from confirmed known-balance accounts (opening plus eligible movements occurring at or after the UTC instant). The instant is before all equal-time events. Pre-instant events remain visible and count in occurrence-date spending but do not change the confirmed current position. Legacy values/formulas remain unchanged until explicit revision-guarded conversion preview/confirmation. No anchor is inferred from account creation. Transfers apply the rule independently per account; Void/Delete remove only effective current contributions. Saved IANA presentation never rewrites UTC facts. Historical pre-instant reconstruction is not bank-verified. Export v1 meanings remain unchanged; native v2 carries the dated basis. General editing and historical-balance UI remain separately authorized work.
 
 ### FinancialEvent
 

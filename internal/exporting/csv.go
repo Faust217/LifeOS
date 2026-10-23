@@ -57,12 +57,17 @@ type csvSink struct {
 	current           io.Writer
 	counts            map[string]int
 	raw, limit, index int
+	version           int
 	created           time.Time
 	profile           exportdata.Profile
 }
 
-func newCSVSink(w io.Writer, created time.Time, p exportdata.Profile, limit int) (*csvSink, error) {
-	return &csvSink{zip: zip.NewWriter(w), counts: map[string]int{}, limit: limit, created: created, profile: p}, nil
+func newCSVSink(w io.Writer, created time.Time, p exportdata.Profile, limit int, versions ...int) (*csvSink, error) {
+	version := 1
+	if len(versions) > 0 {
+		version = versions[0]
+	}
+	return &csvSink{version: version, zip: zip.NewWriter(w), counts: map[string]int{}, limit: limit, created: created, profile: p}, nil
 }
 func (s *csvSink) write(w io.Writer, b []byte) error {
 	if len(b) > s.limit-s.raw {
@@ -105,11 +110,11 @@ func (s *csvSink) Begin(name string) error {
 	if err := s.write(w, []byte{0xef, 0xbb, 0xbf}); err != nil {
 		return err
 	}
-	return s.line(csvHeaders[name])
+	return s.line(s.headers(name))
 }
 func (s *csvSink) Row(name string, r exportdata.Record) error {
-	values := make([]string, 0, len(csvHeaders[name]))
-	for _, column := range csvHeaders[name] {
+	values := make([]string, 0, len(s.headers(name)))
+	for _, column := range s.headers(name) {
 		key := strings.TrimSuffix(column, "_utc")
 		var value any
 		switch {
@@ -181,7 +186,7 @@ func (s *csvSink) Finish() error {
 		return errors.New("incomplete CSV export")
 	}
 	files := []string{"accounts.csv", "categories.csv", "transactions.csv", "movements.csv", "allocations.csv"}
-	manifest := map[string]any{"format": "lifeos-finance-csv-v1", "format_version": 1, "created_at": exportdata.UTC(s.created), "owner_time_zone": s.profile.TimeZone, "record_counts": s.counts, "files": files, "csv_encoding": "UTF-8-BOM", "csv_text_guard": "apostrophe", "minor_units_encoding": "apostrophe-prefixed-decimal-string", "soft_deleted_events": "excluded"}
+	manifest := map[string]any{"format": "lifeos-finance-csv-v" + strconv.Itoa(s.version), "format_version": s.version, "created_at": exportdata.UTC(s.created), "owner_time_zone": s.profile.TimeZone, "record_counts": s.counts, "files": files, "csv_encoding": "UTF-8-BOM", "csv_text_guard": "apostrophe", "minor_units_encoding": "apostrophe-prefixed-decimal-string", "soft_deleted_events": "excluded"}
 	w, err := s.zip.Create("manifest.json")
 	if err != nil {
 		return err
@@ -193,7 +198,14 @@ func (s *csvSink) Finish() error {
 	if err != nil {
 		return err
 	}
-	if err = s.write(w, []byte(csvReadme)); err != nil {
+	readme := csvReadme
+	if s.version == 2 {
+		readme = strings.ReplaceAll(readme, "LifeOS Finance CSV v1", "LifeOS Finance CSV v2")
+		readme += "\nIn v2, affects_balances is POSTED event eligibility, not a guarantee that every account leg changes its current balance. Apply each account's opening_balance_basis and opening_balance_at_utc to the joined movement/event instant. A transfer may contribute to one account but not the other. counts_as_spending still includes POSTED pre-date expenses.\n"
+		readme = strings.ReplaceAll(readme, "Opening balance plus POSTED movements reconstructs a current balance; no historical running balance is claimed.", "For legacy_all_movements: opening plus all POSTED eligible movements. For known_balance_before_instant: opening plus POSTED eligible movements with occurred_at >= opening_balance_at_utc. Earlier events remain history/spending but do not change current balance. The instant precedes all events at exactly that instant. No verified historical bank balance is claimed.")
+		readme += "\nAccount date/confirmation fields are UTC; null dates mean the unchanged legacy formula. Timezone changes do not move UTC dates. Older v1 files keep their original interpretation.\n"
+	}
+	if err = s.write(w, []byte(readme)); err != nil {
 		return err
 	}
 	return s.zip.Close()
@@ -223,3 +235,10 @@ Actual encoded monetary pair: "'1234","'12.34"; negative pair: "'-1","'-0.01".
 MYR transfer: ONE transactions row (100,1.00), source movement (-100,-1.00), destination movement (100,1.00). ONE expense can have allocation pairs (70,0.70) and (30,0.30) without extra transaction rows.
 UTC timestamps end in Z. occurred_at_local uses the saved owner timezone with its actual offset/DST. If no timezone has been confirmed, local/time_zone cells are empty; UTC is still available. Downloaded files are private data outside LifeOS access/revocation controls. Keep them safe.
 `
+
+func (s *csvSink) headers(name string) []string {
+	if name == "accounts" && s.version == 2 {
+		return strings.Split("account_id,name,account_type,currency,opening_balance_minor,opening_balance_decimal,opening_balance_basis,opening_balance_at_utc,opening_balance_confirmed_at_utc,archived_at_utc,created_at_utc,updated_at_utc", ",")
+	}
+	return csvHeaders[name]
+}

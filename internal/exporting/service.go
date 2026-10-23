@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"strconv"
 	"sync"
 	"time"
 
@@ -90,7 +91,14 @@ func (b *boundedBuffer) Write(p []byte) (int, error) {
 func (b *boundedBuffer) WriteString(s string) (int, error) { return b.Write([]byte(s)) }
 
 // Generate completes the artifact before returning it; callers must defer Close.
-func (s *Service) Generate(parent context.Context, owner identity.OwnerID, format string) (artifact *Artifact, err error) {
+func (s *Service) Generate(parent context.Context, owner identity.OwnerID, format string, versions ...int) (artifact *Artifact, err error) {
+	version := 1
+	if len(versions) > 0 {
+		version = versions[0]
+	}
+	if version != 1 && version != 2 {
+		return nil, ErrFormat
+	}
 	if !owner.Valid() {
 		return nil, identity.ErrNotAuthorized
 	}
@@ -135,15 +143,15 @@ func (s *Service) Generate(parent context.Context, owner identity.OwnerID, forma
 	buffer := &boundedBuffer{ctx: ctx, limit: s.limits.bytes}
 	var sink artifactSink
 	if format == "json" {
-		sink, err = newJSONSink(buffer, created, profile)
+		sink, err = newJSONSink(buffer, created, profile, version)
 	} else {
-		sink, err = newCSVSink(buffer, created, profile, s.limits.bytes)
+		sink, err = newCSVSink(buffer, created, profile, s.limits.bytes, version)
 	}
 	if err != nil {
 		return nil, err
 	}
 	wrapper := hookSink{Sink: sink, hook: s.afterCollection}
-	if err = finance.WriteExport(ctx, tx, owner, wrapper); err != nil {
+	if err = finance.WriteExport(ctx, tx, owner, wrapper, version); err != nil {
 		return nil, err
 	}
 	if format == "json" {
@@ -161,10 +169,10 @@ func (s *Service) Generate(parent context.Context, owner identity.OwnerID, forma
 		return nil, err
 	}
 	// Generation's context can now be released; the artifact remains bounded in memory.
-	filename := "lifeos-export-v1-" + created.UTC().Format("20060102T150405Z") + ".json"
+	filename := "lifeos-export-v" + strconv.Itoa(version) + "-" + created.UTC().Format("20060102T150405Z") + ".json"
 	contentType := "application/json; charset=utf-8"
 	if format == "finance_csv" {
-		filename = "lifeos-finance-csv-v1-" + created.UTC().Format("20060102T150405Z") + ".zip"
+		filename = "lifeos-finance-csv-v" + strconv.Itoa(version) + "-" + created.UTC().Format("20060102T150405Z") + ".zip"
 		contentType = "application/zip"
 	}
 	artifact = &Artifact{Data: buffer.Bytes(), Filename: filename, ContentType: contentType, release: release}

@@ -75,3 +75,7 @@ export const archiveMoneyAccount = (csrfToken: string, id: string) => moneyReque
 export const restoreMoneyAccount = (csrfToken: string, id: string) => moneyRequest<void>(`/api/v1/accounts/${encodeURIComponent(id)}/restore`, csrfToken);
 export const voidMoneyEvent = (csrfToken: string, id: string, reason = "") => moneyRequest<void>(`/api/v1/events/${encodeURIComponent(id)}/void`, csrfToken, { reason } satisfies components["schemas"]["MoneyVoidRequest"]);
 export const deleteMoneyEvent = (csrfToken: string, id: string) => moneyRequest<void>(`/api/v1/events/${encodeURIComponent(id)}/delete`, csrfToken);
+
+export type OpeningPreview = components["schemas"]["MoneyOpeningPreview"];
+export const previewOpeningBalance = (csrfToken: string, id: string, input: components["schemas"]["MoneyOpeningPreviewRequest"]) => moneyRequest<OpeningPreview>(`/api/v1/accounts/${encodeURIComponent(id)}/opening-balance/preview`, csrfToken, input);
+export const confirmOpeningBalance = (csrfToken: string, id: string, input: components["schemas"]["MoneyOpeningConfirmRequest"]) => moneyRequest<MoneyAccount>(`/api/v1/accounts/${encodeURIComponent(id)}/opening-balance/confirm`, csrfToken, input);

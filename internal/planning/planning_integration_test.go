@@ -192,7 +192,8 @@ func TestGoalsMigrationServiceAndHTTP(t *testing.T) {
 	owner := goalTestOwner(t, auth, ownerCookie)
 	other := goalTestOwner(t, auth, otherCookie)
 	financeService := finance.NewService(pool)
-	bank, err := financeService.CreateAccount(ctx, owner, finance.AccountInput{Name: "Synthetic bank", Type: "bank", Currency: "MYR", OpeningBalanceMinor: 12345})
+	bank := finance.Account{ID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", Name: "Synthetic bank", Type: "bank", Currency: "MYR", OpeningBalanceMinor: 12345}
+	_, err := pool.Exec(ctx, `INSERT INTO finance_accounts(id,owner_id,name,account_type,currency,opening_balance_minor) VALUES($1,$2,$3,'bank','MYR',12345)`, bank.ID, owner.String(), bank.Name)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -232,6 +233,9 @@ func TestGoalsMigrationServiceAndHTTP(t *testing.T) {
 	}
 	if version, dirty, err := runner.Version(); err != nil || version != 6 || dirty {
 		t.Fatalf("v6 migration version=%d dirty=%t err=%v", version, dirty, err)
+	}
+	if err := runner.Up(); err != nil {
+		t.Fatal(err)
 	}
 	checkBalance()
 

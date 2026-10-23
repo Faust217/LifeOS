@@ -1,10 +1,21 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { previewOpeningBalance, confirmOpeningBalance } from "./money";
 
 import { archiveMoneyAccount, archiveMoneyCategory, createMoneyAccount, deleteMoneyEvent, listMoneyAccounts, listMoneyHistory, MoneyApiError, postMoneyEvent, renameMoneyCategory, restoreMoneyAccount, restoreMoneyCategory, voidMoneyEvent } from "./money";
 
 afterEach(() => vi.unstubAllGlobals());
 
 describe("Money API boundary", () => {
+  it("uses guarded exact balance preview and revision confirmation without owner input", async () => {
+    const request=vi.fn().mockResolvedValue({ok:true,status:200,json:async()=>({})}); vi.stubGlobal("fetch",request);
+    await previewOpeningBalance("csrf","account-1",{opening_balance_at:"2026-10-01T00:00:00Z"});
+    await confirmOpeningBalance("csrf","account-1",{opening_balance_at:"2026-10-01T00:00:00Z",opening_balance_minor:"-9223372036854775808",balance_revision:"12",acknowledge_change:true});
+    expect(request.mock.calls[0][0]).toBe("/api/v1/accounts/account-1/opening-balance/preview");
+    expect(request.mock.calls[1][0]).toBe("/api/v1/accounts/account-1/opening-balance/confirm");
+    expect(JSON.parse(request.mock.calls[0][1].body)).not.toHaveProperty("opening_balance_minor");
+    expect(JSON.parse(request.mock.calls[1][1].body)).toMatchObject({opening_balance_minor:"-9223372036854775808",balance_revision:"12",acknowledge_change:true});
+    for(const call of request.mock.calls) { expect(call[1]).toMatchObject({method:"POST",credentials:"same-origin",cache:"no-store",headers:{"X-CSRF-Token":"csrf"}}); expect(call[1].body).not.toContain("owner_id"); }
+  });
   it("uses same-origin cookies and no owner override for reads", async () => {
     const request = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ items: [] }) });
     vi.stubGlobal("fetch", request);
@@ -17,12 +28,12 @@ describe("Money API boundary", () => {
   it("sends exact decimal-string amounts and CSRF on mutations", async () => {
     const request = vi.fn().mockResolvedValue({ ok: true, status: 201, json: async () => ({ id: "test" }) });
     vi.stubGlobal("fetch", request);
-    await createMoneyAccount("csrf-test", { name: "Cash", type: "cash", currency: "MYR", opening_balance_minor: "-25" });
+    await createMoneyAccount("csrf-test", { name: "Cash", type: "cash", currency: "MYR", opening_balance_minor: "-25", opening_balance_at: "2026-10-01T00:00:00Z" });
     await postMoneyEvent("csrf-test", { kind: "expense", account_id: "account-test", amount_minor: "29", currency: "MYR", occurred_at: "2020-01-01T00:00:00Z", allocations: [{ category_id: "category-test", amount_minor: "29" }] });
     const accountCall = request.mock.calls[0];
     const eventCall = request.mock.calls[1];
     expect(accountCall[1]).toMatchObject({ method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json", "X-CSRF-Token": "csrf-test" } });
-    expect(JSON.parse(accountCall[1].body)).toEqual({ name: "Cash", type: "cash", currency: "MYR", opening_balance_minor: "-25" });
+    expect(JSON.parse(accountCall[1].body)).toEqual({ name: "Cash", type: "cash", currency: "MYR", opening_balance_minor: "-25", opening_balance_at: "2026-10-01T00:00:00Z" });
     expect(JSON.parse(eventCall[1].body).allocations).toEqual([{ category_id: "category-test", amount_minor: "29" }]);
     expect(accountCall[1].body).not.toContain("owner_id");
   });

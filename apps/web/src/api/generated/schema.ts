@@ -4,6 +4,40 @@
  */
 
 export interface paths {
+    "/api/v1/accounts/{accountID}/opening-balance/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview a dated account balance without changing it */
+        post: operations["previewOpeningBalance"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/accounts/{accountID}/opening-balance/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirm a reviewed dated account balance once */
+        post: operations["confirmOpeningBalance"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/export": {
         parameters: {
             query?: never;
@@ -565,7 +599,14 @@ export interface components {
         OwnerExportRequest: {
             /** @enum {string} */
             format: "json" | "finance_csv";
+            /**
+             * @description Omitted means v1; dated accounts require explicit v2.
+             * @default 1
+             * @enum {integer}
+             */
+            export_version: 1 | 2;
         };
+        LifeOSOwnerExportV2: components["schemas"]["lifeos-export-v2.schema"];
         LifeOSOwnerExport: components["schemas"]["lifeos-export-v1.schema"];
         GoalTitleRequest: {
             title: string;
@@ -640,6 +681,50 @@ export interface components {
             type: "cash" | "bank" | "ewallet" | "savings" | "credit_card" | "other";
             currency: components["schemas"]["MoneyCurrency"];
             opening_balance_minor: components["schemas"]["MoneyMinorUnits"];
+            /**
+             * Format: date-time
+             * @description Explicit confirmed balance instant, no later than server time; saved owner timezone required.
+             */
+            opening_balance_at: string;
+        };
+        MoneyOpeningPreviewRequest: {
+            /** Format: date-time */
+            opening_balance_at: string;
+            /** @description Omit to suggest preserving the recorded balance. */
+            opening_balance_minor?: string;
+        };
+        MoneyOpeningConfirmRequest: {
+            /** Format: date-time */
+            opening_balance_at: string;
+            opening_balance_minor: string;
+            balance_revision: string;
+            /** @description Must be true when the reviewed current balance changes. */
+            acknowledge_change: boolean;
+        };
+        MoneyOpeningPreview: {
+            /** Format: uuid */
+            account_id: string;
+            currency: string;
+            /** Format: date-time */
+            opening_balance_at: string;
+            /** @constant */
+            previous_balance_basis: "legacy_all_movements";
+            /** @constant */
+            resulting_balance_basis: "known_balance_before_instant";
+            previous_opening_balance_minor: string;
+            balance_before_minor: string;
+            /** @description Exact integer text; may exceed int64 when suggestion is unavailable. */
+            suggested_opening_balance_minor: string;
+            suggested_representable: boolean;
+            chosen_opening_balance_minor: string | null;
+            balance_after_minor: string | null;
+            /** @description Exact wide difference, not a new stored monetary fact. */
+            balance_change_minor: string | null;
+            before_count: number;
+            before_net_minor: string;
+            on_or_after_count: number;
+            on_or_after_net_minor: string;
+            balance_revision: string;
         };
         MoneyAccount: {
             /** Format: uuid */
@@ -651,6 +736,13 @@ export interface components {
             opening_balance_minor: components["schemas"]["MoneyMinorUnits"];
             /** Format: date-time */
             archived_at?: string;
+            /** Format: date-time */
+            opening_balance_at: string | null;
+            /** Format: date-time */
+            opening_balance_confirmed_at: string | null;
+            /** @enum {string} */
+            opening_balance_basis: "legacy_all_movements" | "known_balance_before_instant";
+            balance_revision: string;
         };
         MoneyAccountsResponse: {
             items: components["schemas"]["MoneyAccount"][];
@@ -1051,6 +1143,179 @@ export interface components {
                 };
             };
         };
+        "$defs-Account": {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** @enum {string} */
+            account_type: "cash" | "bank" | "ewallet" | "savings" | "credit_card" | "other";
+            currency: string;
+            opening_balance_minor: string;
+            /** Format: date-time */
+            archived_at: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** @enum {string} */
+            opening_balance_basis: "legacy_all_movements" | "known_balance_before_instant";
+            /** Format: date-time */
+            opening_balance_at: string | null;
+            /** Format: date-time */
+            opening_balance_confirmed_at: string | null;
+        } & unknown;
+        /**
+         * LifeOSOwnerExportV2
+         * @description lifeos-export-v2 normal owner snapshot with explicit dated/legacy account calculation basis.
+         */
+        "lifeos-export-v2.schema": {
+            /** @constant */
+            format: "lifeos-export-v2";
+            /** @constant */
+            format_version: 2;
+            /** Format: date-time */
+            created_at: string;
+            owner: {
+                /** Format: uuid */
+                id: string;
+                /** Format: email */
+                email: string;
+                /** Format: date-time */
+                created_at: string;
+                /** Format: date-time */
+                updated_at: string;
+            };
+            preferences: {
+                time_zone: string | null;
+            };
+            finance: {
+                accounts: components["schemas"]["$defs-Account"][];
+                categories: components["schemas"]["Category"][];
+                events: components["schemas"]["Event"][];
+                movements: components["schemas"]["Movement"][];
+                allocations: components["schemas"]["Allocation"][];
+            };
+            planning: {
+                goals: components["schemas"]["$defs-Goal"][];
+                checklist_items: components["schemas"]["ChecklistItem"][];
+            };
+            record_counts: {
+                accounts: number;
+                categories: number;
+                events: number;
+                movements: number;
+                allocations: number;
+                goals: number;
+                checklist_items: number;
+            };
+            $defs: {
+                Account: {
+                    /** Format: uuid */
+                    id: string;
+                    name: string;
+                    /** @enum {string} */
+                    account_type: "cash" | "bank" | "ewallet" | "savings" | "credit_card" | "other";
+                    currency: string;
+                    opening_balance_minor: string;
+                    /** Format: date-time */
+                    archived_at: string | null;
+                    /** Format: date-time */
+                    created_at: string;
+                    /** Format: date-time */
+                    updated_at: string;
+                    /** @enum {string} */
+                    opening_balance_basis: "legacy_all_movements" | "known_balance_before_instant";
+                    /** Format: date-time */
+                    opening_balance_at: string | null;
+                    /** Format: date-time */
+                    opening_balance_confirmed_at: string | null;
+                } & unknown;
+                Category: {
+                    /** Format: uuid */
+                    id: string;
+                    name: string;
+                    /** @enum {string} */
+                    kind: "expense" | "income";
+                    /** Format: date-time */
+                    archived_at: string | null;
+                    /** Format: date-time */
+                    created_at: string;
+                    /** Format: date-time */
+                    updated_at: string;
+                };
+                Event: {
+                    /** Format: uuid */
+                    id: string;
+                    /** @enum {string} */
+                    kind: "expense" | "income" | "transfer";
+                    amount_minor: string;
+                    currency: string;
+                    /** Format: date-time */
+                    occurred_at: string;
+                    note: string;
+                    /** @enum {string} */
+                    status: "posted" | "voided";
+                    /** Format: date-time */
+                    voided_at: string | null;
+                    /** @description Stored audit text; may be server-generated. Author provenance is not inferred. */
+                    void_reason: string | null;
+                    /** Format: date-time */
+                    created_at: string;
+                };
+                Movement: {
+                    /** Format: uuid */
+                    id: string;
+                    /** Format: uuid */
+                    event_id: string;
+                    /** Format: uuid */
+                    account_id: string;
+                    amount_minor: string;
+                    currency: string;
+                    /** Format: date-time */
+                    created_at: string;
+                };
+                Allocation: {
+                    /** Format: uuid */
+                    id: string;
+                    /** Format: uuid */
+                    event_id: string;
+                    /** Format: uuid */
+                    category_id: string;
+                    /** @enum {string} */
+                    kind: "expense" | "income";
+                    amount_minor: string;
+                    currency: string;
+                    /** Format: date-time */
+                    created_at: string;
+                };
+                Goal: {
+                    /** Format: uuid */
+                    id: string;
+                    title: string;
+                    /** Format: date-time */
+                    completed_at: string | null;
+                    /** Format: date-time */
+                    archived_at: string | null;
+                    /** Format: date-time */
+                    created_at: string;
+                    /** Format: date-time */
+                    updated_at: string;
+                };
+                ChecklistItem: {
+                    /** Format: uuid */
+                    id: string;
+                    /** Format: uuid */
+                    goal_id: string;
+                    title: string;
+                    /** Format: date-time */
+                    completed_at: string | null;
+                    /** Format: date-time */
+                    created_at: string;
+                    /** Format: date-time */
+                    updated_at: string;
+                };
+            };
+        };
     };
     responses: {
         /** @description Owner-scoped Goal and current checklist progress. */
@@ -1266,6 +1531,88 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    previewOpeningBalance: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured public origin. */
+                Origin: components["parameters"]["MoneyOrigin"];
+                /** @description Session-bound token returned by GET /api/v1/me. */
+                "X-CSRF-Token": components["parameters"]["MoneyCSRF"];
+            };
+            path: {
+                accountID: components["parameters"]["MoneyAccountID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MoneyOpeningPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Complete owner-scoped preview with account revision; no database write. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MoneyOpeningPreview"];
+                };
+            };
+            400: components["responses"]["MoneyBadRequest"];
+            401: components["responses"]["MoneyUnauthorized"];
+            403: components["responses"]["MoneyForbidden"];
+            404: components["responses"]["MoneyNotFound"];
+            409: components["responses"]["MoneyConflict"];
+            413: components["responses"]["MoneyTooLarge"];
+            415: components["responses"]["MoneyUnsupportedMediaType"];
+            422: components["responses"]["MoneyOverflow"];
+            500: components["responses"]["MoneyInternalError"];
+            503: components["responses"]["MoneyUnavailable"];
+        };
+    };
+    confirmOpeningBalance: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured public origin. */
+                Origin: components["parameters"]["MoneyOrigin"];
+                /** @description Session-bound token returned by GET /api/v1/me. */
+                "X-CSRF-Token": components["parameters"]["MoneyCSRF"];
+            };
+            path: {
+                accountID: components["parameters"]["MoneyAccountID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MoneyOpeningConfirmRequest"];
+            };
+        };
+        responses: {
+            /** @description Complete owner-scoped confirmed account; repeat/stale confirmations conflict without another change. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MoneyAccount"];
+                };
+            };
+            400: components["responses"]["MoneyBadRequest"];
+            401: components["responses"]["MoneyUnauthorized"];
+            403: components["responses"]["MoneyForbidden"];
+            404: components["responses"]["MoneyNotFound"];
+            409: components["responses"]["MoneyConflict"];
+            413: components["responses"]["MoneyTooLarge"];
+            415: components["responses"]["MoneyUnsupportedMediaType"];
+            422: components["responses"]["MoneyOverflow"];
+            500: components["responses"]["MoneyInternalError"];
+            503: components["responses"]["MoneyUnavailable"];
+        };
+    };
     downloadOwnerExport: {
         parameters: {
             query?: never;
@@ -1295,7 +1642,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["lifeos-export-v1.schema"];
+                    "application/json": components["schemas"]["lifeos-export-v1.schema"] | components["schemas"]["lifeos-export-v2.schema"];
                     "application/zip": string;
                 };
             };
@@ -1308,6 +1655,21 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description export_version_incompatible; use explicit v2 for dated account balances. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: {
+                            /** @constant */
+                            code: "export_version_incompatible";
+                            message: string;
+                        };
+                    };
+                };
             };
             415: components["responses"]["MoneyUnsupportedMediaType"];
             /** @description export_limit_exceeded; no partial file is returned. */

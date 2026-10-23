@@ -218,7 +218,24 @@ Final delivery checks repeated the full Go suite (112 passed tests/subtests, zer
 
 Tests do not establish unlimited export capacity, universal spreadsheet safety, a new live Google login check or measured peak RSS. Serialized raw/output caps are enforced; runtime/buffer overhead and browser Blob overhead also consume memory. A snapshot acquired before a concurrent deletion can legitimately include that event; previously downloaded copies cannot be revoked.
 
-## Review references
+
+## Issue #33: accepted native v2 dated account support
+
+Accepted [ADR-018](adr/ADR-018-opening-balance-effective-instant.md) adds v2 alongside the immutable v1 specification above. The Me UI now explicitly requests v2. `POST /api/v1/me/export` accepts `export_version: 1 | 2`; omission remains v1. An owner with any dated account (including archived accounts) receives HTTP 409 `export_version_incompatible` for v1, with no file. Legacy-only owners retain v1. Do not silently rebase amounts or omit pre-date events.
+
+**JSON:** root `format="lifeos-export-v2"`, `format_version=2`; every v1 root/module/record field is retained. Each account additionally requires `opening_balance_basis`, `opening_balance_at`, `opening_balance_confirmed_at`. Basis is `legacy_all_movements` with both dates null, or `known_balance_before_instant` with both dates UTC. See `api/export/lifeos-export-v2.schema.json` and its independent synthetic golden. Events, movements, allocations, Goal relationships and exact money stay unchanged; internal balance revisions and conversion evidence are excluded. The original v1 schema/golden remain byte-for-byte unchanged.
+
+**Finance CSV ZIP:** same seven filenames; manifest `format="lifeos-finance-csv-v2"`, `format_version=2`. Only the accounts header changes, in this exact order:
+
+`account_id,name,account_type,currency,opening_balance_minor,opening_balance_decimal,opening_balance_basis,opening_balance_at_utc,opening_balance_confirmed_at_utc,archived_at_utc,created_at_utc,updated_at_utc`
+
+All other CSV headers, apostrophe text/amount guards, BOM, CRLF, quote-all escaping, integer/string decimal conversion and privacy limits remain as v1. Legacy dates use empty cells. README explains both account formulas; `affects_balances` retains event-level posted eligibility, and consumers must additionally apply each account's date to each joined movement. It does not promise that both transfer legs contribute against different starting assertions. `counts_as_spending` includes posted pre-date expenses; dates are not spending filters. No running balance is exported.
+
+**Reconstruction:** legacy opening + every posted visible movement; dated opening + posted visible movements whose event UTC occurrence is on/after that account's date. Before-date events remain exported and may count in spending. Void contributes zero; Soft Deleted events/children remain excluded. One transfer stays one event. The same read-only repeatable-read snapshot, bounded generation, guarded Origin/CSRF/owner access, session revalidation and private no-store response cover both versions. A concurrent conversion cannot mix old opening values with new dates in one artifact. No import/restore capability is added.
+
+Previously downloaded v1 artifacts retain their original meaning. Later Edit revision support needs a separate version review. Physical iOS/Android and Excel/LibreOffice remain unverified; no new platform guarantee is claimed. Local #33 samples and screenshots are ignored review artifacts, not personal data.
+
+### Original v1 review references
 
 - Accepted [ADR-009](adr/ADR-009-import-export-bluecoins.md), [ADR-013](adr/ADR-013-life-first-multi-user-rebaseline.md), [ADR-014](adr/ADR-014-google-identity-invitations-owner-isolation.md), [ADR-016](adr/ADR-016-financial-event-soft-delete.md) and [V0.1 Scope](V0.1_SCOPE.md).
 - [ADR-015](adr/ADR-015-personal-import-boundary.md) is Proposed and unrelated to approving Export implementation.

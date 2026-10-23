@@ -25,7 +25,7 @@ export function OwnerExport({ csrfToken, onSessionExpired }: { csrfToken: string
     release(); setDownload(null); setError(""); setMessage("Preparing your private export…"); setPending(true);
     const request = new AbortController(); controller.current = request;
     try {
-      const result = await downloadOwnerExport(csrfToken, format, request.signal);
+      const result = await downloadOwnerExport(csrfToken, format, request.signal, 2);
       if (request.signal.aborted) return;
       const url = URL.createObjectURL(result.blob); objectURL.current = url;
       setDownload({ url, filename: result.filename }); setMessage("Download ready. Use Save file if it did not start.");

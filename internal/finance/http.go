@@ -26,6 +26,8 @@ func RegisterRoutes(router chi.Router, auth *identity.Auth, service *Service) {
 	handler := moneyHandler{service: service}
 	router.MethodFunc(http.MethodGet, "/accounts", auth.RequireRead(handler.listAccounts))
 	router.MethodFunc(http.MethodPost, "/accounts", auth.RequireMutation(handler.createAccount))
+	router.MethodFunc(http.MethodPost, "/accounts/{accountID}/opening-balance/preview", auth.RequireMutation(handler.previewOpeningBalance))
+	router.MethodFunc(http.MethodPost, "/accounts/{accountID}/opening-balance/confirm", auth.RequireMutation(handler.confirmOpeningBalance))
 	router.MethodFunc(http.MethodGet, "/accounts/{accountID}/balance", auth.RequireRead(handler.balance))
 	router.MethodFunc(http.MethodPost, "/accounts/{accountID}/archive", auth.RequireMutation(handler.archiveAccount))
 	router.MethodFunc(http.MethodPost, "/accounts/{accountID}/restore", auth.RequireMutation(handler.restoreAccount))
@@ -43,10 +45,11 @@ func RegisterRoutes(router chi.Router, auth *identity.Auth, service *Service) {
 }
 
 type accountRequest struct {
-	Name                string `json:"name"`
-	Type                string `json:"type"`
-	Currency            string `json:"currency"`
-	OpeningBalanceMinor string `json:"opening_balance_minor"`
+	Name                string     `json:"name"`
+	Type                string     `json:"type"`
+	Currency            string     `json:"currency"`
+	OpeningBalanceMinor string     `json:"opening_balance_minor"`
+	OpeningBalanceAt    *time.Time `json:"opening_balance_at"`
 }
 
 type accountResponse struct {
@@ -56,6 +59,10 @@ type accountResponse struct {
 	Currency            string     `json:"currency"`
 	OpeningBalanceMinor string     `json:"opening_balance_minor"`
 	ArchivedAt          *time.Time `json:"archived_at,omitempty"`
+	OpeningBalanceAt    *time.Time `json:"opening_balance_at"`
+	OpeningConfirmedAt  *time.Time `json:"opening_balance_confirmed_at"`
+	OpeningBasis        string     `json:"opening_balance_basis"`
+	BalanceRevision     string     `json:"balance_revision"`
 }
 
 type categoryRequest struct {
@@ -132,7 +139,15 @@ type eventResponse struct {
 
 func accountDTO(account Account) accountResponse {
 	return accountResponse{ID: account.ID, Name: account.Name, Type: account.Type, Currency: account.Currency,
-		OpeningBalanceMinor: strconv.FormatInt(account.OpeningBalanceMinor, 10), ArchivedAt: account.ArchivedAt}
+		OpeningBalanceMinor: strconv.FormatInt(account.OpeningBalanceMinor, 10), ArchivedAt: account.ArchivedAt, OpeningBalanceAt: utcOpeningInstant(account.OpeningBalanceAt), OpeningConfirmedAt: utcOpeningInstant(account.OpeningConfirmedAt), BalanceRevision: strconv.FormatInt(account.BalanceRevision, 10), OpeningBasis: account.OpeningBasis()}
+}
+
+func utcOpeningInstant(at *time.Time) *time.Time {
+	if at == nil {
+		return nil
+	}
+	utc := at.UTC()
+	return &utc
 }
 
 func categoryDTO(category Category) categoryResponse {
@@ -171,7 +186,7 @@ func (h moneyHandler) createAccount(w http.ResponseWriter, r *http.Request, owne
 		return
 	}
 	account, err := h.service.CreateAccount(r.Context(), owner, AccountInput{
-		Name: input.Name, Type: input.Type, Currency: input.Currency, OpeningBalanceMinor: opening})
+		Name: input.Name, Type: input.Type, Currency: input.Currency, OpeningBalanceMinor: opening, OpeningBalanceAt: input.OpeningBalanceAt})
 	if err != nil {
 		writeMoneyError(w, err)
 		return

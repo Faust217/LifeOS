@@ -26,9 +26,13 @@ func writeJSON(w io.Writer, v any) error {
 	_, err = w.Write(b)
 	return err
 }
-func newJSONSink(w io.Writer, created time.Time, p exportdata.Profile) (*jsonSink, error) {
+func newJSONSink(w io.Writer, created time.Time, p exportdata.Profile, versions ...int) (*jsonSink, error) {
 	s := &jsonSink{w: w, counts: map[string]int{}}
-	if _, err := io.WriteString(w, `{"format":"lifeos-export-v1","format_version":1,"created_at":`); err != nil {
+	version := 1
+	if len(versions) > 0 {
+		version = versions[0]
+	}
+	if _, err := io.WriteString(w, fmt.Sprintf(`{"format":"lifeos-export-v%d","format_version":%d,"created_at":`, version, version)); err != nil {
 		return nil, err
 	}
 	if err := writeJSON(w, exportdata.UTC(created)); err != nil {

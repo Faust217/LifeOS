@@ -21,6 +21,15 @@ describe("private owner export download", () => {
     vi.stubGlobal("fetch",vi.fn().mockResolvedValue(new Response("",{status:401})));
     await expect(downloadOwnerExport("csrf","json",new AbortController().signal)).rejects.toBeInstanceOf(SessionExpiredError);
   });
+  it("requests v2 explicitly without accepting a differently versioned filename", async () => {
+    const request=vi.fn().mockResolvedValue(response(bytes,{"Content-Disposition":'attachment; filename="lifeos-export-v2-20261020T040000Z.json"'}));
+    vi.stubGlobal("fetch",request);
+    const signal=new AbortController().signal;
+    expect((await downloadOwnerExport("csrf","json",signal,2)).filename).toContain("-v2-");
+    expect(JSON.parse(request.mock.calls[0][1].body)).toEqual({format:"json",export_version:2});
+    request.mockResolvedValue(response());
+    await expect(downloadOwnerExport("csrf","json",signal,2)).rejects.toThrow();
+  });
   it("rejects size, MIME, unsafe filename and truncated responses", async () => {
     const invalidHeaders: Record<string,string>[] = [{"Content-Length":String(MAX_EXPORT_BYTES+1)},{"Content-Length":"999"},{"Content-Type":"text/html"},{"Content-Disposition":'attachment; filename="../private.json"'}];
     for(const headers of invalidHeaders){

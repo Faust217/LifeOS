@@ -1,8 +1,8 @@
 # LifeOS Roadmap
 
-**Status:** Issue #16 direction approved; ADR-013, ADR-014, ADR-016 and ADR-017 accepted. Issue #29 Soft Delete is implemented and Product Owner approved. Bluecoins import scope change awaits proposed ADR-015 acceptance.
+**Status:** Issue #16 direction approved; ADR-013, ADR-014, ADR-016, ADR-017 and ADR-018 accepted. Issue #29 Soft Delete is implemented and Product Owner approved. Bluecoins import scope change awaits proposed ADR-015 acceptance.
 
-**Updated:** 2026-10-20
+**Updated:** 2026-10-23
 
 ## Roadmap Rule
 
@@ -15,7 +15,7 @@ Unplanned ideas go to a backlog unless they change core semantics. They should n
 | Release | Goal | Major capability |
 | --- | --- | --- |
 | Foundation | Build the base | Repository, governance, Docker, PostgreSQL, migrations, Go module boundaries, OpenAPI, CI, and ADRs |
-| V0.1 Invite-only online Alpha | Prove a useful, durable private mobile-first life workflow | Complete Me/export after the approved pre-Me Money gates; correct Finance semantics and idempotency; verify backup/restore and non-destructive upgrades; establish Personal Data Ready gate |
+| V0.1 Invite-only online Alpha | Prove a useful, durable private mobile-first life workflow | Me/export complete; Opening Balance → Idempotency → Atomic Edit → Historical Running Balances under separate reviews; verify backup/restore and non-destructive upgrades; establish Personal Data Ready gate |
 | V0.2 Insight and capture | Make Money history easier to use and assess offline needs | API-backed transaction search/filter and monthly/category spending charts first; Wishlist and offline sync remain planned, with their order subject to Product Owner approval |
 | V0.3 | Extend Plans after daily-use evidence | Trips and richer Plans capabilities, each requiring separate scope review |
 | Later milestones | Expand only after use proves the need | Assets, People/Split, privacy-conscious Admin Dashboard, optional AI/MCP, self-host hardening, and possible native client |
@@ -37,7 +37,16 @@ Expected capability:
 
 Issue #31 is completed, pushed and closed. The Product Owner accepted [ADR-017](adr/ADR-017-owner-data-export.md) and authorized [Issue #32](https://github.com/Faust217/LifeOS/issues/32) **Me / Owner Data Export** on 2026-10-20. The [approved design](EXPORT_DESIGN.md) is implemented, verified and Product Owner approved: compact profile/sign-out/timezone management, complete versioned normal owner JSON and guarded Finance CSV ZIP with exact minor-unit/readable decimal values. The Product Owner approved visual and actual export-file review and authorized final delivery after verification; Issue #32 records its commit/closure. Export does not pass Personal Data Ready or introduce import/restore. ADR-015 remains a separate Proposed decision.
 
-The current product milestone is defined in [V0.1_SCOPE.md](V0.1_SCOPE.md). Today and the focused Money category/Void refinements are complete. The Product Owner accepted [ADR-016](adr/ADR-016-financial-event-soft-delete.md) and closed [Issue #29](https://github.com/Faust217/LifeOS/issues/29) after verification and visual review. Linked ledger records remain internally. The Product Owner approved [Issue #30](https://github.com/Faust217/LifeOS/issues/30) compact date-grouped Money history and persisted owner timezone; implementation was delivered and Issue #30 was closed. [Issue #31](https://github.com/Faust217/LifeOS/issues/31) is a focused Today/Plans UI polish after Money; its implementation passed Product Owner visual review. Me/export is now implemented and Product Owner approved in Issue #32. Later work includes opening-balance effective dates and backdated-entry correctness, safe owner-scoped financial-write idempotency, database backup/restore, and a non-destructive upgrade rehearsal, each under its own scope and approval. Evaluate historical running balances only after the correct Finance semantics are defined. Evaluate an installable PWA, secure HTTPS hosting, and reliable persistent storage before inviting real-data use. Owner isolation and safe forward migrations remain permanent requirements.
+The Product Owner approved the next Finance correctness/daily-use order, with **local #33 implementation only** currently authorized:
+
+1. [#33 Opening Balance Effective Date and Backdated Transactions](https://github.com/Faust217/LifeOS/issues/33): known-balance instant, explicit safe legacy conversion; [ADR-018](adr/ADR-018-opening-balance-effective-instant.md) Accepted. The Product Owner accepted the v8 implementation and v2 artifacts on 2026-10-23 and authorized final delivery; commit/closure evidence is tracked in #33.
+2. [#34 Owner-scoped Financial Write Idempotency](https://github.com/Faust217/LifeOS/issues/34): small PostgreSQL mechanism and reviewed retry/conflict/retention contract.
+3. [#35 Atomic Edit Transaction with Revision Audit](https://github.com/Faust217/LifeOS/issues/35): stable event ID, narrow one-save edit, complete splits and non-counting prior revision evidence.
+4. [#36 Historical Per-Account Running Balances](https://github.com/Faust217/LifeOS/issues/36): complete account data, deterministic order, compact Sage Green rows and snapshot-aware pages.
+
+Each depends on the previous capability and explicit design/implementation authorization. Do not infer legacy anchors, present incomplete pre-anchor reconstruction as bank-verified, count old edit revisions, or redefine export v1. Issue #33 implements the accepted v2 boundary and forward migration v8 in disposable tests. #34–#36 have not begun. Personal-data access, deployment and automatic progression remain unauthorized.
+
+The current product milestone is defined in [V0.1_SCOPE.md](V0.1_SCOPE.md). Today and the focused Money category/Void refinements are complete. The Product Owner accepted [ADR-016](adr/ADR-016-financial-event-soft-delete.md) and closed [Issue #29](https://github.com/Faust217/LifeOS/issues/29) after verification and visual review. Linked ledger records remain internally. The Product Owner approved [Issue #30](https://github.com/Faust217/LifeOS/issues/30) compact date-grouped Money history and persisted owner timezone; implementation was delivered and Issue #30 was closed. [Issue #31](https://github.com/Faust217/LifeOS/issues/31) is a focused Today/Plans UI polish after Money; its implementation passed Product Owner visual review. Me/export is complete in Issue #32. The next four Finance capabilities follow the approved order above, then separately scoped database backup/restore and non-destructive upgrade rehearsal remain mandatory before real-data use. Evaluate an installable PWA, secure HTTPS hosting, and reliable persistent storage before inviting real-data use. Owner isolation and safe forward migrations remain permanent requirements.
 
 **Personal Data Ready gate:** Do not use real financial data until opening-balance/backdated correctness, idempotent writes, owner isolation, suitable export, verified backups and restore, non-destructive upgrade, and an appropriately secured persistent deployment have evidence and Product Owner acceptance. A working dashboard or browser preview alone does not pass this gate.
 
@@ -65,7 +74,7 @@ V1.0 criteria will be set from observed use rather than assuming every deferred 
 
 The API-backed search/filter and monthly/category charts are now V0.2 priorities. Recurring scheduled income/expense and broad icon/text refinement remain deferred backlog ideas.
 
-Before the private Alpha relies on real personal finance data, review and resolve opening-balance effective dates with correct backdated-entry semantics, and owner-scoped idempotency for financial writes. Current warning text and uncertain-result retry guidance do not close these correctness gates. Historical post-transaction account balances are another deferred Money enhancement.
+Before the private Alpha relies on real personal finance data, implement and verify the accepted opening-balance/backdated and owner-scoped idempotency decisions under their separately approved issues. Current warnings and uncertain-result retry guidance do not close these gates. Atomic editing and historical post-transaction balances are planned as the third and fourth Finance scopes above; their implementation has not begun.
 
 ## Future Domains
 

@@ -141,6 +141,9 @@ func TestFinanceMigrationAndLedger(t *testing.T) {
 	if version, dirty, err := runner.Version(); err != nil || version != 6 || dirty {
 		t.Fatalf("soft delete migration version=%d dirty=%t err=%v", version, dirty, err)
 	}
+	if err := runner.Up(); err != nil {
+		t.Fatal(err)
+	}
 	service := NewService(pool)
 	if got, err := service.Balance(ctx, upgradeOwner, upgradeAccount); err != nil || got.AmountMinor != 900 {
 		t.Fatalf("upgrade event balance=%+v err=%v", got, err)
@@ -152,7 +155,7 @@ func TestFinanceMigrationAndLedger(t *testing.T) {
 	now := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
 	account := func(o identity.OwnerID, name, kind, currencyCode string, opening int64) Account {
 		t.Helper()
-		result, err := service.CreateAccount(ctx, o, AccountInput{Name: name, Type: kind, Currency: currencyCode, OpeningBalanceMinor: opening})
+		result, err := legacyTestAccount(ctx, service, o, AccountInput{Name: name, Type: kind, Currency: currencyCode, OpeningBalanceMinor: opening})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -590,7 +593,7 @@ func TestFinanceMigrationAndLedger(t *testing.T) {
 	}
 
 	// Empty Goals and no deleted events can roll back to v4; populated Finance cannot.
-	if err := runner.Steps(-2); err != nil {
+	if err := runner.Steps(-4); err != nil {
 		t.Fatalf("roll back empty v6/v5 extensions: %v", err)
 	}
 	// A populated down migration refuses to erase financial history.

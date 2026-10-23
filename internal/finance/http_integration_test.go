@@ -150,7 +150,7 @@ func TestParseMinorUnit(t *testing.T) {
 
 func TestMoneyHTTPIntegration(t *testing.T) {
 	pool, runner := financeTestDatabase(t, "LIFEOS_MONEY_API_TEST_DATABASE_URL")
-	if err := runner.Steps(3); err != nil {
+	if err := runner.Up(); err != nil {
 		t.Fatalf("upgrade API test database to v6: %v", err)
 	}
 	const ownerID = "11111111-1111-4111-8111-111111111111"
@@ -230,9 +230,12 @@ func TestMoneyHTTPIntegration(t *testing.T) {
 	tooLarge := `{"name":"` + strings.Repeat("x", maxMoneyRequestBytes) + `","kind":"expense"}`
 	moneyError(t, request(http.MethodPost, "/api/v1/categories", tooLarge, ownerCookie, ownerCSRF), http.StatusRequestEntityTooLarge, "request_too_large")
 
-	ownerBank := moneyDecode[accountResponse](t, request(http.MethodPost, "/api/v1/accounts", `{"name":"Bank","type":"bank","currency":"MYR","opening_balance_minor":"1000"}`, ownerCookie, ownerCSRF), http.StatusCreated)
-	ownerCard := moneyDecode[accountResponse](t, request(http.MethodPost, "/api/v1/accounts", `{"name":"Card","type":"credit_card","currency":"MYR","opening_balance_minor":"-500"}`, ownerCookie, ownerCSRF), http.StatusCreated)
-	testerBank := moneyDecode[accountResponse](t, request(http.MethodPost, "/api/v1/accounts", `{"name":"Tester","type":"bank","currency":"MYR","opening_balance_minor":"200"}`, testerCookie, testerCSRF), http.StatusCreated)
+	if _, err := pool.Exec(context.Background(), `UPDATE lifeos_users SET time_zone='Asia/Kuala_Lumpur' WHERE id IN ($1,$2)`, ownerID, testerID); err != nil {
+		t.Fatal(err)
+	}
+	ownerBank := moneyDecode[accountResponse](t, request(http.MethodPost, "/api/v1/accounts", `{"name":"Bank","type":"bank","currency":"MYR","opening_balance_minor":"1000","opening_balance_at":"1970-01-01T00:00:00Z"}`, ownerCookie, ownerCSRF), http.StatusCreated)
+	ownerCard := moneyDecode[accountResponse](t, request(http.MethodPost, "/api/v1/accounts", `{"name":"Card","type":"credit_card","currency":"MYR","opening_balance_minor":"-500","opening_balance_at":"1970-01-01T00:00:00Z"}`, ownerCookie, ownerCSRF), http.StatusCreated)
+	testerBank := moneyDecode[accountResponse](t, request(http.MethodPost, "/api/v1/accounts", `{"name":"Tester","type":"bank","currency":"MYR","opening_balance_minor":"200","opening_balance_at":"1970-01-01T00:00:00Z"}`, testerCookie, testerCSRF), http.StatusCreated)
 	food := moneyDecode[categoryResponse](t, request(http.MethodPost, "/api/v1/categories", `{"name":"Food","kind":"expense"}`, ownerCookie, ownerCSRF), http.StatusCreated)
 	salary := moneyDecode[categoryResponse](t, request(http.MethodPost, "/api/v1/categories", `{"name":"Salary","kind":"income"}`, ownerCookie, ownerCSRF), http.StatusCreated)
 	testerFood := moneyDecode[categoryResponse](t, request(http.MethodPost, "/api/v1/categories", `{"name":"Private","kind":"expense"}`, testerCookie, testerCSRF), http.StatusCreated)
