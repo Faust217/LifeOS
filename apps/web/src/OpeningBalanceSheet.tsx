@@ -1,10 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import { confirmOpeningBalance, listMoneyAccounts, MoneyApiError, previewOpeningBalance, type MoneyAccount, type OpeningPreview } from "./api/money";
+import { confirmOpeningBalance, MoneyApiError, previewOpeningBalance, type MoneyAccount, type OpeningPreview } from "./api/money";
+import { FinancialWriteRecovery, usePendingFinancialWrite } from "./FinancialWriteRecovery";
+import { pendingFinancialWrite } from "./pendingFinancialWrite";
 import { formatLocalDate, formatLocalTimeWithZone, formatMinorUnits, localDateTimeValue, matchingInstants, parseAmountToMinor, toOccurredAt } from "./moneyAmount";
 
 export type OpeningBalanceDraft = { now: string; historical: boolean; when: string; instant: string; preserve: boolean; amount: string };
 
-export function OpeningBalanceSheet({ account, csrfToken, timeZone, draft, onDraft, onClose, onSaved, onSessionExpired }: { account: MoneyAccount; csrfToken: string; timeZone: string; draft?: OpeningBalanceDraft; onDraft: (draft: OpeningBalanceDraft) => void; onClose: () => void; onSaved: () => void; onSessionExpired: () => void }) {
+export function OpeningBalanceSheet({ account, csrfToken, timeZone, draft, onDraft, onClose, onSaved, onRecovered, onSessionExpired }: { account: MoneyAccount; csrfToken: string; timeZone: string; draft?: OpeningBalanceDraft; onDraft: (draft: OpeningBalanceDraft) => void; onClose: () => void; onSaved: () => void; onRecovered: () => void; onSessionExpired: () => void }) {
+  const recovery = usePendingFinancialWrite();
+  const financialBlocked = recovery.kind !== "empty" && recovery.kind !== "hidden";
   const dialog = useRef<HTMLDialogElement>(null);
   const trigger = useRef<HTMLElement | null>(null);
   const reviewHeading = useRef<HTMLParagraphElement>(null);
@@ -39,9 +43,13 @@ export function OpeningBalanceSheet({ account, csrfToken, timeZone, draft, onDra
     } catch (cause) { report(cause); }
     finally { pending.current = false; setBusy(false); }
   }
-  function report(cause: unknown) {
+  function report(cause: unknown, fromConfirm = false) {
     if (cause instanceof MoneyApiError && cause.status === 401) onSessionExpired();
-    else setError(cause instanceof MoneyApiError && cause.status === 409 ? "This account changed. Review the balance again before confirming." : cause instanceof Error ? cause.message : "Unable to review this balance. Please retry.");
+    else {
+      const recoveryStatus = pendingFinancialWrite.status();
+      if (fromConfirm && recoveryStatus.kind !== "empty" && recoveryStatus.kind !== "hidden") return;
+      setError(cause instanceof MoneyApiError && cause.status === 409 ? "This account changed. Review the balance again before confirming." : cause instanceof Error ? cause.message : "Unable to review this balance. Please retry.");
+    }
   }
   async function confirm() {
     if (!preview?.chosen_opening_balance_minor || pending.current) return;
@@ -50,15 +58,8 @@ export function OpeningBalanceSheet({ account, csrfToken, timeZone, draft, onDra
       await confirmOpeningBalance(csrfToken, account.id, { opening_balance_at: preview.opening_balance_at, opening_balance_minor: preview.chosen_opening_balance_minor, balance_revision: preview.balance_revision, acknowledge_change: ack });
       onSaved();
     } catch (cause) {
-      // Resolve an uncertain response by reading current state, never by blindly converting again.
-      if (cause instanceof MoneyApiError && (cause.status === 0 || cause.status === 200 || cause.status === 409 || cause.status >= 500)) {
-        try {
-          const current = (await listMoneyAccounts()).items.find((item) => item.id === account.id);
-          if (current?.opening_balance_at === preview.opening_balance_at && current.opening_balance_minor === preview.chosen_opening_balance_minor) { onSaved(); return; }
-        } catch { /* Keep the original draft/error and allow a safe fresh review. */ }
-      }
-      report(cause);
-      if (cause instanceof MoneyApiError && cause.status === 409) setPreview(null);
+      report(cause, true);
+      if (cause instanceof MoneyApiError && cause.status === 409 && cause.code === "conflict") setPreview(null);
     } finally { pending.current = false; setBusy(false); }
   }
   const changed = preview?.balance_change_minor != null && preview.balance_change_minor !== "0";
@@ -71,6 +72,7 @@ export function OpeningBalanceSheet({ account, csrfToken, timeZone, draft, onDra
   }}>
     <div className="money-dialog-content">
       <div className="money-dialog-head"><h2 id="opening-title">Confirm balance date</h2><button className="money-dialog-close" type="button" aria-label="Close balance review" disabled={busy} onClick={onClose}>×</button></div>
+      <FinancialWriteRecovery csrfToken={csrfToken} onRecovered={onRecovered} onSessionExpired={onSessionExpired} />
       <p><strong>{account.name}</strong> · {account.currency}</p>
       <p className="money-help">Choose a balance and date so older entries are not counted twice. Nothing changes until you confirm.</p>
       {!preview ? <form className="money-form" onSubmit={(event) => { event.preventDefault(); void review(); }}>
@@ -90,7 +92,7 @@ export function OpeningBalanceSheet({ account, csrfToken, timeZone, draft, onDra
         {!preview.suggested_representable && preserve && <p role="alert">A balance that preserves the current total cannot be suggested within the supported range. Change details and enter a known balance.</p>}
         <p className="money-help">{preview.before_count} earlier recorded transaction(s) stay in history and spending. They will not change this dated balance again.</p>
         {changed && <label className="money-choice"><input type="checkbox" checked={ack} disabled={busy} onChange={(event) => setAck(event.target.checked)} />I understand my recorded balance will change by {formatMinorUnits(preview.balance_change_minor!, account.currency)}.</label>}
-        <div className="money-confirm-actions"><button className="button button-outline" type="button" disabled={busy} onClick={() => setPreview(null)}>Change details</button><button className="button button-primary" type="button" disabled={busy || preview.chosen_opening_balance_minor == null || (changed && !ack)} onClick={() => void confirm()}>{busy ? "Confirming…" : "Confirm balance"}</button></div>
+        <div className="money-confirm-actions"><button className="button button-outline" type="button" disabled={busy || financialBlocked} onClick={() => setPreview(null)}>Change details</button><button className="button button-primary" type="button" disabled={busy || financialBlocked || preview.chosen_opening_balance_minor == null || (changed && !ack)} onClick={() => void confirm()}>{busy ? "Confirming…" : "Confirm balance"}</button></div>
       </div>}
       {error && <p role="alert" className="money-field-error">{error}</p>}
       <button className="money-text-action" type="button" disabled={busy} onClick={onClose}>Cancel</button>

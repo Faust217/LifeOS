@@ -5,7 +5,10 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"github.com/jackc/pgx/v5"
 	"math"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -117,19 +120,27 @@ type TransferInput struct {
 
 type Service struct{ repo *repository }
 
-func NewService(pool *pgxpool.Pool) *Service { return &Service{repo: &repository{pool: pool}} }
+func NewService(pool *pgxpool.Pool) *Service {
+	return &Service{repo: &repository{pool: pool, writeSlots: make(chan struct{}, 8), keyLimit: FinancialWriteKeyLimit, capacityObserver: observeCapacity}}
+}
 
-func (s *Service) CreateAccount(ctx context.Context, owner identity.OwnerID, input AccountInput) (Account, error) {
+func (s *Service) CreateAccount(ctx context.Context, owner identity.OwnerID, input AccountInput, requestKey string) (Account, error) {
 	if !owner.Valid() {
 		return Account{}, ErrUnauthorized
 	}
 	input.Name = strings.TrimSpace(input.Name)
-	if input.Name == "" || len(input.Name) > 120 || !validCurrency(input.Currency) || !validAccountType(input.Type) || !validOpeningInstant(input.OpeningBalanceAt) {
+	if input.Name == "" || !utf8.ValidString(input.Name) || len(input.Name) > 120 || !validCurrency(input.Currency) || !validAccountType(input.Type) || !validOpeningShape(input.OpeningBalanceAt) {
 		return Account{}, ErrInvalidInput
 	}
 	at := input.OpeningBalanceAt.UTC().Truncate(time.Microsecond)
 	input.OpeningBalanceAt = &at
-	return s.repo.createAccount(ctx, owner, input)
+	cmd := financialCommand{operation: "account.create", parameters: []any{input.Name, input.Type, input.Currency, strconv.FormatInt(input.OpeningBalanceMinor, 10), canonicalInstant(at)}}
+	return executeFinancialWrite(ctx, s.repo, owner, requestKey, cmd, func(ctx context.Context, tx pgx.Tx) (Account, error) {
+		if !validOpeningInstant(input.OpeningBalanceAt) {
+			return Account{}, ErrInvalidInput
+		}
+		return s.repo.createAccountInTx(ctx, tx, owner, input)
+	})
 }
 
 func (s *Service) CreateCategory(ctx context.Context, owner identity.OwnerID, input CategoryInput) (Category, error) {
@@ -174,21 +185,27 @@ func (s *Service) RestoreCategory(ctx context.Context, owner identity.OwnerID, c
 	return s.repo.restoreCategory(ctx, owner, categoryID)
 }
 
-func (s *Service) PostExpense(ctx context.Context, owner identity.OwnerID, input EventInput) (Event, error) {
-	return s.postSingleAccountEvent(ctx, owner, "expense", input)
+func (s *Service) PostExpense(ctx context.Context, owner identity.OwnerID, input EventInput, requestKey string) (Event, error) {
+	return s.postSingleAccountEvent(ctx, owner, "expense", input, requestKey)
 }
 
-func (s *Service) PostIncome(ctx context.Context, owner identity.OwnerID, input EventInput) (Event, error) {
-	return s.postSingleAccountEvent(ctx, owner, "income", input)
+func (s *Service) PostIncome(ctx context.Context, owner identity.OwnerID, input EventInput, requestKey string) (Event, error) {
+	return s.postSingleAccountEvent(ctx, owner, "income", input, requestKey)
 }
 
-func (s *Service) postSingleAccountEvent(ctx context.Context, owner identity.OwnerID, kind string, input EventInput) (Event, error) {
+func (s *Service) postSingleAccountEvent(ctx context.Context, owner identity.OwnerID, kind string, input EventInput, requestKey string) (Event, error) {
 	if !owner.Valid() {
 		return Event{}, ErrUnauthorized
 	}
 	if !validID(input.AccountID) || !validEventInput(input.AmountMinor, input.Currency, input.OccurredAt, input.Note) {
 		return Event{}, ErrInvalidInput
 	}
+	input.AccountID = strings.ToLower(input.AccountID)
+	input.Allocations = append([]AllocationInput{}, input.Allocations...)
+	for i := range input.Allocations {
+		input.Allocations[i].CategoryID = strings.ToLower(input.Allocations[i].CategoryID)
+	}
+	sort.Slice(input.Allocations, func(i, j int) bool { return input.Allocations[i].CategoryID < input.Allocations[j].CategoryID })
 	var total int64
 	seen := make(map[string]bool, len(input.Allocations))
 	for _, allocation := range input.Allocations {
@@ -208,26 +225,38 @@ func (s *Service) postSingleAccountEvent(ctx context.Context, owner identity.Own
 	if kind == "expense" {
 		amount = -amount
 	}
-	return s.repo.post(ctx, owner, postSpec{
-		kind: kind, amount: input.AmountMinor, currency: input.Currency,
-		occurredAt: input.OccurredAt.UTC().Truncate(time.Microsecond), note: input.Note,
-		movements:   []movementSpec{{accountID: input.AccountID, amount: amount}},
-		allocations: input.Allocations,
+	pairs := make([]any, 0, len(input.Allocations))
+	for _, a := range input.Allocations {
+		pairs = append(pairs, []any{a.CategoryID, strconv.FormatInt(a.AmountMinor, 10)})
+	}
+	cmd := financialCommand{operation: "event.create", parameters: []any{kind, input.AccountID, strconv.FormatInt(input.AmountMinor, 10), input.Currency, canonicalInstant(input.OccurredAt), input.Note, pairs}}
+	return executeFinancialWrite(ctx, s.repo, owner, requestKey, cmd, func(ctx context.Context, tx pgx.Tx) (Event, error) {
+		return s.repo.postInTx(ctx, tx, owner, postSpec{
+			kind: kind, amount: input.AmountMinor, currency: input.Currency,
+			occurredAt: input.OccurredAt.UTC().Truncate(time.Microsecond), note: input.Note,
+			movements:   []movementSpec{{accountID: input.AccountID, amount: amount}},
+			allocations: input.Allocations,
+		})
 	})
 }
 
-func (s *Service) Transfer(ctx context.Context, owner identity.OwnerID, input TransferInput) (Event, error) {
+func (s *Service) Transfer(ctx context.Context, owner identity.OwnerID, input TransferInput, requestKey string) (Event, error) {
 	if !owner.Valid() {
 		return Event{}, ErrUnauthorized
 	}
+	input.FromAccountID = strings.ToLower(input.FromAccountID)
+	input.ToAccountID = strings.ToLower(input.ToAccountID)
 	if !validID(input.FromAccountID) || !validID(input.ToAccountID) || input.FromAccountID == input.ToAccountID ||
 		!validEventInput(input.AmountMinor, input.Currency, input.OccurredAt, input.Note) {
 		return Event{}, ErrInvalidInput
 	}
-	return s.repo.post(ctx, owner, postSpec{
-		kind: "transfer", amount: input.AmountMinor, currency: input.Currency,
-		occurredAt: input.OccurredAt.UTC().Truncate(time.Microsecond), note: input.Note,
-		movements: []movementSpec{{accountID: input.FromAccountID, amount: -input.AmountMinor}, {accountID: input.ToAccountID, amount: input.AmountMinor}},
+	cmd := financialCommand{operation: "transfer.create", parameters: []any{input.FromAccountID, input.ToAccountID, strconv.FormatInt(input.AmountMinor, 10), input.Currency, canonicalInstant(input.OccurredAt), input.Note}}
+	return executeFinancialWrite(ctx, s.repo, owner, requestKey, cmd, func(ctx context.Context, tx pgx.Tx) (Event, error) {
+		return s.repo.postInTx(ctx, tx, owner, postSpec{
+			kind: "transfer", amount: input.AmountMinor, currency: input.Currency,
+			occurredAt: input.OccurredAt.UTC().Truncate(time.Microsecond), note: input.Note,
+			movements: []movementSpec{{accountID: input.FromAccountID, amount: -input.AmountMinor}, {accountID: input.ToAccountID, amount: input.AmountMinor}},
+		})
 	})
 }
 
@@ -301,30 +330,44 @@ const noVoidReasonProvided = "No reason provided by owner"
 
 // VoidEvent keeps the original event, movements, and allocations for audit.
 // A corrected event is posted separately after the void succeeds.
-func (s *Service) VoidEvent(ctx context.Context, owner identity.OwnerID, eventID, reason string) error {
+func (s *Service) VoidEvent(ctx context.Context, owner identity.OwnerID, eventID, reason, requestKey string) error {
 	if !owner.Valid() {
 		return ErrUnauthorized
 	}
+	eventID = strings.ToLower(eventID)
 	reason = strings.TrimSpace(reason)
-	if !validID(eventID) || utf8.RuneCountInString(reason) > 500 {
+	if !validID(eventID) || !utf8.ValidString(reason) || utf8.RuneCountInString(reason) > 500 {
 		return ErrInvalidInput
 	}
+	var explicit any = reason
+	mode := "explicit"
 	if reason == "" {
+		mode = "generated"
+		explicit = nil
 		reason = noVoidReasonProvided
 	}
-	return s.repo.voidEvent(ctx, owner, eventID, reason)
+	cmd := financialCommand{operation: "event.void", target: eventID, parameters: []any{mode, explicit}}
+	_, err := executeFinancialWrite(ctx, s.repo, owner, requestKey, cmd, func(ctx context.Context, tx pgx.Tx) (struct{}, error) {
+		return struct{}{}, s.repo.voidEventInTx(ctx, tx, owner, eventID, reason)
+	})
+	return err
 }
 
 // DeleteEvent hides an owned event from ordinary reads while retaining its ledger rows.
 // Repeating a successful deletion is safe and does not change balances again.
-func (s *Service) DeleteEvent(ctx context.Context, owner identity.OwnerID, eventID string) error {
+func (s *Service) DeleteEvent(ctx context.Context, owner identity.OwnerID, eventID, requestKey string) error {
 	if !owner.Valid() {
 		return ErrUnauthorized
 	}
 	if !validID(eventID) {
 		return ErrInvalidInput
 	}
-	return s.repo.deleteEvent(ctx, owner, eventID)
+	eventID = strings.ToLower(eventID)
+	cmd := financialCommand{operation: "event.delete", target: eventID, parameters: []any{}}
+	_, err := executeFinancialWrite(ctx, s.repo, owner, requestKey, cmd, func(ctx context.Context, tx pgx.Tx) (struct{}, error) {
+		return struct{}{}, s.repo.deleteEventInTx(ctx, tx, owner, eventID)
+	})
+	return err
 }
 
 func validAccountType(value string) bool {
@@ -350,7 +393,7 @@ func validCurrency(code string) bool {
 }
 
 func validEventInput(amount int64, currencyCode string, occurredAt time.Time, note string) bool {
-	return amount > 0 && validCurrency(currencyCode) && !occurredAt.IsZero() && len(note) <= 1000
+	return amount > 0 && validCurrency(currencyCode) && !occurredAt.IsZero() && utf8.ValidString(note) && len(note) <= 1000
 }
 
 func validID(id string) bool {

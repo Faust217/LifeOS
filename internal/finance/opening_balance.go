@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/big"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Faust217/LifeOS/internal/identity"
@@ -32,9 +33,10 @@ type OpeningPreview struct {
 	BalanceRevision        string    `json:"balance_revision"`
 }
 
-func validOpeningInstant(at *time.Time) bool {
-	return at != nil && !at.IsZero() && !at.After(time.Now()) && at.Year() >= 1 && at.Year() <= 9999
+func validOpeningShape(at *time.Time) bool {
+	return at != nil && !at.IsZero() && at.Year() >= 1 && at.Year() <= 9999
 }
+func validOpeningInstant(at *time.Time) bool { return validOpeningShape(at) && !at.After(time.Now()) }
 
 func (s *Service) PreviewOpeningBalance(ctx context.Context, owner identity.OwnerID, id string, at time.Time, chosen *int64) (OpeningPreview, error) {
 	if !owner.Valid() {
@@ -62,20 +64,27 @@ func (s *Service) PreviewOpeningBalance(ctx context.Context, owner identity.Owne
 	return result, tx.Commit(ctx)
 }
 
-func (s *Service) ConfirmOpeningBalance(ctx context.Context, owner identity.OwnerID, id string, at time.Time, amount, revision int64, acknowledge bool) (Account, error) {
+func (s *Service) ConfirmOpeningBalance(ctx context.Context, owner identity.OwnerID, id string, at time.Time, amount, revision int64, acknowledge bool, requestKey string) (Account, error) {
 	if !owner.Valid() {
 		return Account{}, ErrUnauthorized
 	}
-	if !validID(id) || !validOpeningInstant(&at) || revision < 0 {
+	if !validID(id) || !validOpeningShape(&at) || revision < 0 {
 		return Account{}, ErrInvalidInput
 	}
 	at = at.UTC().Truncate(time.Microsecond)
-	tx, err := s.repo.pool.Begin(ctx)
-	if err != nil {
-		return Account{}, err
+	id = strings.ToLower(id)
+	cmd := financialCommand{operation: "opening_balance.confirm", target: id, parameters: []any{canonicalInstant(at), strconv.FormatInt(amount, 10), strconv.FormatInt(revision, 10), acknowledge}}
+	return executeFinancialWrite(ctx, s.repo, owner, requestKey, cmd, func(ctx context.Context, tx pgx.Tx) (Account, error) {
+		return confirmOpeningBalanceInTx(ctx, tx, owner, id, at, amount, revision, acknowledge)
+	})
+}
+
+func confirmOpeningBalanceInTx(ctx context.Context, tx pgx.Tx, owner identity.OwnerID, id string, at time.Time, amount, revision int64, acknowledge bool) (Account, error) {
+	if !validOpeningInstant(&at) {
+		return Account{}, ErrInvalidInput
 	}
-	defer tx.Rollback(ctx)
-	if err = requireOpeningZone(ctx, tx, owner); err != nil {
+
+	if err := requireOpeningZone(ctx, tx, owner); err != nil {
 		return Account{}, err
 	}
 	account, err := readOpeningAccount(ctx, tx, owner, id, true)
@@ -115,7 +124,7 @@ func (s *Service) ConfirmOpeningBalance(ctx context.Context, owner identity.Owne
 	account.OpeningBalanceAt = &at
 	account.OpeningConfirmedAt = &confirmed
 	account.BalanceRevision++
-	return account, tx.Commit(ctx)
+	return account, nil
 }
 
 func requireOpeningZone(ctx context.Context, tx pgx.Tx, owner identity.OwnerID) error {

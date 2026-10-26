@@ -1,6 +1,6 @@
 # LifeOS Codebase Map
 
-**Current code:** Issues #26–#31 are complete, pushed and closed. Issue #32 Me / Owner Data Export is implemented and Product Owner approved under accepted ADR-017; see [Export Design](EXPORT_DESIGN.md). Issue #33 known-balance dates and v2 exports are implemented under accepted ADR-018 and Product Owner accepted for final delivery on 2026-10-23. This is a navigation guide; [Architecture](ARCHITECTURE.md), [Domain Model](DOMAIN_MODEL.md), and accepted [ADRs](adr/README.md) define the rules.
+**Current code:** Issue #34 is implemented locally under accepted ADR-019 and awaiting final Product Owner review; migration v9, keyed write coordination and frozen browser recovery are described below. Issues #26–#31 are complete, pushed and closed. Issue #32 Me / Owner Data Export is implemented and Product Owner approved under accepted ADR-017; see [Export Design](EXPORT_DESIGN.md). Issue #33 known-balance dates and v2 exports are implemented under accepted ADR-018 and Product Owner accepted for final delivery on 2026-10-23. This is a navigation guide; [Architecture](ARCHITECTURE.md), [Domain Model](DOMAIN_MODEL.md), and accepted [ADRs](adr/README.md) define the rules.
 
 ## Start here
 
@@ -9,7 +9,7 @@
 | Web | [`apps/web/src/main.tsx`](../apps/web/src/main.tsx) mounts [`App`](../apps/web/src/LifeApp.tsx) through [`App.tsx`](../apps/web/src/App.tsx). `LifeApp.tsx` confirms the session before rendering [`AuthenticatedShell`](../apps/web/src/LifeApp.tsx). [`navigation.ts`](../apps/web/src/navigation.ts) resolves Today, Money, Plans, Me, and Goal detail URLs. [`lifeos.css`](../apps/web/src/lifeos.css), [`money.css`](../apps/web/src/money.css), and [`goals.css`](../apps/web/src/goals.css) carry the Sage Green UI. |
 | API | [`cmd/lifeos-api/main.go`](../cmd/lifeos-api/main.go) `run` creates services and registers identity, Finance, Planning and Export on one `/api/v1` chi router. [`httpapi.NewRouter`](../internal/platform/httpapi/router.go) mounts it beside health/readiness and request middleware. |
 | Identity | [`internal/identity/auth.go`](../internal/identity/auth.go) owns Google OIDC, sessions, `Auth.RequireRead`, and `Auth.RequireMutation`; [`owner.go`](../internal/identity/owner.go) defines the server-derived `OwnerID`. [`repository.go`](../internal/identity/repository.go) persists identity and sessions. [`cmd/lifeos-admin/main.go`](../cmd/lifeos-admin/main.go) is the trusted local invitation operator. |
-| Persistence | [`database.OpenPostgreSQL`](../internal/platform/database/postgres.go) opens the pool. [`db/migrations/`](../db/migrations/) holds numbered SQL; [`cmd/lifeos-migrate/main.go`](../cmd/lifeos-migrate/main.go) applies or reports them. v2/v3 add identity/sessions; v4 adds Money; v5 adds Goals; v6 adds the nullable Finance Soft Delete marker; v7 adds nullable owner `time_zone`. [`migrations.CurrentVersion`](../internal/platform/migrations/version.go) makes `/readyz` require v7. |
+| Persistence | [`database.OpenPostgreSQL`](../internal/platform/database/postgres.go) opens the pool. [`db/migrations/`](../db/migrations/) holds numbered SQL; [`cmd/lifeos-migrate/main.go`](../cmd/lifeos-migrate/main.go) applies or reports them. v2/v3 add identity/sessions; v4 adds Money; v5 adds Goals; v6 adds the nullable Finance Soft Delete marker; v7 adds nullable owner `time_zone`; v8 adds dated opening balances; v9 adds minimal financial request markers. [`migrations.CurrentVersion`](../internal/platform/migrations/version.go) makes `/readyz` require v9. |
 | Contracts and deployment | [`api/openapi/openapi.yaml`](../api/openapi/openapi.yaml) is the API contract; [`apps/web/src/api/generated/schema.ts`](../apps/web/src/api/generated/schema.ts) is generated from it. [`deploy/compose.yaml`](../deploy/compose.yaml) starts PostgreSQL, migration job, API, and web; the [`API`](../deploy/api.Dockerfile) and [`web`](../deploy/web.Dockerfile) Dockerfiles build their images. |
 
 ## Feature paths
@@ -225,3 +225,34 @@ Both preview and confirmation routes use `Auth.RequireMutation`; the diagram abb
 | Export click → `OwnerExport.downloadExport` | `downloadOwnerExport` requests version2 → `exporting.Service.Generate` → Finance `WriteExport`; v2 account projection or explicit incompatible-v1 error → versioned JSON/CSV sinks. Existing snapshot/release-time guard and limits apply. |
 
 Tests: `internal/finance/opening_balance_integration_test.go`, `opening_http_test.go`, Finance/Money/Soft Delete suites, `internal/exporting/export_integration_test.go`, independent v1/v2 JSON Schema golden checks and API web tests. The populated-v7 upgrade, complete >10k-event conversion preview, concurrent post/Void/Delete/conversion/export, rollback and responsive real guarded API checks use only new disposable databases. Published migrations, accepted older ADRs and v1 golden contracts remain intact; ADR-015 stays Proposed.
+
+
+## Issue #34: owner-scoped financial write idempotency (local review)
+
+[ADR-019](adr/ADR-019-owner-scoped-financial-write-idempotency.md) is Accepted. New migration [`000009_financial_write_idempotency.up.sql`](../db/migrations/000009_financial_write_idempotency.up.sql) adds only operational success markers, owner/key uniqueness and versioned digests. The down migration refuses when populated. Published v1–v8 and normal export v1/v2 fixtures remain unchanged.
+
+- Browser [`pendingFinancialWrite.ts`](../apps/web/src/pendingFinancialWrite.ts) `PendingFinancialWrites.prepare/start/finish/retry` freezes/verifies one bounded per-tab command, prevents silent replacement and handles storage/owner changes. [`api/money.ts`](../apps/web/src/api/money.ts) `prepareFinancialRequest/financialRequest/retryFinancialWrite` sends exact bytes/key with fresh CSRF, handles first success versus content-free replay and preserves uncertainty. [`FinancialWriteRecovery`](../apps/web/src/FinancialWriteRecovery.tsx) supplies manual retry and acknowledged conflict recovery; `AuthenticatedShell` binds the active owner and sign-out clears private recovery. No offline queue.
+- [`idempotency_http.go`](../internal/finance/idempotency_http.go) `moneyHandler.financialMutation` wraps exactly six existing routes after shared auth checks, adds bounded admission and strict key validation. `uniqueJSONObject` detects duplicate member names before struct decoding; bounded UTF-8 parsing remains in `decodeMoneyJSON`.
+- Existing [`service.go`](../internal/finance/service.go) entry points require a request key, normalize full intent, then call [`idempotency.go`](../internal/finance/idempotency.go) `canonicalFinancialCommand` / `executeFinancialWrite`. `committedCommand` compares retained version/digest before mutable-state checks. New commands take an owner transaction advisory lock, recheck, enforce quota, insert the marker and invoke caller-transaction helpers in [`repository.go`](../internal/finance/repository.go) / [`opening_balance.go`](../internal/finance/opening_balance.go). Only the coordinator commits. `ErrAlreadyApplied` is an explicit successful receipt outcome, never an old DTO.
+- `moneyHandler.finishFinancialWrite` reuses [`Auth.RevalidateOwner`](../internal/identity/export.go) after transaction/connection release, then emits the original success or `200 already_applied`. Money refreshes complete server balances/current history; Today reads current truth normally. Internal markers are excluded from exports.
+- `capacityBand/observeCapacity` warn at 90% without private identifiers/content. The [capacity/recovery runbook](FINANCIAL_WRITE_RECOVERY.md) describes the 100,000 limit, non-expiring keys, safe increases and restore limitations. No new monitoring service or API.
+
+```mermaid
+flowchart TD
+  A[Money confirmed Save] --> B[PendingFinancialWrites.prepare/start]
+  B --> C[financialRequest: exact body and key]
+  C --> D[Auth.RequireMutation / financialMutation]
+  D --> E[covered HTTP handler / Service method]
+  E --> F[canonicalFinancialCommand / executeFinancialWrite]
+  F --> G[committedCommand]
+  G -->|match| H[ErrAlreadyApplied]
+  G -->|new| I[owner transaction lock / recheck / quota / marker]
+  I --> J[caller-transaction ledger or opening helper]
+  J --> K[shared commit]
+  H --> L[finishFinancialWrite / RevalidateOwner]
+  K --> L
+  L --> M[first success or content-free replay]
+  M --> N[PendingFinancialWrites.finish / loadMoney]
+```
+
+Exact inputs, outputs, error paths and tests are in the [Issue #34 English journal](../learning/journal/2026-10-26-financial-write-idempotency.md). The isolated fixture under ignored `.cache/issue34/` uses a real guarded Go API and a new PostgreSQL database, including a proxy that discards one completed HTTP response. No production test login/fault endpoint is shipped.

@@ -1,6 +1,7 @@
 package finance
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"regexp"
 	"strconv"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Faust217/LifeOS/internal/identity"
 	"github.com/go-chi/chi/v5"
@@ -19,15 +21,18 @@ const maxMoneyRequestBytes = 16 << 10
 
 var minorUnitPattern = regexp.MustCompile(`^-?(0|[1-9][0-9]*)$`)
 
-type moneyHandler struct{ service *Service }
+type moneyHandler struct {
+	service *Service
+	auth    *identity.Auth
+}
 
 // RegisterRoutes adds only authenticated Finance routes to the shared /api/v1 router.
 func RegisterRoutes(router chi.Router, auth *identity.Auth, service *Service) {
-	handler := moneyHandler{service: service}
+	handler := moneyHandler{service: service, auth: auth}
 	router.MethodFunc(http.MethodGet, "/accounts", auth.RequireRead(handler.listAccounts))
-	router.MethodFunc(http.MethodPost, "/accounts", auth.RequireMutation(handler.createAccount))
+	router.MethodFunc(http.MethodPost, "/accounts", handler.financialMutation(handler.createAccount))
 	router.MethodFunc(http.MethodPost, "/accounts/{accountID}/opening-balance/preview", auth.RequireMutation(handler.previewOpeningBalance))
-	router.MethodFunc(http.MethodPost, "/accounts/{accountID}/opening-balance/confirm", auth.RequireMutation(handler.confirmOpeningBalance))
+	router.MethodFunc(http.MethodPost, "/accounts/{accountID}/opening-balance/confirm", handler.financialMutation(handler.confirmOpeningBalance))
 	router.MethodFunc(http.MethodGet, "/accounts/{accountID}/balance", auth.RequireRead(handler.balance))
 	router.MethodFunc(http.MethodPost, "/accounts/{accountID}/archive", auth.RequireMutation(handler.archiveAccount))
 	router.MethodFunc(http.MethodPost, "/accounts/{accountID}/restore", auth.RequireMutation(handler.restoreAccount))
@@ -38,10 +43,10 @@ func RegisterRoutes(router chi.Router, auth *identity.Auth, service *Service) {
 	router.MethodFunc(http.MethodPost, "/categories/{categoryID}/restore", auth.RequireMutation(handler.restoreCategory))
 	router.MethodFunc(http.MethodGet, "/categories/{categoryID}/spending", auth.RequireRead(handler.categorySpending))
 	router.MethodFunc(http.MethodGet, "/events", auth.RequireRead(handler.history))
-	router.MethodFunc(http.MethodPost, "/events", auth.RequireMutation(handler.postEvent))
-	router.MethodFunc(http.MethodPost, "/transfers", auth.RequireMutation(handler.transfer))
-	router.MethodFunc(http.MethodPost, "/events/{eventID}/void", auth.RequireMutation(handler.voidEvent))
-	router.MethodFunc(http.MethodPost, "/events/{eventID}/delete", auth.RequireMutation(handler.deleteEvent))
+	router.MethodFunc(http.MethodPost, "/events", handler.financialMutation(handler.postEvent))
+	router.MethodFunc(http.MethodPost, "/transfers", handler.financialMutation(handler.transfer))
+	router.MethodFunc(http.MethodPost, "/events/{eventID}/void", handler.financialMutation(handler.voidEvent))
+	router.MethodFunc(http.MethodPost, "/events/{eventID}/delete", handler.financialMutation(handler.deleteEvent))
 }
 
 type accountRequest struct {
@@ -186,12 +191,8 @@ func (h moneyHandler) createAccount(w http.ResponseWriter, r *http.Request, owne
 		return
 	}
 	account, err := h.service.CreateAccount(r.Context(), owner, AccountInput{
-		Name: input.Name, Type: input.Type, Currency: input.Currency, OpeningBalanceMinor: opening, OpeningBalanceAt: input.OpeningBalanceAt})
-	if err != nil {
-		writeMoneyError(w, err)
-		return
-	}
-	writeMoneyJSON(w, http.StatusCreated, accountDTO(account))
+		Name: input.Name, Type: input.Type, Currency: input.Currency, OpeningBalanceMinor: opening, OpeningBalanceAt: input.OpeningBalanceAt}, r.Header.Get("Idempotency-Key"))
+	h.finishFinancialWrite(w, r, owner, http.StatusCreated, accountDTO(account), err)
 }
 
 func (h moneyHandler) listAccounts(w http.ResponseWriter, r *http.Request, owner identity.OwnerID) {
@@ -394,18 +395,14 @@ func (h moneyHandler) postEvent(w http.ResponseWriter, r *http.Request, owner id
 	var event Event
 	switch input.Kind {
 	case "expense":
-		event, err = h.service.PostExpense(r.Context(), owner, eventInput)
+		event, err = h.service.PostExpense(r.Context(), owner, eventInput, r.Header.Get("Idempotency-Key"))
 	case "income":
-		event, err = h.service.PostIncome(r.Context(), owner, eventInput)
+		event, err = h.service.PostIncome(r.Context(), owner, eventInput, r.Header.Get("Idempotency-Key"))
 	default:
 		writeMoneyError(w, ErrInvalidInput)
 		return
 	}
-	if err != nil {
-		writeMoneyError(w, err)
-		return
-	}
-	writeMoneyJSON(w, http.StatusCreated, eventDTO(event))
+	h.finishFinancialWrite(w, r, owner, http.StatusCreated, eventDTO(event), err)
 }
 
 func (h moneyHandler) transfer(w http.ResponseWriter, r *http.Request, owner identity.OwnerID) {
@@ -424,12 +421,8 @@ func (h moneyHandler) transfer(w http.ResponseWriter, r *http.Request, owner ide
 	}
 	event, err := h.service.Transfer(r.Context(), owner, TransferInput{FromAccountID: input.FromAccountID,
 		ToAccountID: input.ToAccountID, AmountMinor: amount, Currency: input.Currency,
-		OccurredAt: input.OccurredAt, Note: input.Note})
-	if err != nil {
-		writeMoneyError(w, err)
-		return
-	}
-	writeMoneyJSON(w, http.StatusCreated, eventDTO(event))
+		OccurredAt: input.OccurredAt, Note: input.Note}, r.Header.Get("Idempotency-Key"))
+	h.finishFinancialWrite(w, r, owner, http.StatusCreated, eventDTO(event), err)
 }
 
 func (h moneyHandler) history(w http.ResponseWriter, r *http.Request, owner identity.OwnerID) {
@@ -478,11 +471,8 @@ func (h moneyHandler) voidEvent(w http.ResponseWriter, r *http.Request, owner id
 	if !decodeMoneyJSON(w, r, &input) {
 		return
 	}
-	if err := h.service.VoidEvent(r.Context(), owner, chi.URLParam(r, "eventID"), input.Reason); err != nil {
-		writeMoneyError(w, err)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
+	err := h.service.VoidEvent(r.Context(), owner, chi.URLParam(r, "eventID"), input.Reason, r.Header.Get("Idempotency-Key"))
+	h.finishFinancialWrite(w, r, owner, http.StatusNoContent, nil, err)
 }
 
 func (h moneyHandler) deleteEvent(w http.ResponseWriter, r *http.Request, owner identity.OwnerID) {
@@ -493,11 +483,8 @@ func (h moneyHandler) deleteEvent(w http.ResponseWriter, r *http.Request, owner 
 	if !emptyMoneyBody(w, r) {
 		return
 	}
-	if err := h.service.DeleteEvent(r.Context(), owner, chi.URLParam(r, "eventID")); err != nil {
-		writeMoneyError(w, err)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
+	err := h.service.DeleteEvent(r.Context(), owner, chi.URLParam(r, "eventID"), r.Header.Get("Idempotency-Key"))
+	h.finishFinancialWrite(w, r, owner, http.StatusNoContent, nil, err)
 }
 
 func moneyQuery(r *http.Request, allowed ...string) (url.Values, error) {
@@ -537,7 +524,21 @@ func decodeMoneyJSON(w http.ResponseWriter, r *http.Request, target any) bool {
 		writeMoneyErrorStatus(w, http.StatusUnsupportedMediaType, "unsupported_media_type", "Content-Type must be application/json")
 		return false
 	}
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxMoneyRequestBytes))
+	var source io.Reader = http.MaxBytesReader(w, r.Body, maxMoneyRequestBytes)
+	if r.Context().Value(financialWriteContextKey{}) != nil {
+		data, err := io.ReadAll(source)
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			writeMoneyErrorStatus(w, 413, "request_too_large", "Request body is too large")
+			return false
+		}
+		if err != nil || !utf8.Valid(data) || !uniqueJSONObject(data) {
+			writeMoneyErrorStatus(w, 400, "invalid_json", "Invalid JSON request body")
+			return false
+		}
+		source = bytes.NewReader(data)
+	}
+	decoder := json.NewDecoder(source)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(target); err != nil {
 		var tooLarge *http.MaxBytesError
@@ -571,13 +572,30 @@ func emptyMoneyBody(w http.ResponseWriter, r *http.Request) bool {
 
 func writeMoneyJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "no-store")
+	if w.Header().Get("Cache-Control") == "" {
+		w.Header().Set("Cache-Control", "no-store")
+	}
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(value)
 }
 
 func writeMoneyError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, ErrKeyRequired):
+		writeMoneyErrorStatus(w, 400, "idempotency_key_required", "A request key is required")
+	case errors.Is(err, ErrInvalidKey):
+		writeMoneyErrorStatus(w, 400, "invalid_idempotency_key", "Invalid request key")
+	case errors.Is(err, ErrKeyConflict):
+		writeMoneyErrorStatus(w, 409, "idempotency_key_conflict", "That Save key belongs to a different command; do not resubmit with a new key")
+	case errors.Is(err, ErrKeyCapacity):
+		writeMoneyErrorStatus(w, 409, "idempotency_capacity_exceeded", "Financial write capacity reached; existing Saves can still be retried")
+	case errors.Is(err, ErrWriteBusy):
+		w.Header().Set("Retry-After", "1")
+		writeMoneyErrorStatus(w, 503, "financial_write_busy", "LifeOS is busy; retry the same Save")
+	case errors.Is(err, ErrWriteUnknown):
+		writeMoneyErrorStatus(w, 503, "financial_write_outcome_unknown", "Save may have completed; retry the same Save")
+	case errors.Is(err, ErrFingerprintVersion):
+		writeMoneyErrorStatus(w, 503, "idempotency_version_unsupported", "Save compatibility unavailable; retain this request key")
 	case errors.Is(err, ErrInvalidInput):
 		writeMoneyErrorStatus(w, http.StatusBadRequest, "invalid_input", "Invalid Money input")
 	case errors.Is(err, ErrCurrencyMismatch):

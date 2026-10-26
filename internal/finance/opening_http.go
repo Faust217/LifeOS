@@ -78,10 +78,6 @@ func (h moneyHandler) confirmOpeningBalance(w http.ResponseWriter, r *http.Reque
 		writeMoneyError(w, ErrInvalidInput)
 		return
 	}
-	result, err := h.service.ConfirmOpeningBalance(r.Context(), owner, chi.URLParam(r, "accountID"), *in.OpeningBalanceAt, amount, revision, *in.AcknowledgeChange)
-	if err != nil {
-		writeMoneyError(w, err)
-		return
-	}
-	writeMoneyJSON(w, http.StatusOK, accountDTO(result))
+	result, err := h.service.ConfirmOpeningBalance(r.Context(), owner, chi.URLParam(r, "accountID"), *in.OpeningBalanceAt, amount, revision, *in.AcknowledgeChange, r.Header.Get("Idempotency-Key"))
+	h.finishFinancialWrite(w, r, owner, http.StatusOK, accountDTO(result), err)
 }

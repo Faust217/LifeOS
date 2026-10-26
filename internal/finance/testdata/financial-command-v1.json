@@ -1,0 +1,95 @@
+[
+  {
+    "owner": "11111111-1111-4111-8111-111111111111",
+    "operation": "account.create",
+    "target": null,
+    "parameters": [
+      "Cash",
+      "bank",
+      "MYR",
+      "-9223372036854775808",
+      "2026-10-01T00:00:00.123456Z"
+    ],
+    "canonical": "[\"lifeos-finance-command-v1\",\"11111111-1111-4111-8111-111111111111\",\"account.create\",null,[\"Cash\",\"bank\",\"MYR\",\"-9223372036854775808\",\"2026-10-01T00:00:00.123456Z\"]]",
+    "sha256": "83c3bccb5a980e2d47e0f0bcfd463d44ae20c3b28371867d3fb8abed721e5e6e"
+  },
+  {
+    "owner": "11111111-1111-4111-8111-111111111111",
+    "operation": "event.create",
+    "target": null,
+    "parameters": [
+      "expense",
+      "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "9223372036854775807",
+      "MYR",
+      "2026-10-01T00:00:00.123456Z",
+      "<coffee> & tea\n咖啡",
+      [
+        [
+          "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "9223372036854775807"
+        ]
+      ]
+    ],
+    "canonical": "[\"lifeos-finance-command-v1\",\"11111111-1111-4111-8111-111111111111\",\"event.create\",null,[\"expense\",\"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\",\"9223372036854775807\",\"MYR\",\"2026-10-01T00:00:00.123456Z\",\"\\u003ccoffee\\u003e \\u0026 tea\\n咖啡\",[[\"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb\",\"9223372036854775807\"]]]]",
+    "sha256": "44d88c5f321206e25cb61ab6568cb2aad20400ddb16faafbfe180705483fd729"
+  },
+  {
+    "owner": "11111111-1111-4111-8111-111111111111",
+    "operation": "transfer.create",
+    "target": null,
+    "parameters": [
+      "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      "100",
+      "MYR",
+      "2026-10-01T00:00:00.123456Z",
+      ""
+    ],
+    "canonical": "[\"lifeos-finance-command-v1\",\"11111111-1111-4111-8111-111111111111\",\"transfer.create\",null,[\"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\",\"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb\",\"100\",\"MYR\",\"2026-10-01T00:00:00.123456Z\",\"\"]]",
+    "sha256": "5184821e402f79e02411d73a3bcc12ef2acee4f0fc6ab96d6e711fe4cfb7a6b8"
+  },
+  {
+    "owner": "11111111-1111-4111-8111-111111111111",
+    "operation": "opening_balance.confirm",
+    "target": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    "parameters": [
+      "2026-10-01T00:00:00.123456Z",
+      "0",
+      "12",
+      true
+    ],
+    "canonical": "[\"lifeos-finance-command-v1\",\"11111111-1111-4111-8111-111111111111\",\"opening_balance.confirm\",\"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\",[\"2026-10-01T00:00:00.123456Z\",\"0\",\"12\",true]]",
+    "sha256": "b354455717091ba0522bde9a40c1610b567ae39e8b3dd89ba2126fa0487d096f"
+  },
+  {
+    "owner": "11111111-1111-4111-8111-111111111111",
+    "operation": "event.void",
+    "target": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    "parameters": [
+      "generated",
+      null
+    ],
+    "canonical": "[\"lifeos-finance-command-v1\",\"11111111-1111-4111-8111-111111111111\",\"event.void\",\"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb\",[\"generated\",null]]",
+    "sha256": "c049c8c5aa6b7071697a0c4c3f7386bb754cf9c8ad4b90e1c494fdab70d2d62f"
+  },
+  {
+    "owner": "11111111-1111-4111-8111-111111111111",
+    "operation": "event.void",
+    "target": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    "parameters": [
+      "explicit",
+      "Duplicate entry"
+    ],
+    "canonical": "[\"lifeos-finance-command-v1\",\"11111111-1111-4111-8111-111111111111\",\"event.void\",\"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb\",[\"explicit\",\"Duplicate entry\"]]",
+    "sha256": "6d9120bca775ba2c81fd16ab067d6bc7840f17163595db7d7c48e25cbf2b831c"
+  },
+  {
+    "owner": "11111111-1111-4111-8111-111111111111",
+    "operation": "event.delete",
+    "target": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    "parameters": [],
+    "canonical": "[\"lifeos-finance-command-v1\",\"11111111-1111-4111-8111-111111111111\",\"event.delete\",\"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb\",[]]",
+    "sha256": "8cc9a9e171a7bf4bd219a603f95c4cd4fc6a3a5dd767c297a3496aa4285c1e55"
+  }
+]

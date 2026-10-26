@@ -134,6 +134,7 @@ func TestOwnerExportIntegration(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Origin", requestOrigin)
 		req.Header.Set("X-CSRF-Token", token)
+		req.Header.Set("Idempotency-Key", newFinancialWriteKey())
 		response, err := server.Client().Do(req)
 		if err != nil {
 			t.Fatal(err)
@@ -211,9 +212,9 @@ func TestOwnerExportIntegration(t *testing.T) {
 		var e finance.Event
 		var err error
 		if kind == "income" {
-			e, err = f.PostIncome(ctx, o, in)
+			e, err = f.PostIncome(ctx, o, in, newFinancialWriteKey())
 		} else {
-			e, err = f.PostExpense(ctx, o, in)
+			e, err = f.PostExpense(ctx, o, in, newFinancialWriteKey())
 		}
 		if err != nil {
 			t.Fatal(err)
@@ -224,21 +225,21 @@ func TestOwnerExportIntegration(t *testing.T) {
 	income := post(owner, bank, 1000, "income", "Uncategorized income", nil)
 	post(owner, bank, 50, "expense", "Uncategorized", nil)
 	voided := post(owner, bank, 75, "expense", "Visible voided", []finance.AllocationInput{{CategoryID: cat.ID, AmountMinor: 75}})
-	if err = f.VoidEvent(ctx, owner, voided.ID, ""); err != nil {
+	if err = f.VoidEvent(ctx, owner, voided.ID, "", newFinancialWriteKey()); err != nil {
 		t.Fatal(err)
 	}
 	deleted := post(owner, bank, 33, "expense", "DELETED-CANARY", []finance.AllocationInput{{CategoryID: cat.ID, AmountMinor: 33}})
-	if err = f.DeleteEvent(ctx, owner, deleted.ID); err != nil {
+	if err = f.DeleteEvent(ctx, owner, deleted.ID, newFinancialWriteKey()); err != nil {
 		t.Fatal(err)
 	}
 	deletedVoid := post(owner, bank, 10, "income", "DELETED-VOID-CANARY", nil)
-	if err = f.VoidEvent(ctx, owner, deletedVoid.ID, "explicit audit"); err != nil {
+	if err = f.VoidEvent(ctx, owner, deletedVoid.ID, "explicit audit", newFinancialWriteKey()); err != nil {
 		t.Fatal(err)
 	}
-	if err = f.DeleteEvent(ctx, owner, deletedVoid.ID); err != nil {
+	if err = f.DeleteEvent(ctx, owner, deletedVoid.ID, newFinancialWriteKey()); err != nil {
 		t.Fatal(err)
 	}
-	transfer, err := f.Transfer(ctx, owner, finance.TransferInput{FromAccountID: bank.ID, ToAccountID: saving.ID, AmountMinor: 100, Currency: "MYR", OccurredAt: now, Note: "One transfer"})
+	transfer, err := f.Transfer(ctx, owner, finance.TransferInput{FromAccountID: bank.ID, ToAccountID: saving.ID, AmountMinor: 100, Currency: "MYR", OccurredAt: now, Note: "One transfer"}, newFinancialWriteKey())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -529,7 +530,7 @@ func TestOwnerExportIntegration(t *testing.T) {
 		if _, err = pool.Exec(ctx, `UPDATE goals SET title='Changed after snapshot' WHERE owner_id=$1 AND id=$2`, owner.String(), goal.ID); err != nil {
 			t.Fatal(err)
 		}
-		if err = f.DeleteEvent(ctx, owner, income.ID); err != nil {
+		if err = f.DeleteEvent(ctx, owner, income.ID, newFinancialWriteKey()); err != nil {
 			t.Fatal(err)
 		}
 		close(release)
@@ -610,7 +611,7 @@ func TestOwnerExportIntegration(t *testing.T) {
 		snapshot := make(chan result, 1)
 		go func() { a, e := service.Generate(ctx, owner, "json", 2); snapshot <- result{a, e} }()
 		<-reached
-		if _, err = f.ConfirmOpeningBalance(ctx, owner, bank.ID, at, amount, revision, false); err != nil {
+		if _, err = f.ConfirmOpeningBalance(ctx, owner, bank.ID, at, amount, revision, false, newFinancialWriteKey()); err != nil {
 			close(release)
 			t.Fatal(err)
 		}

@@ -15,7 +15,12 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type repository struct{ pool *pgxpool.Pool }
+type repository struct {
+	pool             *pgxpool.Pool
+	writeSlots       chan struct{}
+	keyLimit         int64
+	capacityObserver func(int64, int64)
+}
 
 type movementSpec struct {
 	accountID string
@@ -38,16 +43,11 @@ type accountState struct {
 	openingAt *time.Time
 }
 
-func (r *repository) createAccount(ctx context.Context, owner identity.OwnerID, input AccountInput) (Account, error) {
+func (r *repository) createAccountInTx(ctx context.Context, tx pgx.Tx, owner identity.OwnerID, input AccountInput) (Account, error) {
 	id, err := newUUID()
 	if err != nil {
 		return Account{}, err
 	}
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return Account{}, err
-	}
-	defer tx.Rollback(ctx)
 	if err = requireOpeningZone(ctx, tx, owner); err != nil {
 		return Account{}, err
 	}
@@ -59,7 +59,7 @@ func (r *repository) createAccount(ctx context.Context, owner identity.OwnerID, 
 	if err != nil {
 		return Account{}, err
 	}
-	return account, tx.Commit(ctx)
+	return account, nil
 }
 
 func (r *repository) createCategory(ctx context.Context, owner identity.OwnerID, input CategoryInput) (Category, error) {
@@ -335,12 +335,7 @@ func (r *repository) eventAllocations(ctx context.Context, owner identity.OwnerI
 	return allocations, rows.Err()
 }
 
-func (r *repository) post(ctx context.Context, owner identity.OwnerID, spec postSpec) (Event, error) {
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return Event{}, fmt.Errorf("begin financial event: %w", err)
-	}
-	defer tx.Rollback(ctx)
+func (r *repository) postInTx(ctx context.Context, tx pgx.Tx, owner identity.OwnerID, spec postSpec) (Event, error) {
 	states, err := lockAccounts(ctx, tx, owner, spec.movements, false)
 	if err != nil {
 		return Event{}, err
@@ -422,22 +417,14 @@ func (r *repository) post(ctx context.Context, owner identity.OwnerID, spec post
 	if err := bumpBalanceRevisions(ctx, tx, owner, spec.movements); err != nil {
 		return Event{}, err
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return Event{}, fmt.Errorf("commit financial event: %w", err)
-	}
 	return event, nil
 }
 
-func (r *repository) voidEvent(ctx context.Context, owner identity.OwnerID, eventID, reason string) error {
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin void: %w", err)
-	}
-	defer tx.Rollback(ctx)
+func (r *repository) voidEventInTx(ctx context.Context, tx pgx.Tx, owner identity.OwnerID, eventID, reason string) error {
 	var status string
 	var deleted bool
 	var occurredAt time.Time
-	err = tx.QueryRow(ctx, `SELECT status, deleted_at IS NOT NULL, occurred_at FROM financial_events WHERE owner_id = $1 AND id = $2 FOR UPDATE`, owner.String(), eventID).Scan(&status, &deleted, &occurredAt)
+	err := tx.QueryRow(ctx, `SELECT status, deleted_at IS NOT NULL, occurred_at FROM financial_events WHERE owner_id = $1 AND id = $2 FOR UPDATE`, owner.String(), eventID).Scan(&status, &deleted, &occurredAt)
 	if err != nil {
 		return notFoundOr("find event", err)
 	}
@@ -459,24 +446,19 @@ func (r *repository) voidEvent(ctx context.Context, owner identity.OwnerID, even
 	if err := bumpBalanceRevisions(ctx, tx, owner, movements); err != nil {
 		return err
 	}
-	return tx.Commit(ctx)
+	return nil
 }
 
-func (r *repository) deleteEvent(ctx context.Context, owner identity.OwnerID, eventID string) error {
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin delete: %w", err)
-	}
-	defer tx.Rollback(ctx)
+func (r *repository) deleteEventInTx(ctx context.Context, tx pgx.Tx, owner identity.OwnerID, eventID string) error {
 	var status string
 	var deleted bool
 	var occurredAt time.Time
-	err = tx.QueryRow(ctx, `SELECT status, deleted_at IS NOT NULL, occurred_at FROM financial_events WHERE owner_id = $1 AND id = $2 FOR UPDATE`, owner.String(), eventID).Scan(&status, &deleted, &occurredAt)
+	err := tx.QueryRow(ctx, `SELECT status, deleted_at IS NOT NULL, occurred_at FROM financial_events WHERE owner_id = $1 AND id = $2 FOR UPDATE`, owner.String(), eventID).Scan(&status, &deleted, &occurredAt)
 	if err != nil {
 		return notFoundOr("find event", err)
 	}
 	if deleted {
-		return tx.Commit(ctx)
+		return nil
 	}
 	movements, err := eventMovementSpecs(ctx, tx, owner, eventID)
 	if err != nil {
@@ -501,7 +483,7 @@ func (r *repository) deleteEvent(ctx context.Context, owner identity.OwnerID, ev
 	if err := bumpBalanceRevisions(ctx, tx, owner, movements); err != nil {
 		return err
 	}
-	return tx.Commit(ctx)
+	return nil
 }
 
 func eventMovementSpecs(ctx context.Context, tx pgx.Tx, owner identity.OwnerID, eventID string) ([]movementSpec, error) {

@@ -80,6 +80,7 @@ func moneyHTTP(t *testing.T, router http.Handler, method, path, body string, coo
 	}
 	if csrf != "" {
 		request.Header.Set("X-CSRF-Token", csrf)
+		request.Header.Set("Idempotency-Key", newFinancialWriteKey())
 	}
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, request)
@@ -223,6 +224,7 @@ func TestMoneyHTTPIntegration(t *testing.T) {
 	wrongType.AddCookie(ownerCookie)
 	wrongType.Header.Set("Origin", moneyTestOrigin)
 	wrongType.Header.Set("X-CSRF-Token", ownerCSRF)
+	wrongType.Header.Set("Idempotency-Key", newFinancialWriteKey())
 	wrongType.Header.Set("Content-Type", "text/plain")
 	wrongTypeResponse := httptest.NewRecorder()
 	router.ServeHTTP(wrongTypeResponse, wrongType)

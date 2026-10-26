@@ -7,6 +7,8 @@ import {
   type AccountCreate, type CategoryCreate, type EventCreate, type MoneyAccount,
   type MoneyBalance, type MoneyCategory, type MoneyEvent, type TransferCreate,
 } from "./api/money";
+import { FinancialWriteRecovery, usePendingFinancialWrite } from "./FinancialWriteRecovery";
+import { FinancialRecoveryError, pendingFinancialWrite } from "./pendingFinancialWrite";
 import { OpeningBalanceSheet, type OpeningBalanceDraft } from "./OpeningBalanceSheet";
 import { Icon } from "./Icons";
 import { currencyDigits, formatLocalDate, formatLocalTime, formatLocalTimeWithZone, formatMinorUnits, localDateKey, localDateTimeValue, matchingInstants, minorUnitsToInput, parseAmountToMinor, toOccurredAt } from "./moneyAmount";
@@ -24,6 +26,11 @@ type MoneyData = {
   hasNext: boolean;
 };
 type MoneyView = { status: "loading" } | { status: "error"; message: string } | { status: "ready"; data: MoneyData };
+
+function savingLabel() {
+  const status = pendingFinancialWrite.status();
+  return status.kind === "pending" && !status.sending ? "Save needs recovery" : "Saving…";
+}
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : "Something went wrong. Please try again.";
@@ -52,6 +59,8 @@ function historyAccounts(event: MoneyEvent, accounts: MoneyAccount[]): string {
 }
 
 export function MoneyPage({ csrfToken, timeZone, onSessionExpired }: { csrfToken: string; timeZone: string | null; onSessionExpired: () => void }) {
+  const financialRecovery = usePendingFinancialWrite();
+  const financialBlocked = financialRecovery.kind !== "empty" && financialRecovery.kind !== "hidden";
   const [balanceAccount, setBalanceAccount] = useState<MoneyAccount | null>(null);
   const openingDrafts = useRef<Record<string, OpeningBalanceDraft>>({});
   const [panel, setPanel] = useState<"overview" | "transactions">("transactions");
@@ -134,7 +143,7 @@ export function MoneyPage({ csrfToken, timeZone, onSessionExpired }: { csrfToken
   }
 
   function openTransaction(kind: TransactionAction = "expense", original: MoneyEvent | null = null) {
-    if (!timeZone) return;
+    if (!timeZone || financialBlocked) return;
     returnFocusRef.current = document.querySelector<HTMLElement>(".money-quick-action");
     setTransactionAction(kind);
     setReplacement(original);
@@ -145,6 +154,7 @@ export function MoneyPage({ csrfToken, timeZone, onSessionExpired }: { csrfToken
   }
 
   function chooseSetup(item: "account" | "category") {
+    if (financialBlocked) return;
     setupReturnFocusRef.current = dialogRef.current?.open
       ? document.querySelector<HTMLElement>(".money-quick-action")
       : document.activeElement as HTMLElement;
@@ -176,10 +186,13 @@ export function MoneyPage({ csrfToken, timeZone, onSessionExpired }: { csrfToken
       setNotice(refreshed ? successMessage : "Saved, but the latest Money data could not be loaded. Check recent activity before doing this again.");
       return true;
     } catch (error) {
+      const recoveryStatus = pendingFinancialWrite.status();
       if (error instanceof MoneyApiError && error.status === 401) onSessionExpired();
-      setOperationError(error instanceof MoneyApiError && (error.status === 0 || error.status >= 500 || (error.status >= 200 && error.status < 300))
-        ? "The result is uncertain. This change may have saved. Check recent activity before trying again."
-        : messageOf(error));
+      if (recoveryStatus.kind === "empty" || recoveryStatus.kind === "hidden") {
+        setOperationError(error instanceof FinancialRecoveryError ? error.message : error instanceof MoneyApiError && (error.status === 0 || error.status >= 500 || (error.status >= 200 && error.status < 300))
+          ? "The result is uncertain. Check recent activity before trying again."
+          : messageOf(error));
+      }
       return false;
     } finally {
       pendingRef.current = false;
@@ -192,14 +205,15 @@ export function MoneyPage({ csrfToken, timeZone, onSessionExpired }: { csrfToken
   const hasExpenseCategory = data?.categories.some((category) => !category.archived_at && category.kind === "expense") ?? false;
   return (
     <div className="page-stack money-page">
-      {balanceAccount && (timeZone ? <OpeningBalanceSheet account={balanceAccount} csrfToken={csrfToken} timeZone={timeZone} draft={openingDrafts.current[balanceAccount.id]} onDraft={(draft) => { openingDrafts.current[balanceAccount.id] = draft; }} onClose={() => setBalanceAccount(null)} onSaved={() => { delete openingDrafts.current[balanceAccount.id]; setBalanceAccount(null); setNotice("Balance date confirmed."); void loadMoney(page); }} onSessionExpired={onSessionExpired} /> : <section className="money-state"><p>Confirm your timezone in Me before choosing a balance date.</p><a className="button button-primary" href="/me#timezone">Open timezone settings</a><button type="button" className="money-text-action" onClick={() => setBalanceAccount(null)}>Cancel</button></section>)}
+      {balanceAccount && (timeZone ? <OpeningBalanceSheet account={balanceAccount} csrfToken={csrfToken} timeZone={timeZone} draft={openingDrafts.current[balanceAccount.id]} onDraft={(draft) => { openingDrafts.current[balanceAccount.id] = draft; }} onClose={() => setBalanceAccount(null)} onSaved={() => { delete openingDrafts.current[balanceAccount.id]; setBalanceAccount(null); setNotice("Balance date confirmed."); void loadMoney(page); }} onRecovered={() => { setBalanceAccount(null); setNotice("Save confirmed. Showing current records."); void loadMoney(page); }} onSessionExpired={onSessionExpired} /> : <section className="money-state"><p>Confirm your timezone in Me before choosing a balance date.</p><a className="button button-primary" href="/me#timezone">Open timezone settings</a><button type="button" className="money-text-action" onClick={() => setBalanceAccount(null)}>Cancel</button></section>)}
       <header className="money-page-header">
         <h1>Money</h1>
-        {data && timeZone && <div className="money-header-actions"><button type="button" className="button button-primary money-quick-action" onClick={() => openTransaction()} disabled={pending}>+ Add transaction</button><a className="button button-outline money-settings-action" href="/me#timezone">Settings</a></div>}
+        {data && timeZone && <div className="money-header-actions"><button type="button" className="button button-primary money-quick-action" onClick={() => openTransaction()} disabled={pending || financialBlocked}>+ Add transaction</button><a className="button button-outline money-settings-action" href="/me#timezone">Settings</a></div>}
       </header>
+      <FinancialWriteRecovery csrfToken={csrfToken} onSessionExpired={onSessionExpired} onRecovered={() => { closeTransaction(); closeSetup(); setBalanceAccount(null); setNotice("Save confirmed. Showing current records."); void loadMoney(page); }} />
       {notice && <p className="money-quick-feedback" role="status">{notice}</p>}
 
-      {operationError && <div className="money-feedback money-error money-retry-read"><p role="alert">{operationError}</p><button type="button" className="button button-outline" onClick={() => void loadMoney(page)}>Refresh accounts and activity</button></div>}
+      {operationError && <div className="money-feedback money-error money-retry-read"><p role="alert">{operationError}</p><button type="button" className="button button-outline" onClick={() => void loadMoney(page)}>{financialBlocked ? "Refresh data (Save stays pending)" : "Refresh accounts and activity"}</button></div>}
       {refreshing && data && <p className="money-refreshing" role="status">Refreshing Money…</p>}
 
       {view.status === "loading" && <section className="money-state" role="status" aria-live="polite"><span className="loading-orb" aria-hidden="true" /><h2>Loading your Money space…</h2><p>Checking your latest accounts and activity.</p></section>}
@@ -208,21 +222,21 @@ export function MoneyPage({ csrfToken, timeZone, onSessionExpired }: { csrfToken
       {data && <>
         {!timeZone && <section className="money-timezone-card"><h2>Set your transaction timezone</h2><p>Use the same dates and times on every device.</p><a className="button button-primary" href="/me#timezone">Confirm timezone in Me</a></section>}
         {timeZone && <nav className="money-view-switch" aria-label="Money views"><button type="button" aria-pressed={panel === "overview"} disabled={pending} onClick={() => setPanel("overview")}>Overview</button><button type="button" aria-pressed={panel === "transactions"} disabled={pending} onClick={() => setPanel("transactions")}>Transactions</button></nav>}
-        {timeZone && (!hasActiveAccount || (page === 0 && data.events.length === 0)) && <section className="money-onboarding" aria-label="Get started with Money"><p className="eyebrow">GET STARTED</p><h2>Three small steps to your first record.</h2><ol><li className={hasActiveAccount ? "is-done" : ""}><span>1. Account</span>{hasActiveAccount ? "Ready" : <button type="button" onClick={() => chooseSetup("account")}>Create an account</button>}</li><li className={hasExpenseCategory ? "is-done" : ""}><span>2. Category (optional)</span>{hasExpenseCategory ? "Ready" : <button type="button" onClick={() => chooseSetup("category")}>Add a category</button>}</li><li className={data.events.length > 0 ? "is-done" : ""}><span>3. First transaction</span>{data.events.length > 0 ? "Ready" : <button type="button" onClick={() => openTransaction("expense")}>Record an expense</button>}</li></ol><p>Categories are optional: you can record income or expenses as Uncategorized. For existing accounts, confirm a balance date in Overview before relying on older entries. New accounts use the balance and date you confirm.</p></section>}
-        {(!timeZone || panel === "overview") && <AccountOverview onBalanceDate={setBalanceAccount} data={data} csrfToken={csrfToken} pending={pending} runMutation={runMutation} operationError={operationError} onAddAccount={() => chooseSetup("account")} onCategories={() => chooseSetup("category")} />}
-        {timeZone && panel === "transactions" && <HistorySection data={data} timeZone={timeZone} page={page} setPage={setPage} csrfToken={csrfToken} pending={pending} runMutation={runMutation} onReplace={openTransaction} operationError={operationError} />}
+        {timeZone && (!hasActiveAccount || (page === 0 && data.events.length === 0)) && <section className="money-onboarding" aria-label="Get started with Money"><p className="eyebrow">GET STARTED</p><h2>Three small steps to your first record.</h2><ol><li className={hasActiveAccount ? "is-done" : ""}><span>1. Account</span>{hasActiveAccount ? "Ready" : <button type="button" disabled={financialBlocked} onClick={() => chooseSetup("account")}>Create an account</button>}</li><li className={hasExpenseCategory ? "is-done" : ""}><span>2. Category (optional)</span>{hasExpenseCategory ? "Ready" : <button type="button" disabled={financialBlocked} onClick={() => chooseSetup("category")}>Add a category</button>}</li><li className={data.events.length > 0 ? "is-done" : ""}><span>3. First transaction</span>{data.events.length > 0 ? "Ready" : <button type="button" disabled={financialBlocked} onClick={() => openTransaction("expense")}>Record an expense</button>}</li></ol><p>Categories are optional: you can record income or expenses as Uncategorized. For existing accounts, confirm a balance date in Overview before relying on older entries. New accounts use the balance and date you confirm.</p></section>}
+        {(!timeZone || panel === "overview") && <AccountOverview onBalanceDate={setBalanceAccount} data={data} csrfToken={csrfToken} pending={pending || financialBlocked} runMutation={runMutation} operationError={operationError} onAddAccount={() => chooseSetup("account")} onCategories={() => chooseSetup("category")} />}
+        {timeZone && panel === "transactions" && <HistorySection data={data} timeZone={timeZone} page={page} setPage={setPage} csrfToken={csrfToken} pending={pending || financialBlocked} runMutation={runMutation} onReplace={openTransaction} operationError={operationError} />}
         <dialog ref={setupDialogRef} className="money-transaction-dialog money-setup-dialog" aria-labelledby="money-setup-dialog-title" onCancel={(event) => { if (pending) event.preventDefault(); }} onClose={() => { if (!setupDialogRef.current?.open) closeSetup(); }} onClick={(event) => { if (event.target === setupDialogRef.current) closeSetup(); }}>
-          <div className="money-dialog-content"><div className="money-dialog-head"><h2 id="money-setup-dialog-title">{setupAction === "account" ? "Add account" : "Categories"}</h2><button type="button" className="money-dialog-close" onClick={closeSetup} disabled={pending} aria-label="Close setup panel">×</button></div>
-            <div className="money-setup-pane" hidden={setupAction !== "account"}><AccountForm open={setupOpen && setupAction === "account"} timeZone={timeZone} csrfToken={csrfToken} pending={pending} runMutation={runMutation} operationError={operationError} onSaved={closeSetup} /></div>
+          <div className="money-dialog-content"><div className="money-dialog-head"><h2 id="money-setup-dialog-title">{setupAction === "account" ? "Add account" : "Categories"}</h2><button type="button" className="money-dialog-close" onClick={closeSetup} disabled={pending} aria-label="Close setup panel">×</button></div><FinancialWriteRecovery csrfToken={csrfToken} onSessionExpired={onSessionExpired} onRecovered={() => { closeTransaction(); closeSetup(); void loadMoney(page); }} />
+            <div className="money-setup-pane" hidden={setupAction !== "account"}><AccountForm open={setupOpen && setupAction === "account"} timeZone={timeZone} csrfToken={csrfToken} pending={pending || financialBlocked} runMutation={runMutation} operationError={operationError} onSaved={closeSetup} /></div>
             <div className="money-setup-pane" hidden={setupAction !== "category"}><CategoryPanel categories={data.categories} csrfToken={csrfToken} pending={pending} runMutation={runMutation} operationError={operationError} /></div>
           </div>
         </dialog>
         {timeZone && <dialog ref={dialogRef} className="money-transaction-dialog" aria-labelledby="money-dialog-title" onClose={closeTransaction} onClick={(event) => { if (event.target === dialogRef.current) closeTransaction(); }}>
-          <div className="money-dialog-content"><div className="money-dialog-head"><h2 id="money-dialog-title">{replacement ? "Review a replacement" : "Add transaction"}</h2><button type="button" className="money-dialog-close" onClick={closeTransaction} aria-label="Close transaction form">×</button></div>
+          <div className="money-dialog-content"><div className="money-dialog-head"><h2 id="money-dialog-title">{replacement ? "Review a replacement" : "Add transaction"}</h2><button type="button" className="money-dialog-close" onClick={closeTransaction} aria-label="Close transaction form">×</button></div><FinancialWriteRecovery csrfToken={csrfToken} onSessionExpired={onSessionExpired} onRecovered={() => { closeTransaction(); closeSetup(); void loadMoney(page); }} />
             {replacement && <p className="money-help">The original remains voided. Review every field and explicitly confirm the new transaction before saving.</p>}
-            <div className="money-action-tabs" role="group" aria-label="Transaction type">{(["expense", "income", "transfer"] as const).map((item) => <button key={item} type="button" className={`money-action-tab${transactionAction === item ? " is-active" : ""}`} aria-pressed={transactionAction === item} disabled={pending} onClick={() => { setTransactionAction(item); setReplacement(null); setOperationError(""); }}>{item[0].toUpperCase() + item.slice(1)}</button>)}</div>
-            {(transactionAction === "expense" || transactionAction === "income") && <EntryForm key={`${formSession}-${transactionAction}-${replacement?.id ?? "new"}`} kind={transactionAction} timeZone={timeZone} accounts={data.accounts} categories={data.categories} csrfToken={csrfToken} pending={pending} runMutation={runMutation} onChooseAction={chooseSetup} initial={replacement} operationError={operationError} onSaved={closeTransaction} />}
-            {transactionAction === "transfer" && <TransferForm key={`${formSession}-${replacement?.id ?? "new"}`} timeZone={timeZone} accounts={data.accounts} csrfToken={csrfToken} pending={pending} runMutation={runMutation} onChooseAction={chooseSetup} initial={replacement} operationError={operationError} onSaved={closeTransaction} />}
+            <div className="money-action-tabs" role="group" aria-label="Transaction type">{(["expense", "income", "transfer"] as const).map((item) => <button key={item} type="button" className={`money-action-tab${transactionAction === item ? " is-active" : ""}`} aria-pressed={transactionAction === item} disabled={pending || financialBlocked} onClick={() => { setTransactionAction(item); setReplacement(null); setOperationError(""); }}>{item[0].toUpperCase() + item.slice(1)}</button>)}</div>
+            {(transactionAction === "expense" || transactionAction === "income") && <EntryForm key={`${formSession}-${transactionAction}-${replacement?.id ?? "new"}`} kind={transactionAction} timeZone={timeZone} accounts={data.accounts} categories={data.categories} csrfToken={csrfToken} pending={pending || financialBlocked} runMutation={runMutation} onChooseAction={chooseSetup} initial={replacement} operationError={operationError} onSaved={closeTransaction} />}
+            {transactionAction === "transfer" && <TransferForm key={`${formSession}-${replacement?.id ?? "new"}`} timeZone={timeZone} accounts={data.accounts} csrfToken={csrfToken} pending={pending || financialBlocked} runMutation={runMutation} onChooseAction={chooseSetup} initial={replacement} operationError={operationError} onSaved={closeTransaction} />}
           </div>
         </dialog>}
       </>}
@@ -304,7 +318,7 @@ function AccountForm({ open, timeZone, csrfToken, pending, runMutation, operatio
       </>}
       {error && <p id="money-account-error" className="money-field-error" role="alert">{error}</p>}
       {operationError && <p className="money-field-error" role="alert">{operationError}</p>}
-      <button className="button button-primary" type="submit" disabled={pending}>{pending ? "Saving…" : "Create account"}</button></fieldset>
+      <button className="button button-primary" type="submit" disabled={pending}>{pending ? savingLabel() : "Create account"}</button></fieldset>
   </form>;
 }
 
@@ -341,8 +355,8 @@ function CategoryPanel({ categories, csrfToken, pending, runMutation, operationE
   function row(category: MoneyCategory) {
     return <li key={category.id} className="money-category-item">
       <div className="money-category-row"><span><strong>{category.name}</strong><span className="money-category-kind"> · {category.kind}</span></span><div className="money-category-actions"><button type="button" className="money-text-action" data-category-action={`${category.id}-rename`} disabled={pending} onClick={() => { setEditingID(category.id); setDraftName(category.name); setConfirm(null); setLocalError(""); }}>Rename</button><button type="button" className="money-text-action" data-category-action={`${category.id}-${category.archived_at ? "restore" : "archive"}`} disabled={pending} onClick={() => { setConfirm({ id: category.id, action: category.archived_at ? "restore" : "archive" }); setEditingID(null); setLocalError(""); }}>{category.archived_at ? "Restore" : "Archive"}</button></div></div>
-      {editingID === category.id && <form className="money-category-edit money-confirm" onSubmit={(event) => void submitRename(event, category)}><label>New name<input autoFocus required maxLength={120} value={draftName} onChange={(event) => { setDraftName(event.target.value); setLocalError(""); }} aria-invalid={!!localError} aria-describedby={localError ? "money-category-edit-error" : undefined} /></label><p className="money-help">This keeps the same category and updates the name shown on past transactions. Its {category.kind} type cannot change.</p>{localError && <p id="money-category-edit-error" className="money-field-error" role="alert">{localError}</p>}{operationError && <p className="money-field-error" role="alert">{operationError}</p>}<div className="money-confirm-actions"><button type="button" className="button button-outline" disabled={pending} onClick={cancelAction}>Cancel</button><button type="submit" className="button button-primary" disabled={pending}>{pending ? "Saving…" : "Save name"}</button></div></form>}
-      {confirm?.id === category.id && <div className="money-confirm" role="group" aria-label={`${confirm.action} ${category.name}`}><p>{confirm.action === "archive" ? `Archive ${category.name}? Past transactions and balances stay unchanged. It will no longer be available for new transactions.` : `Restore ${category.name} for new ${category.kind} transactions? Past transactions stay unchanged.`}</p>{operationError && <p className="money-field-error" role="alert">{operationError}</p>}<div className="money-confirm-actions"><button type="button" className="button button-outline" disabled={pending} onClick={cancelAction}>Cancel</button><button type="button" className={confirm.action === "archive" ? "button button-danger" : "button button-primary"} disabled={pending} onClick={() => void confirmChange(category, confirm.action)}>{pending ? "Saving…" : `Confirm ${confirm.action}`}</button></div></div>}
+      {editingID === category.id && <form className="money-category-edit money-confirm" onSubmit={(event) => void submitRename(event, category)}><label>New name<input autoFocus required maxLength={120} value={draftName} onChange={(event) => { setDraftName(event.target.value); setLocalError(""); }} aria-invalid={!!localError} aria-describedby={localError ? "money-category-edit-error" : undefined} /></label><p className="money-help">This keeps the same category and updates the name shown on past transactions. Its {category.kind} type cannot change.</p>{localError && <p id="money-category-edit-error" className="money-field-error" role="alert">{localError}</p>}{operationError && <p className="money-field-error" role="alert">{operationError}</p>}<div className="money-confirm-actions"><button type="button" className="button button-outline" disabled={pending} onClick={cancelAction}>Cancel</button><button type="submit" className="button button-primary" disabled={pending}>{pending ? savingLabel() : "Save name"}</button></div></form>}
+      {confirm?.id === category.id && <div className="money-confirm" role="group" aria-label={`${confirm.action} ${category.name}`}><p>{confirm.action === "archive" ? `Archive ${category.name}? Past transactions and balances stay unchanged. It will no longer be available for new transactions.` : `Restore ${category.name} for new ${category.kind} transactions? Past transactions stay unchanged.`}</p>{operationError && <p className="money-field-error" role="alert">{operationError}</p>}<div className="money-confirm-actions"><button type="button" className="button button-outline" disabled={pending} onClick={cancelAction}>Cancel</button><button type="button" className={confirm.action === "archive" ? "button button-danger" : "button button-primary"} disabled={pending} onClick={() => void confirmChange(category, confirm.action)}>{pending ? savingLabel() : `Confirm ${confirm.action}`}</button></div></div>}
     </li>;
   }
   return <div className="money-category-panel">
@@ -367,7 +381,7 @@ function CategoryForm({ csrfToken, pending, runMutation, operationError }: { csr
     <fieldset disabled={pending}><div className="money-field-grid"><label>Category name<input required maxLength={120} value={name} onChange={(event) => setName(event.target.value)} placeholder="Groceries" aria-invalid={!!error} aria-describedby={error ? "money-category-error" : undefined} /></label><label>Category type<select value={kind} onChange={(event) => setKind(event.target.value as CategoryCreate["kind"])}><option value="expense">Expense</option><option value="income">Income</option></select></label></div>
       {error && <p id="money-category-error" className="money-field-error" role="alert">{error}</p>}
       {operationError && <p className="money-field-error" role="alert">{operationError}</p>}
-      <button className="button button-primary" type="submit" disabled={pending}>{pending ? "Saving…" : "Create category"}</button></fieldset>
+      <button className="button button-primary" type="submit" disabled={pending}>{pending ? savingLabel() : "Create category"}</button></fieldset>
   </form>;
 }
 
@@ -416,8 +430,8 @@ function EntryForm({ kind, timeZone, accounts, categories, csrfToken, pending, r
   }
   return <form className="money-form" noValidate onSubmit={(event) => void submit(event)}>
     <div><p className="eyebrow">RECORD {kind.toUpperCase()}</p><h3>{kind === "income" ? "Money coming in." : "Money going out."}</h3><p>The selected account sets the currency. Choose a category or leave this transaction Uncategorized.</p></div>
-    {activeAccounts.length === 0 && <p className="money-help">You need an active account. <button type="button" className="money-inline-action" onClick={() => onChooseAction("account")}>Create an account</button>.</p>}
-    {activeCategories.length === 0 && <p className="money-help">You can record this as Uncategorized, or <button type="button" className="money-inline-action" onClick={() => onChooseAction("category")}>create a category</button>.</p>}
+    {activeAccounts.length === 0 && <p className="money-help">You need an active account. <button type="button" className="money-inline-action" disabled={pending} onClick={() => onChooseAction("account")}>Create an account</button>.</p>}
+    {activeCategories.length === 0 && <p className="money-help">You can record this as Uncategorized, or <button type="button" className="money-inline-action" disabled={pending} onClick={() => onChooseAction("category")}>create a category</button>.</p>}
     <fieldset disabled={pending || activeAccounts.length === 0}><div className="money-field-grid">
       <label>Account<select required value={accountID} onChange={(event) => { setAccountID(event.target.value); changed(); }} aria-invalid={error?.field === "account"} aria-describedby={error?.field === "account" ? "money-entry-error" : undefined}><option value="">Choose an account</option>{activeAccounts.map((account) => <option key={account.id} value={account.id}>{account.name} · {account.currency}</option>)}</select></label>
       <label>{kind === "income" ? "Income" : "Expense"} category <span className="money-optional">optional</span><select value={categoryID} onChange={(event) => { setCategoryID(event.target.value); changed(); }} aria-invalid={error?.field === "category"} aria-describedby={error?.field === "category" ? "money-entry-error" : undefined}><option value="">Uncategorized</option>{activeCategories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
@@ -427,7 +441,7 @@ function EntryForm({ kind, timeZone, accounts, categories, csrfToken, pending, r
       {error && <p id="money-entry-error" className="money-field-error" role="alert">{error.message}</p>}
       {operationError && <p className="money-field-error" role="alert">{operationError}</p>}
       {initial && reviewed && <p className="money-confirm" role="status">Review complete. Confirm to create a new record; the voided original will remain in history.</p>}
-      <button className="button button-primary" type="submit" disabled={pending || activeAccounts.length === 0}>{pending ? "Saving…" : initial ? reviewed ? "Confirm replacement" : "Review replacement" : `Record ${kind}`}</button></fieldset>
+      <button className="button button-primary" type="submit" disabled={pending || activeAccounts.length === 0}>{pending ? savingLabel() : initial ? reviewed ? "Confirm replacement" : "Review replacement" : `Record ${kind}`}</button></fieldset>
   </form>;
 }
 
@@ -463,7 +477,7 @@ function TransferForm({ timeZone, accounts, csrfToken, pending, runMutation, onC
   }
   return <form className="money-form" noValidate onSubmit={(event) => void submit(event)}>
     <div><p className="eyebrow">TRANSFER</p><h3>Move money between accounts.</h3><p>A transfer changes two balances but does not create income or spending.</p></div>
-    {active.length < 2 && <p className="money-help">You need two active accounts. <button type="button" className="money-inline-action" onClick={() => onChooseAction("account")}>Create an account</button>.</p>}
+    {active.length < 2 && <p className="money-help">You need two active accounts. <button type="button" className="money-inline-action" disabled={pending} onClick={() => onChooseAction("account")}>Create an account</button>.</p>}
     {source && destinations.length === 0 && <p className="money-help">Add another account in {source.currency} to make a transfer.</p>}
     <fieldset disabled={pending || active.length < 2}><div className="money-field-grid">
       <label>From account<select required value={fromID} onChange={(event) => { setFromID(event.target.value); setToID(""); changed(); }} aria-invalid={error?.field === "from"} aria-describedby={error?.field === "from" ? "money-transfer-error" : undefined}><option value="">Choose source</option>{active.map((account) => <option key={account.id} value={account.id}>{account.name} · {account.currency}</option>)}</select></label>
@@ -474,7 +488,7 @@ function TransferForm({ timeZone, accounts, csrfToken, pending, runMutation, onC
       {error && <p id="money-transfer-error" className="money-field-error" role="alert">{error.message}</p>}
       {operationError && <p className="money-field-error" role="alert">{operationError}</p>}
       {initial && reviewed && <p className="money-confirm" role="status">Review complete. Confirm to create a new transfer; the voided original will remain in history.</p>}
-      <button className="button button-primary" type="submit" disabled={pending || active.length < 2}>{pending ? "Saving…" : initial ? reviewed ? "Confirm replacement" : "Review replacement" : "Record transfer"}</button></fieldset>
+      <button className="button button-primary" type="submit" disabled={pending || active.length < 2}>{pending ? savingLabel() : initial ? reviewed ? "Confirm replacement" : "Review replacement" : "Record transfer"}</button></fieldset>
   </form>;
 }
 

@@ -359,7 +359,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Void an event with an optional note while retaining history */
+        /**
+         * Void an event with an optional note while retaining history
+         * @description Required owner-scoped UUIDv4 key; first success has Idempotency-Replayed=false. Matching replay acknowledges the original committed command without financial contents. Different normalized data under a committed key fails 409. All attempts recheck session, Origin and CSRF. See ADR-019.
+         */
         post: operations["voidMoneyEvent"];
         delete?: never;
         options?: never;
@@ -596,6 +599,10 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        FinancialWriteReplay: {
+            /** @constant */
+            outcome: "already_applied";
+        };
         OwnerExportRequest: {
             /** @enum {string} */
             format: "json" | "finance_csv";
@@ -671,7 +678,7 @@ export interface components {
         MoneyErrorResponse: {
             error: {
                 /** @enum {string} */
-                code: "invalid_json" | "invalid_input" | "unsupported_media_type" | "request_too_large" | "authentication_required" | "invalid_origin" | "invalid_csrf" | "owner_override" | "method_not_allowed" | "session_unavailable" | "currency_mismatch" | "not_found" | "archived_record" | "conflict" | "amount_overflow" | "internal_error";
+                code: "idempotency_key_required" | "invalid_idempotency_key" | "idempotency_key_conflict" | "idempotency_capacity_exceeded" | "financial_write_busy" | "financial_write_outcome_unknown" | "idempotency_version_unsupported" | "invalid_json" | "invalid_input" | "unsupported_media_type" | "request_too_large" | "authentication_required" | "invalid_origin" | "invalid_csrf" | "owner_override" | "method_not_allowed" | "session_unavailable" | "currency_mismatch" | "not_found" | "archived_record" | "conflict" | "amount_overflow" | "internal_error";
                 message: string;
             };
         };
@@ -1318,6 +1325,27 @@ export interface components {
         };
     };
     responses: {
+        /** @description Original command committed; no reapplication or prior financial contents. Refresh normal authorized reads because the record may subsequently have changed or disappeared. Private/no-store. */
+        FinancialWriteReplay: {
+            headers: {
+                "Idempotency-Replayed": components["headers"]["IdempotencyCommittedReplay"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["FinancialWriteReplay"];
+            };
+        };
+        /** @description Bounded busy/rollback (financial_write_busy), uncertain commit (financial_write_outcome_unknown), unsupported fingerprint version, or session validation unavailable. Keep and manually retry the SAME key and frozen body; do not infer that an earlier attempt rolled back. */
+        FinancialWriteUnavailable: {
+            headers: {
+                /** @description Present as 1 for financial_write_busy; absent when no retry delay can be promised. */
+                "Retry-After"?: "1";
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["MoneyErrorResponse"];
+            };
+        };
         /** @description Owner-scoped Goal and current checklist progress. */
         GoalOK: {
             headers: {
@@ -1509,6 +1537,8 @@ export interface components {
         };
     };
     parameters: {
+        /** @description Exactly one cryptographically random lowercase UUIDv4 for this logical Save, retained with the frozen payload across uncertain retries. Scoped to the authenticated owner across all six covered writes; never expire/evict successful keys. Missing/invalid key fails 400; changed committed intent fails 409. */
+        FinancialIdempotencyKey: string;
         MoneyAccountID: string;
         MoneyCategoryID: string;
         MoneyEventID: string;
@@ -1524,6 +1554,12 @@ export interface components {
     };
     requestBodies: never;
     headers: {
+        /** @description First committed success. Private/no-store; retain the key until a valid response is received. */
+        IdempotencyFirstSuccess: "false";
+        /** @description Previously committed command; acknowledgement contains no old financial contents. */
+        IdempotencyCommittedReplay: "true";
+        /** @description false on first committed success; true on the content-free already_applied acknowledgement. All successes are private and no-store. */
+        IdempotencyReplayed: "false" | "true";
         /** @description Identifier used to correlate a request with structured server logs. */
         RequestId: string;
     };
@@ -1576,6 +1612,8 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Exactly one cryptographically random lowercase UUIDv4 for this logical Save, retained with the frozen payload across uncertain retries. Scoped to the authenticated owner across all six covered writes; never expire/evict successful keys. Missing/invalid key fails 400; changed committed intent fails 409. */
+                "Idempotency-Key": components["parameters"]["FinancialIdempotencyKey"];
                 /** @description Must exactly match the configured public origin. */
                 Origin: components["parameters"]["MoneyOrigin"];
                 /** @description Session-bound token returned by GET /api/v1/me. */
@@ -1592,13 +1630,14 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Complete owner-scoped confirmed account; repeat/stale confirmations conflict without another change. */
+            /** @description First committed confirmation returns the owned Account (replay=false); a matching committed key returns only already_applied (replay=true), before current revision checks. A new key must satisfy current preconditions. */
             200: {
                 headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyReplayed"];
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["MoneyAccount"];
+                    "application/json": components["schemas"]["MoneyAccount"] | components["schemas"]["FinancialWriteReplay"];
                 };
             };
             400: components["responses"]["MoneyBadRequest"];
@@ -1610,7 +1649,7 @@ export interface operations {
             415: components["responses"]["MoneyUnsupportedMediaType"];
             422: components["responses"]["MoneyOverflow"];
             500: components["responses"]["MoneyInternalError"];
-            503: components["responses"]["MoneyUnavailable"];
+            503: components["responses"]["FinancialWriteUnavailable"];
         };
     };
     downloadOwnerExport: {
@@ -1961,6 +2000,8 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Exactly one cryptographically random lowercase UUIDv4 for this logical Save, retained with the frozen payload across uncertain retries. Scoped to the authenticated owner across all six covered writes; never expire/evict successful keys. Missing/invalid key fails 400; changed committed intent fails 409. */
+                "Idempotency-Key": components["parameters"]["FinancialIdempotencyKey"];
                 /** @description Must exactly match the configured public origin. */
                 Origin: components["parameters"]["MoneyOrigin"];
                 /** @description Session-bound token returned by GET /api/v1/me. */
@@ -1975,9 +2016,11 @@ export interface operations {
             };
         };
         responses: {
+            200: components["responses"]["FinancialWriteReplay"];
             /** @description Account created. */
             201: {
                 headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyFirstSuccess"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -1987,10 +2030,11 @@ export interface operations {
             400: components["responses"]["MoneyBadRequest"];
             401: components["responses"]["MoneyUnauthorized"];
             403: components["responses"]["MoneyForbidden"];
+            409: components["responses"]["MoneyConflict"];
             413: components["responses"]["MoneyTooLarge"];
             415: components["responses"]["MoneyUnsupportedMediaType"];
             500: components["responses"]["MoneyInternalError"];
-            503: components["responses"]["MoneyUnavailable"];
+            503: components["responses"]["FinancialWriteUnavailable"];
         };
     };
     getMoneyAccountBalance: {
@@ -2307,6 +2351,8 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description Exactly one cryptographically random lowercase UUIDv4 for this logical Save, retained with the frozen payload across uncertain retries. Scoped to the authenticated owner across all six covered writes; never expire/evict successful keys. Missing/invalid key fails 400; changed committed intent fails 409. */
+                "Idempotency-Key": components["parameters"]["FinancialIdempotencyKey"];
                 /** @description Must exactly match the configured public origin. */
                 Origin: components["parameters"]["MoneyOrigin"];
                 /** @description Session-bound token returned by GET /api/v1/me. */
@@ -2321,9 +2367,11 @@ export interface operations {
             };
         };
         responses: {
+            200: components["responses"]["FinancialWriteReplay"];
             /** @description Atomic financial event with its movement and zero or more allocations. An empty allocation array means Uncategorized. */
             201: {
                 headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyFirstSuccess"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2339,13 +2387,15 @@ export interface operations {
             415: components["responses"]["MoneyUnsupportedMediaType"];
             422: components["responses"]["MoneyOverflow"];
             500: components["responses"]["MoneyInternalError"];
-            503: components["responses"]["MoneyUnavailable"];
+            503: components["responses"]["FinancialWriteUnavailable"];
         };
     };
     postMoneyTransfer: {
         parameters: {
             query?: never;
             header: {
+                /** @description Exactly one cryptographically random lowercase UUIDv4 for this logical Save, retained with the frozen payload across uncertain retries. Scoped to the authenticated owner across all six covered writes; never expire/evict successful keys. Missing/invalid key fails 400; changed committed intent fails 409. */
+                "Idempotency-Key": components["parameters"]["FinancialIdempotencyKey"];
                 /** @description Must exactly match the configured public origin. */
                 Origin: components["parameters"]["MoneyOrigin"];
                 /** @description Session-bound token returned by GET /api/v1/me. */
@@ -2360,9 +2410,11 @@ export interface operations {
             };
         };
         responses: {
+            200: components["responses"]["FinancialWriteReplay"];
             /** @description Transfer event with equal opposite movements and no allocations. */
             201: {
                 headers: {
+                    "Idempotency-Replayed": components["headers"]["IdempotencyFirstSuccess"];
                     [name: string]: unknown;
                 };
                 content: {
@@ -2378,13 +2430,15 @@ export interface operations {
             415: components["responses"]["MoneyUnsupportedMediaType"];
             422: components["responses"]["MoneyOverflow"];
             500: components["responses"]["MoneyInternalError"];
-            503: components["responses"]["MoneyUnavailable"];
+            503: components["responses"]["FinancialWriteUnavailable"];
         };
     };
     voidMoneyEvent: {
         parameters: {
             query?: never;
             header: {
+                /** @description Exactly one cryptographically random lowercase UUIDv4 for this logical Save, retained with the frozen payload across uncertain retries. Scoped to the authenticated owner across all six covered writes; never expire/evict successful keys. Missing/invalid key fails 400; changed committed intent fails 409. */
+                "Idempotency-Key": components["parameters"]["FinancialIdempotencyKey"];
                 /** @description Must exactly match the configured public origin. */
                 Origin: components["parameters"]["MoneyOrigin"];
                 /** @description Session-bound token returned by GET /api/v1/me. */
@@ -2401,6 +2455,7 @@ export interface operations {
             };
         };
         responses: {
+            200: components["responses"]["FinancialWriteReplay"];
             /** @description Event voided; history remains available. */
             204: {
                 headers: {
@@ -2417,13 +2472,15 @@ export interface operations {
             415: components["responses"]["MoneyUnsupportedMediaType"];
             422: components["responses"]["MoneyOverflow"];
             500: components["responses"]["MoneyInternalError"];
-            503: components["responses"]["MoneyUnavailable"];
+            503: components["responses"]["FinancialWriteUnavailable"];
         };
     };
     deleteMoneyEvent: {
         parameters: {
             query?: never;
             header: {
+                /** @description Exactly one cryptographically random lowercase UUIDv4 for this logical Save, retained with the frozen payload across uncertain retries. Scoped to the authenticated owner across all six covered writes; never expire/evict successful keys. Missing/invalid key fails 400; changed committed intent fails 409. */
+                "Idempotency-Key": components["parameters"]["FinancialIdempotencyKey"];
                 /** @description Must exactly match the configured public origin. */
                 Origin: components["parameters"]["MoneyOrigin"];
                 /** @description Session-bound token returned by GET /api/v1/me. */
@@ -2436,6 +2493,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            200: components["responses"]["FinancialWriteReplay"];
             /** @description Event is deleted from normal views; no response body. */
             204: {
                 headers: {
@@ -2450,7 +2508,7 @@ export interface operations {
             409: components["responses"]["MoneyConflict"];
             422: components["responses"]["MoneyOverflow"];
             500: components["responses"]["MoneyInternalError"];
-            503: components["responses"]["MoneyUnavailable"];
+            503: components["responses"]["FinancialWriteUnavailable"];
         };
     };
     listGoals: {

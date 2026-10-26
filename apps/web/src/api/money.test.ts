@@ -1,17 +1,23 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { previewOpeningBalance, confirmOpeningBalance } from "./money";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { previewOpeningBalance, confirmOpeningBalance, retryFinancialWrite } from "./money";
 
 import { archiveMoneyAccount, archiveMoneyCategory, createMoneyAccount, deleteMoneyEvent, listMoneyAccounts, listMoneyHistory, MoneyApiError, postMoneyEvent, renameMoneyCategory, restoreMoneyAccount, restoreMoneyCategory, voidMoneyEvent } from "./money";
 
-afterEach(() => vi.unstubAllGlobals());
+import { pendingFinancialWrite } from "../pendingFinancialWrite";
+beforeEach(() => {
+ const storage=new Map<string,string>();
+ vi.stubGlobal("window", {sessionStorage:{getItem:(key:string)=>storage.get(key)??null,setItem:(key:string,value:string)=>storage.set(key,value),removeItem:(key:string)=>storage.delete(key)}});
+ pendingFinancialWrite.bindOwner("test-owner");
+});
+afterEach(() => { pendingFinancialWrite.bindOwner(null); vi.unstubAllGlobals(); });
 
 describe("Money API boundary", () => {
   it("uses guarded exact balance preview and revision confirmation without owner input", async () => {
-    const request=vi.fn().mockResolvedValue({ok:true,status:200,json:async()=>({})}); vi.stubGlobal("fetch",request);
-    await previewOpeningBalance("csrf","account-1",{opening_balance_at:"2026-10-01T00:00:00Z"});
-    await confirmOpeningBalance("csrf","account-1",{opening_balance_at:"2026-10-01T00:00:00Z",opening_balance_minor:"-9223372036854775808",balance_revision:"12",acknowledge_change:true});
-    expect(request.mock.calls[0][0]).toBe("/api/v1/accounts/account-1/opening-balance/preview");
-    expect(request.mock.calls[1][0]).toBe("/api/v1/accounts/account-1/opening-balance/confirm");
+    const request=vi.fn().mockResolvedValue({ok:true,status:200,headers:new Headers({"Idempotency-Replayed":"false"}),json:async()=>({id:"account",currency:"MYR",opening_balance_minor:"0"})}); vi.stubGlobal("fetch",request);
+    await previewOpeningBalance("csrf","11111111-1111-4111-8111-111111111111",{opening_balance_at:"2026-10-01T00:00:00Z"});
+    await confirmOpeningBalance("csrf","11111111-1111-4111-8111-111111111111",{opening_balance_at:"2026-10-01T00:00:00Z",opening_balance_minor:"-9223372036854775808",balance_revision:"12",acknowledge_change:true});
+    expect(request.mock.calls[0][0]).toBe("/api/v1/accounts/11111111-1111-4111-8111-111111111111/opening-balance/preview");
+    expect(request.mock.calls[1][0]).toBe("/api/v1/accounts/11111111-1111-4111-8111-111111111111/opening-balance/confirm");
     expect(JSON.parse(request.mock.calls[0][1].body)).not.toHaveProperty("opening_balance_minor");
     expect(JSON.parse(request.mock.calls[1][1].body)).toMatchObject({opening_balance_minor:"-9223372036854775808",balance_revision:"12",acknowledge_change:true});
     for(const call of request.mock.calls) { expect(call[1]).toMatchObject({method:"POST",credentials:"same-origin",cache:"no-store",headers:{"X-CSRF-Token":"csrf"}}); expect(call[1].body).not.toContain("owner_id"); }
@@ -26,7 +32,7 @@ describe("Money API boundary", () => {
   });
 
   it("sends exact decimal-string amounts and CSRF on mutations", async () => {
-    const request = vi.fn().mockResolvedValue({ ok: true, status: 201, json: async () => ({ id: "test" }) });
+    const request = vi.fn().mockResolvedValue({ ok: true, status: 201, headers: new Headers({"Idempotency-Replayed":"false"}), json: async () => ({ id: "test",currency:"MYR",opening_balance_minor:"0",amount_minor:"0",movements:[] }) });
     vi.stubGlobal("fetch", request);
     await createMoneyAccount("csrf-test", { name: "Cash", type: "cash", currency: "MYR", opening_balance_minor: "-25", opening_balance_at: "2026-10-01T00:00:00Z" });
     await postMoneyEvent("csrf-test", { kind: "expense", account_id: "account-test", amount_minor: "29", currency: "MYR", occurred_at: "2020-01-01T00:00:00Z", allocations: [{ category_id: "category-test", amount_minor: "29" }] });
@@ -39,21 +45,21 @@ describe("Money API boundary", () => {
   });
 
   it("uses empty-body archive/restore/delete and an optional void note", async () => {
-    const request = vi.fn().mockResolvedValue({ ok: true, status: 204 });
+    const request = vi.fn().mockResolvedValue({ ok: true, status: 204, headers: new Headers({"Idempotency-Replayed":"false"}) });
     vi.stubGlobal("fetch", request);
-    await archiveMoneyAccount("csrf", "account-1");
-    await restoreMoneyAccount("csrf", "account-1");
-    await voidMoneyEvent("csrf", "event-1", "Entered twice");
-    await voidMoneyEvent("csrf", "event-2");
-    await deleteMoneyEvent("csrf", "event-3");
-    expect(request.mock.calls[0][0]).toBe("/api/v1/accounts/account-1/archive");
+    await archiveMoneyAccount("csrf", "11111111-1111-4111-8111-111111111111");
+    await restoreMoneyAccount("csrf", "11111111-1111-4111-8111-111111111111");
+    await voidMoneyEvent("csrf", "22222222-2222-4222-8222-222222222222", "Entered twice");
+    await voidMoneyEvent("csrf", "33333333-3333-4333-8333-333333333333");
+    await deleteMoneyEvent("csrf", "44444444-4444-4444-8444-444444444444");
+    expect(request.mock.calls[0][0]).toBe("/api/v1/accounts/11111111-1111-4111-8111-111111111111/archive");
     expect(request.mock.calls[0][1].body).toBeUndefined();
-    expect(request.mock.calls[1][0]).toBe("/api/v1/accounts/account-1/restore");
+    expect(request.mock.calls[1][0]).toBe("/api/v1/accounts/11111111-1111-4111-8111-111111111111/restore");
     expect(request.mock.calls[1][1]).toMatchObject({ method: "POST", headers: { "X-CSRF-Token": "csrf" } });
     expect(request.mock.calls[1][1].body).toBeUndefined();
     expect(JSON.parse(request.mock.calls[2][1].body)).toEqual({ reason: "Entered twice" });
     expect(JSON.parse(request.mock.calls[3][1].body)).toEqual({ reason: "" });
-    expect(request.mock.calls[4][0]).toBe("/api/v1/events/event-3/delete");
+    expect(request.mock.calls[4][0]).toBe("/api/v1/events/44444444-4444-4444-8444-444444444444/delete");
     expect(request.mock.calls[4][1]).toMatchObject({ method: "POST", credentials: "same-origin", headers: { "X-CSRF-Token": "csrf" } });
     expect(request.mock.calls[4][1].body).toBeUndefined();
   });
@@ -62,11 +68,11 @@ describe("Money API boundary", () => {
     const request = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ id: "category-1", name: "Medical", kind: "expense" }) });
     vi.stubGlobal("fetch", request);
     await renameMoneyCategory("csrf", "category-1", { name: "Medical" });
-    request.mockResolvedValue({ ok: true, status: 204 });
+    request.mockResolvedValue({ ok: true, status: 204, headers: new Headers({"Idempotency-Replayed":"false"}) });
     await archiveMoneyCategory("csrf", "category-1");
     await restoreMoneyCategory("csrf", "category-1");
-    request.mockResolvedValue({ ok: true, status: 201, json: async () => ({ id: "event-1" }) });
-    await postMoneyEvent("csrf", { kind: "expense", account_id: "account-1", amount_minor: "100", currency: "MYR", occurred_at: "2026-10-13T00:00:00Z", allocations: [] });
+    request.mockResolvedValue({ ok: true, status: 201, headers: new Headers({"Idempotency-Replayed":"false"}), json: async () => ({ id: "22222222-2222-4222-8222-222222222222",currency:"MYR",amount_minor:"100",movements:[] }) });
+    await postMoneyEvent("csrf", { kind: "expense", account_id: "11111111-1111-4111-8111-111111111111", amount_minor: "100", currency: "MYR", occurred_at: "2026-10-13T00:00:00Z", allocations: [] });
     expect(request.mock.calls.map((call) => call[0])).toEqual([
       "/api/v1/categories/category-1/rename", "/api/v1/categories/category-1/archive",
       "/api/v1/categories/category-1/restore", "/api/v1/events",
@@ -95,4 +101,47 @@ describe("Money API boundary", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => { throw new SyntaxError("private response bytes"); } }));
     await expect(listMoneyAccounts()).rejects.toEqual(new MoneyApiError(200, "internal_error"));
   });
+});
+
+
+describe("Financial Save recovery API", () => {
+ const input = { kind: "expense" as const, account_id: "11111111-1111-4111-8111-111111111111", amount_minor: "1250", currency: "MYR", occurred_at: "2026-10-02T00:00:00.123456Z", note: "Frozen", allocations: [{category_id:"22222222-2222-4222-8222-222222222222",amount_minor:"1250"}] };
+ const receipt = () => new Response(JSON.stringify({outcome:"already_applied"}),{status:200,headers:{"Idempotency-Replayed":"true"}});
+ it("retries lost responses with identical frozen bytes/key and fresh CSRF", async () => {
+  const request=vi.fn().mockRejectedValueOnce(new Error("response lost")).mockImplementationOnce(async()=>receipt());vi.stubGlobal("fetch",request);
+  await expect(postMoneyEvent("csrf-first",input)).rejects.toMatchObject({status:0});
+  const frozen=pendingFinancialWrite.retry();
+  await expect(postMoneyEvent("csrf-new",{...input,amount_minor:"1500"})).rejects.toMatchObject({reason:"pending"});
+  expect(request).toHaveBeenCalledTimes(1);
+  await expect(retryFinancialWrite("csrf-renewed")).resolves.toEqual({outcome:"already_applied"});
+  expect(request.mock.calls[1][1].body).toBe(request.mock.calls[0][1].body);
+  expect(request.mock.calls[1][1].headers).toMatchObject({"Idempotency-Key":frozen.key,"X-CSRF-Token":"csrf-renewed"});
+  expect(pendingFinancialWrite.status().kind).toBe("empty");
+ });
+ it("keeps a conflicting key until explicit recovery, never rotates automatically",async()=>{
+  const request=vi.fn().mockImplementation(async()=>new Response(JSON.stringify({error:{code:"idempotency_key_conflict",message:"private payload"}}),{status:409}));vi.stubGlobal("fetch",request);
+  await expect(postMoneyEvent("csrf",input)).rejects.toMatchObject({code:"idempotency_key_conflict"});
+  const frozen=pendingFinancialWrite.retry();await expect(postMoneyEvent("csrf",input)).rejects.toMatchObject({reason:"pending"});
+  expect(pendingFinancialWrite.retry()).toEqual(frozen);expect(request).toHaveBeenCalledTimes(1);
+ });
+ it("preserves pending state after expired sessions or a rejected retry",async()=>{
+  const request=vi.fn().mockRejectedValueOnce(new Error("lost")).mockImplementationOnce(async()=>new Response(JSON.stringify({error:{code:"authentication_required"}}),{status:401})).mockImplementationOnce(async()=>new Response(JSON.stringify({error:{code:"conflict"}}),{status:409}));vi.stubGlobal("fetch",request);
+  await expect(postMoneyEvent("csrf",input)).rejects.toThrow();const frozen=pendingFinancialWrite.retry();
+  await expect(retryFinancialWrite("expired")).rejects.toMatchObject({status:401});
+  await expect(retryFinancialWrite("renewed")).rejects.toMatchObject({status:409});expect(pendingFinancialWrite.retry()).toEqual(frozen);
+ });
+ it("releases a definitive initial validation failure while preserving caller input",async()=>{
+  const original=JSON.stringify(input);const request=vi.fn().mockImplementation(async()=>new Response(JSON.stringify({error:{code:"invalid_input"}}),{status:400}));vi.stubGlobal("fetch",request);
+  await expect(postMoneyEvent("csrf",input)).rejects.toMatchObject({status:400});expect(pendingFinancialWrite.status().kind).toBe("empty");expect(JSON.stringify(input)).toBe(original);
+ });
+ it("does not treat malformed success as resolved",async()=>{
+  const request=vi.fn().mockImplementation(async()=>new Response("{}",{status:201,headers:{"Idempotency-Replayed":"false"}}));vi.stubGlobal("fetch",request);
+  await expect(postMoneyEvent("csrf",input)).rejects.toMatchObject({status:201});expect(pendingFinancialWrite.status().kind).toBe("pending");
+ });
+ it("never sends a corrupted pending payload",async()=>{
+  const record=await pendingFinancialWrite.prepare("/api/v1/events",JSON.stringify(input));
+  const broken={...record,body:JSON.stringify({...input,amount_minor:"9999"})};window.sessionStorage.setItem("lifeos.financial-write.v1",JSON.stringify(broken));
+  const request=vi.fn();vi.stubGlobal("fetch",request);
+  await expect(retryFinancialWrite("csrf")).rejects.toMatchObject({reason:"corrupted"});expect(request).not.toHaveBeenCalled();
+ });
 });

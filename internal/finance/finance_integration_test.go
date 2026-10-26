@@ -189,19 +189,19 @@ func TestFinanceMigrationAndLedger(t *testing.T) {
 	assertBalance(owner, card.ID, -5000)
 
 	expense, err := service.PostExpense(ctx, owner, EventInput{AccountID: bank.ID, AmountMinor: 1500, Currency: "MYR",
-		OccurredAt: now, Note: "Lunch", Allocations: []AllocationInput{{food.ID, 1000}, {groceries.ID, 500}}})
+		OccurredAt: now, Note: "Lunch", Allocations: []AllocationInput{{food.ID, 1000}, {groceries.ID, 500}}}, newFinancialWriteKey())
 	if err != nil || len(expense.Movements) != 1 || expense.Movements[0].AmountMinor != -1500 || len(expense.Allocations) != 2 {
 		t.Fatalf("expense=%+v err=%v", expense, err)
 	}
 	assertBalance(owner, bank.ID, 8500)
 	income, err := service.PostIncome(ctx, owner, EventInput{AccountID: bank.ID, AmountMinor: 3000, Currency: "MYR",
-		OccurredAt: now.Add(time.Minute), Allocations: []AllocationInput{{salary.ID, 3000}}})
+		OccurredAt: now.Add(time.Minute), Allocations: []AllocationInput{{salary.ID, 3000}}}, newFinancialWriteKey())
 	if err != nil || len(income.Movements) != 1 || income.Movements[0].AmountMinor != 3000 {
 		t.Fatalf("income=%+v err=%v", income, err)
 	}
 	assertBalance(owner, bank.ID, 11500)
 	transfer, err := service.Transfer(ctx, owner, TransferInput{FromAccountID: bank.ID, ToAccountID: savings.ID,
-		AmountMinor: 5000, Currency: "MYR", OccurredAt: now.Add(2 * time.Minute)})
+		AmountMinor: 5000, Currency: "MYR", OccurredAt: now.Add(2 * time.Minute)}, newFinancialWriteKey())
 	if err != nil || len(transfer.Movements) != 2 || len(transfer.Allocations) != 0 ||
 		transfer.Movements[0].AmountMinor+transfer.Movements[1].AmountMinor != 0 {
 		t.Fatalf("transfer=%+v err=%v", transfer, err)
@@ -209,20 +209,20 @@ func TestFinanceMigrationAndLedger(t *testing.T) {
 	assertBalance(owner, bank.ID, 6500)
 	assertBalance(owner, savings.ID, 5000)
 	cardPurchase, err := service.PostExpense(ctx, owner, EventInput{AccountID: card.ID, AmountMinor: 1000, Currency: "MYR",
-		OccurredAt: now.Add(3 * time.Minute), Allocations: []AllocationInput{{food.ID, 1000}}})
+		OccurredAt: now.Add(3 * time.Minute), Allocations: []AllocationInput{{food.ID, 1000}}}, newFinancialWriteKey())
 	if err != nil || cardPurchase.Movements[0].AmountMinor != -1000 {
 		t.Fatalf("card purchase=%+v err=%v", cardPurchase, err)
 	}
 	assertBalance(owner, card.ID, -6000)
 	cardPayment, err := service.Transfer(ctx, owner, TransferInput{FromAccountID: bank.ID, ToAccountID: card.ID,
-		AmountMinor: 2000, Currency: "MYR", OccurredAt: now.Add(4 * time.Minute)})
+		AmountMinor: 2000, Currency: "MYR", OccurredAt: now.Add(4 * time.Minute)}, newFinancialWriteKey())
 	if err != nil || len(cardPayment.Allocations) != 0 {
 		t.Fatalf("card payment=%+v err=%v", cardPayment, err)
 	}
 	assertBalance(owner, bank.ID, 4500)
 	assertBalance(owner, card.ID, -4000)
 	_, err = service.PostExpense(ctx, owner, EventInput{AccountID: usd.ID, AmountMinor: 100, Currency: "USD",
-		OccurredAt: now.Add(-time.Minute), Allocations: []AllocationInput{{food.ID, 100}}})
+		OccurredAt: now.Add(-time.Minute), Allocations: []AllocationInput{{food.ID, 100}}}, newFinancialWriteKey())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -258,18 +258,18 @@ func TestFinanceMigrationAndLedger(t *testing.T) {
 		t.Fatalf("cross-owner restore=%v", err)
 	}
 	if _, err := service.PostExpense(ctx, owner, EventInput{AccountID: otherBank.ID, AmountMinor: 100, Currency: "MYR",
-		OccurredAt: now, Allocations: []AllocationInput{{food.ID, 100}}}); !errors.Is(err, ErrNotFound) {
+		OccurredAt: now, Allocations: []AllocationInput{{food.ID, 100}}}, newFinancialWriteKey()); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("foreign account write=%v", err)
 	}
 	if _, err := service.PostExpense(ctx, owner, EventInput{AccountID: bank.ID, AmountMinor: 100, Currency: "MYR",
-		OccurredAt: now, Allocations: []AllocationInput{{otherFood.ID, 100}}}); !errors.Is(err, ErrNotFound) {
+		OccurredAt: now, Allocations: []AllocationInput{{otherFood.ID, 100}}}, newFinancialWriteKey()); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("foreign category write=%v", err)
 	}
 	if _, err := service.Transfer(ctx, owner, TransferInput{FromAccountID: bank.ID, ToAccountID: otherBank.ID,
-		AmountMinor: 100, Currency: "MYR", OccurredAt: now}); !errors.Is(err, ErrNotFound) {
+		AmountMinor: 100, Currency: "MYR", OccurredAt: now}, newFinancialWriteKey()); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("foreign transfer target=%v", err)
 	}
-	if err := service.VoidEvent(ctx, other, expense.ID, "not mine"); !errors.Is(err, ErrNotFound) {
+	if err := service.VoidEvent(ctx, other, expense.ID, "not mine", newFinancialWriteKey()); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("cross-owner void=%v", err)
 	}
 	if _, err := service.CategorySpending(ctx, owner, otherFood.ID, "MYR"); !errors.Is(err, ErrNotFound) {
@@ -302,46 +302,46 @@ func TestFinanceMigrationAndLedger(t *testing.T) {
 	}
 
 	if _, err := service.PostExpense(ctx, owner, EventInput{AccountID: bank.ID, AmountMinor: 0, Currency: "MYR", OccurredAt: now,
-		Allocations: []AllocationInput{{food.ID, 1}}}); !errors.Is(err, ErrInvalidInput) {
+		Allocations: []AllocationInput{{food.ID, 1}}}, newFinancialWriteKey()); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("zero expense=%v", err)
 	}
 	if _, err := service.PostIncome(ctx, owner, EventInput{AccountID: bank.ID, AmountMinor: 100, Currency: "ZZZ", OccurredAt: now,
-		Allocations: []AllocationInput{{salary.ID, 100}}}); !errors.Is(err, ErrInvalidInput) {
+		Allocations: []AllocationInput{{salary.ID, 100}}}, newFinancialWriteKey()); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("invalid ISO currency=%v", err)
 	}
 	if _, err := service.PostExpense(ctx, owner, EventInput{AccountID: bank.ID, AmountMinor: 100, Currency: "MYR", OccurredAt: now,
-		Allocations: []AllocationInput{{food.ID, 99}}}); !errors.Is(err, ErrInvalidInput) {
+		Allocations: []AllocationInput{{food.ID, 99}}}, newFinancialWriteKey()); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("allocation mismatch=%v", err)
 	}
 	if _, err := service.PostIncome(ctx, owner, EventInput{AccountID: bank.ID, AmountMinor: 100, Currency: "MYR", OccurredAt: now,
-		Allocations: []AllocationInput{{food.ID, 100}}}); !errors.Is(err, ErrInvalidInput) {
+		Allocations: []AllocationInput{{food.ID, 100}}}, newFinancialWriteKey()); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("income with expense category=%v", err)
 	}
 	if _, err := service.PostExpense(ctx, owner, EventInput{AccountID: usd.ID, AmountMinor: 100, Currency: "MYR", OccurredAt: now,
-		Allocations: []AllocationInput{{food.ID, 100}}}); !errors.Is(err, ErrCurrencyMismatch) {
+		Allocations: []AllocationInput{{food.ID, 100}}}, newFinancialWriteKey()); !errors.Is(err, ErrCurrencyMismatch) {
 		t.Fatalf("account currency mismatch=%v", err)
 	}
 	if _, err := service.Transfer(ctx, owner, TransferInput{FromAccountID: bank.ID, ToAccountID: usd.ID,
-		AmountMinor: 100, Currency: "MYR", OccurredAt: now}); !errors.Is(err, ErrCurrencyMismatch) {
+		AmountMinor: 100, Currency: "MYR", OccurredAt: now}, newFinancialWriteKey()); !errors.Is(err, ErrCurrencyMismatch) {
 		t.Fatalf("transfer currency mismatch=%v", err)
 	}
 	overdraft := account(owner, "Overdraft", "bank", "MYR", 100)
 	overdraftTarget := account(owner, "Overdraft target", "savings", "MYR", 0)
 	overdraftCategory := category(owner, "Overdraft expense", "expense")
 	overdraftExpense, err := service.PostExpense(ctx, owner, EventInput{AccountID: overdraft.ID, AmountMinor: 150, Currency: "MYR", OccurredAt: now,
-		Allocations: []AllocationInput{{overdraftCategory.ID, 150}}})
+		Allocations: []AllocationInput{{overdraftCategory.ID, 150}}}, newFinancialWriteKey())
 	if err != nil || len(overdraftExpense.Movements) != 1 || overdraftExpense.Movements[0].AmountMinor != -150 {
 		t.Fatalf("ordinary account overdraft expense=%+v err=%v", overdraftExpense, err)
 	}
 	assertBalance(owner, overdraft.ID, -50)
 	overdraftTransfer, err := service.Transfer(ctx, owner, TransferInput{FromAccountID: overdraft.ID,
-		ToAccountID: overdraftTarget.ID, AmountMinor: 75, Currency: "MYR", OccurredAt: now})
+		ToAccountID: overdraftTarget.ID, AmountMinor: 75, Currency: "MYR", OccurredAt: now}, newFinancialWriteKey())
 	if err != nil || len(overdraftTransfer.Allocations) != 0 {
 		t.Fatalf("ordinary account overdraft transfer=%+v err=%v", overdraftTransfer, err)
 	}
 	assertBalance(owner, overdraft.ID, -125)
 	assertBalance(owner, overdraftTarget.ID, 75)
-	if err := service.VoidEvent(ctx, owner, overdraftTransfer.ID, "Wrong transfer"); err != nil {
+	if err := service.VoidEvent(ctx, owner, overdraftTransfer.ID, "Wrong transfer", newFinancialWriteKey()); err != nil {
 		t.Fatalf("void overdraft transfer: %v", err)
 	}
 	assertBalance(owner, overdraft.ID, -50)
@@ -351,18 +351,23 @@ func TestFinanceMigrationAndLedger(t *testing.T) {
 	}
 	maxAccount := account(owner, "Maximum", "bank", "MYR", math.MaxInt64)
 	if _, err := service.PostIncome(ctx, owner, EventInput{AccountID: maxAccount.ID, AmountMinor: 1, Currency: "MYR", OccurredAt: now,
-		Allocations: []AllocationInput{{salary.ID, 1}}}); !errors.Is(err, ErrOverflow) {
+		Allocations: []AllocationInput{{salary.ID, 1}}}, newFinancialWriteKey()); !errors.Is(err, ErrOverflow) {
 		t.Fatalf("income overflow=%v", err)
 	}
 	minCard := account(owner, "Minimum liability", "credit_card", "MYR", math.MinInt64)
 	if _, err := service.PostExpense(ctx, owner, EventInput{AccountID: minCard.ID, AmountMinor: 1, Currency: "MYR", OccurredAt: now,
-		Allocations: []AllocationInput{{food.ID, 1}}}); !errors.Is(err, ErrOverflow) {
+		Allocations: []AllocationInput{{food.ID, 1}}}, newFinancialWriteKey()); !errors.Is(err, ErrOverflow) {
 		t.Fatalf("liability overflow=%v", err)
 	}
 	before := financeCounts(t, pool, owner)
-	_, err = service.repo.post(ctx, owner, postSpec{kind: "expense", amount: 100, currency: "MYR", occurredAt: now,
+	rollbackTx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = service.repo.postInTx(ctx, rollbackTx, owner, postSpec{kind: "expense", amount: 100, currency: "MYR", occurredAt: now,
 		movements:   []movementSpec{{accountID: bank.ID, amount: -100}},
 		allocations: []AllocationInput{{food.ID, 50}, {food.ID, 50}}})
+	_ = rollbackTx.Rollback(ctx)
 	if err == nil {
 		t.Fatal("duplicate allocation did not abort event")
 	}
@@ -375,7 +380,7 @@ func TestFinanceMigrationAndLedger(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := service.Transfer(ctx, owner, TransferInput{FromAccountID: bank.ID, ToAccountID: savings.ID,
-		AmountMinor: 100, Currency: "MYR", OccurredAt: now}); !errors.Is(err, ErrArchived) {
+		AmountMinor: 100, Currency: "MYR", OccurredAt: now}, newFinancialWriteKey()); !errors.Is(err, ErrArchived) {
 		t.Fatalf("transfer to archived account=%v", err)
 	}
 	assertBalance(owner, savings.ID, 5000)
@@ -386,7 +391,7 @@ func TestFinanceMigrationAndLedger(t *testing.T) {
 		t.Fatalf("restore active account=%v", err)
 	}
 	assertBalance(owner, savings.ID, 5000)
-	if err := service.VoidEvent(ctx, owner, expense.ID, ""); err != nil {
+	if err := service.VoidEvent(ctx, owner, expense.ID, "", newFinancialWriteKey()); err != nil {
 		t.Fatal(err)
 	}
 	assertBalance(owner, bank.ID, 6000)
@@ -406,7 +411,7 @@ func TestFinanceMigrationAndLedger(t *testing.T) {
 	if !foundVoid {
 		t.Fatal("void lost financial history")
 	}
-	if err := service.VoidEvent(ctx, owner, expense.ID, "again"); !errors.Is(err, ErrConflict) {
+	if err := service.VoidEvent(ctx, owner, expense.ID, "again", newFinancialWriteKey()); !errors.Is(err, ErrConflict) {
 		t.Fatalf("repeat void=%v", err)
 	}
 
@@ -422,7 +427,7 @@ func TestFinanceMigrationAndLedger(t *testing.T) {
 		go func() {
 			defer group.Done()
 			_, err := service.PostExpense(ctx, owner, EventInput{AccountID: concurrentAccount.ID, AmountMinor: 80,
-				Currency: "MYR", OccurredAt: now, Allocations: []AllocationInput{{food.ID, 80}}})
+				Currency: "MYR", OccurredAt: now, Allocations: []AllocationInput{{food.ID, 80}}}, newFinancialWriteKey())
 			results <- err
 		}()
 	}
@@ -452,7 +457,7 @@ func TestFinanceMigrationAndLedger(t *testing.T) {
 		go func() {
 			defer group.Done()
 			_, err := service.Transfer(ctx, owner, TransferInput{FromAccountID: transferSource.ID,
-				ToAccountID: transferTarget.ID, AmountMinor: 80, Currency: "MYR", OccurredAt: now})
+				ToAccountID: transferTarget.ID, AmountMinor: 80, Currency: "MYR", OccurredAt: now}, newFinancialWriteKey())
 			transferResults <- err
 		}()
 	}
@@ -483,7 +488,7 @@ func TestFinanceMigrationAndLedger(t *testing.T) {
 		go func(fromID, toID string) {
 			defer group.Done()
 			_, err := service.Transfer(ctx, owner, TransferInput{FromAccountID: fromID,
-				ToAccountID: toID, AmountMinor: 60, Currency: "MYR", OccurredAt: now})
+				ToAccountID: toID, AmountMinor: 60, Currency: "MYR", OccurredAt: now}, newFinancialWriteKey())
 			oppositeResults <- err
 		}(pair[0], pair[1])
 	}
@@ -498,19 +503,19 @@ func TestFinanceMigrationAndLedger(t *testing.T) {
 	assertBalance(owner, oppositeB.ID, 100)
 	voidAccount := account(owner, "Void income", "bank", "MYR", 0)
 	voidIncome, err := service.PostIncome(ctx, owner, EventInput{AccountID: voidAccount.ID, AmountMinor: 100,
-		Currency: "MYR", OccurredAt: now, Allocations: []AllocationInput{{salary.ID, 100}}})
+		Currency: "MYR", OccurredAt: now, Allocations: []AllocationInput{{salary.ID, 100}}}, newFinancialWriteKey())
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := service.PostExpense(ctx, owner, EventInput{AccountID: voidAccount.ID, AmountMinor: 100,
-		Currency: "MYR", OccurredAt: now, Allocations: []AllocationInput{{food.ID, 100}}}); err != nil {
+		Currency: "MYR", OccurredAt: now, Allocations: []AllocationInput{{food.ID, 100}}}, newFinancialWriteKey()); err != nil {
 		t.Fatal(err)
 	}
-	if err := service.VoidEvent(ctx, owner, voidIncome.ID, "Income did not occur"); err != nil {
+	if err := service.VoidEvent(ctx, owner, voidIncome.ID, "Income did not occur", newFinancialWriteKey()); err != nil {
 		t.Fatalf("void income into negative balance=%v", err)
 	}
 	assertBalance(owner, voidAccount.ID, -100)
-	if err := service.VoidEvent(ctx, owner, income.ID, "correct salary"); err != nil {
+	if err := service.VoidEvent(ctx, owner, income.ID, "correct salary", newFinancialWriteKey()); err != nil {
 		t.Fatal(err)
 	}
 	assertBalance(owner, bank.ID, 3000)
@@ -518,7 +523,7 @@ func TestFinanceMigrationAndLedger(t *testing.T) {
 		t.Fatalf("income category counted as spending=%v", err)
 	}
 	if _, err := service.Transfer(ctx, owner, TransferInput{FromAccountID: bank.ID, ToAccountID: savings.ID,
-		AmountMinor: 100, Currency: "MYR", OccurredAt: now}); err != nil {
+		AmountMinor: 100, Currency: "MYR", OccurredAt: now}, newFinancialWriteKey()); err != nil {
 		t.Fatalf("transfer to restored account: %v", err)
 	}
 	assertBalance(owner, bank.ID, 2900)
@@ -552,7 +557,7 @@ func TestFinanceMigrationAndLedger(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := service.PostExpense(ctx, owner, EventInput{AccountID: bank.ID, AmountMinor: 100, Currency: "MYR", OccurredAt: now,
-		Allocations: []AllocationInput{{food.ID, 100}}}); !errors.Is(err, ErrArchived) {
+		Allocations: []AllocationInput{{food.ID, 100}}}, newFinancialWriteKey()); !errors.Is(err, ErrArchived) {
 		t.Fatalf("archived category accepted=%v", err)
 	}
 	if got, err := service.CategorySpending(ctx, owner, food.ID, "MYR"); err != nil || got != spendingBeforeArchive {
@@ -565,15 +570,15 @@ func TestFinanceMigrationAndLedger(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := service.PostExpense(ctx, owner, EventInput{AccountID: bank.ID, AmountMinor: 100, Currency: "MYR", OccurredAt: now,
-		Allocations: []AllocationInput{{food.ID, 100}}}); err != nil {
+		Allocations: []AllocationInput{{food.ID, 100}}}, newFinancialWriteKey()); err != nil {
 		t.Fatalf("restored category rejected=%v", err)
 	}
 	assertBalance(owner, bank.ID, 2800)
-	uncategorizedExpense, err := service.PostExpense(ctx, owner, EventInput{AccountID: bank.ID, AmountMinor: 200, Currency: "MYR", OccurredAt: now.Add(time.Hour), Allocations: []AllocationInput{}})
+	uncategorizedExpense, err := service.PostExpense(ctx, owner, EventInput{AccountID: bank.ID, AmountMinor: 200, Currency: "MYR", OccurredAt: now.Add(time.Hour), Allocations: []AllocationInput{}}, newFinancialWriteKey())
 	if err != nil || len(uncategorizedExpense.Movements) != 1 || len(uncategorizedExpense.Allocations) != 0 {
 		t.Fatalf("uncategorized expense=%+v err=%v", uncategorizedExpense, err)
 	}
-	uncategorizedIncome, err := service.PostIncome(ctx, owner, EventInput{AccountID: bank.ID, AmountMinor: 150, Currency: "MYR", OccurredAt: now.Add(2 * time.Hour), Allocations: []AllocationInput{}})
+	uncategorizedIncome, err := service.PostIncome(ctx, owner, EventInput{AccountID: bank.ID, AmountMinor: 150, Currency: "MYR", OccurredAt: now.Add(2 * time.Hour), Allocations: []AllocationInput{}}, newFinancialWriteKey())
 	if err != nil || len(uncategorizedIncome.Movements) != 1 || len(uncategorizedIncome.Allocations) != 0 {
 		t.Fatalf("uncategorized income=%+v err=%v", uncategorizedIncome, err)
 	}
@@ -583,22 +588,32 @@ func TestFinanceMigrationAndLedger(t *testing.T) {
 		owner.String(), uncategorizedExpense.ID, uncategorizedIncome.ID).Scan(&persistedAllocations); err != nil || persistedAllocations != 0 {
 		t.Fatalf("uncategorized allocations=%d err=%v", persistedAllocations, err)
 	}
-	if err := service.VoidEvent(ctx, owner, uncategorizedExpense.ID, "Correction"); err != nil {
+	if err := service.VoidEvent(ctx, owner, uncategorizedExpense.ID, "Correction", newFinancialWriteKey()); err != nil {
 		t.Fatalf("void uncategorized expense=%v", err)
 	}
 	assertBalance(owner, bank.ID, 2950)
 	if _, err := service.PostExpense(ctx, owner, EventInput{AccountID: bank.ID, AmountMinor: 100, Currency: "MYR", OccurredAt: now,
-		Allocations: []AllocationInput{{food.ID, 70}, {groceries.ID, 20}}}); !errors.Is(err, ErrInvalidInput) {
+		Allocations: []AllocationInput{{food.ID, 70}, {groceries.ID, 20}}}, newFinancialWriteKey()); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("partial multi-allocation accepted=%v", err)
 	}
 
-	// Empty Goals and no deleted events can roll back to v4; populated Finance cannot.
-	if err := runner.Steps(-4); err != nil {
-		t.Fatalf("roll back empty v6/v5 extensions: %v", err)
+	// Retain the published v4 guard check without bypassing current v9 metadata.
+	publishedDown, err := os.ReadFile("../../db/migrations/000004_money_ledger.down.sql")
+	if err != nil {
+		t.Fatal(err)
 	}
-	// A populated down migration refuses to erase financial history.
+	downTx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = downTx.Exec(ctx, string(publishedDown))
+	_ = downTx.Rollback(ctx)
+	if err == nil {
+		t.Fatal("populated v4 down discarded ledger history")
+	}
+	// A populated v9 down refuses to discard retry protection or the ledger.
 	if err := runner.Steps(-1); err == nil {
-		t.Fatal("finance down migration removed existing records")
+		t.Fatal("idempotency down migration removed committed keys")
 	}
 	var remaining int
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM financial_events WHERE owner_id = $1`, owner.String()).Scan(&remaining); err != nil || remaining < 8 {

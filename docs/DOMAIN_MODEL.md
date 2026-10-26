@@ -249,3 +249,8 @@ tool_invocation_audits
 ```
 
 Final tables, constraints, and indexes require dedicated migrations and relevant ADRs. Do not treat this sketch as permission to implement an undifferentiated schema.
+
+
+## Financial write request metadata (ADR-019)
+
+Accepted [ADR-019](adr/ADR-019-owner-scoped-financial-write-idempotency.md) adds owner-scoped operational success markers in migration v9, separate from domain facts. A client key identifies one logical command; it is not an event/account ID or authorization. Marker and financial mutation commit together. Replays acknowledge prior application without returning a historical DTO or changing current ledger state. The table retains no raw payload, result ID, money or note and is excluded from normal exports. Void/Delete/anchor rules and all domain relationships remain unchanged. Capacity warnings, indefinite retention and safe browser recovery are described in [Financial Write Recovery](FINANCIAL_WRITE_RECOVERY.md).

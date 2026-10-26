@@ -39,16 +39,16 @@ func TestMoneyValidation(t *testing.T) {
 
 func TestUnverifiedOwnerFailsClosed(t *testing.T) {
 	service := NewService(nil)
-	if _, err := service.CreateAccount(context.Background(), identity.OwnerID{}, AccountInput{}); !errors.Is(err, ErrUnauthorized) {
+	if _, err := service.CreateAccount(context.Background(), identity.OwnerID{}, AccountInput{}, newFinancialWriteKey()); !errors.Is(err, ErrUnauthorized) {
 		t.Fatalf("account creation with zero owner=%v", err)
 	}
 	if _, err := service.History(context.Background(), identity.OwnerID{}, 10, 0); !errors.Is(err, ErrUnauthorized) {
 		t.Fatalf("history with zero owner=%v", err)
 	}
-	if err := service.VoidEvent(context.Background(), identity.OwnerID{}, "", ""); !errors.Is(err, ErrUnauthorized) {
+	if err := service.VoidEvent(context.Background(), identity.OwnerID{}, "", "", newFinancialWriteKey()); !errors.Is(err, ErrUnauthorized) {
 		t.Fatalf("void with zero owner=%v", err)
 	}
-	if err := service.DeleteEvent(context.Background(), identity.OwnerID{}, ""); !errors.Is(err, ErrUnauthorized) {
+	if err := service.DeleteEvent(context.Background(), identity.OwnerID{}, "", newFinancialWriteKey()); !errors.Is(err, ErrUnauthorized) {
 		t.Fatalf("delete with zero owner=%v", err)
 	}
 }

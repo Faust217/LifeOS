@@ -7,6 +7,7 @@ import { TimeZoneSetting } from "./TimeZoneSetting";
 import { OwnerExport } from "./OwnerExport";
 import { timeZoneLabel } from "./moneyAmount";
 import "./me.css";
+import { pendingFinancialWrite } from "./pendingFinancialWrite";
 import { MoneyPage } from "./MoneyPage";
 import { TodayPage } from "./TodayPage";
 import { goalIDFromPath, primaryAreas, resolveArea, type Area } from "./navigation";
@@ -30,6 +31,7 @@ export function App() {
     try {
       const user = await fetchCurrentUser();
       if (request === requestSequence.current) {
+        if (!user) pendingFinancialWrite.bindOwner(null);
         setSession(user ? { status: "ready", user } : { status: "signed-out" });
       }
     } catch {
@@ -56,15 +58,23 @@ export function App() {
 
   async function handleSignOut() {
     if (session.status !== "ready") return;
+    const recovery = pendingFinancialWrite.status();
+    if (recovery.kind === "pending" && recovery.sending) { setSignOutError("Wait for the current Save to finish before signing out."); return; }
+    if (recovery.kind !== "empty" && recovery.kind !== "hidden" && !window.confirm("A Save may be unresolved. Signing out clears this tab's private recovery record and loses its retry key. Check your activity first. Sign out?")) return;
     const user = session.user;
+    // An asynchronous draft preparation must not begin a Save during explicit sign-out.
+    pendingFinancialWrite.bindOwner(null);
     requestSequence.current += 1;
     signingOut.current = true;
     setSession({ status: "signing-out", user });
     setSignOutError("");
     try {
       await signOut(user.csrf_token);
+      try { pendingFinancialWrite.clearAcknowledged(); } catch { window.alert("Signed out. Local recovery storage could not be cleared. Close this tab to remove its private session storage; lost keys cannot be recovered."); }
+      pendingFinancialWrite.bindOwner(null);
       setSession({ status: "signed-out" });
     } catch {
+      pendingFinancialWrite.bindOwner(user.id);
       setSession({ status: "ready", user });
       setSignOutError("Sign-out could not be completed. Please try again.");
     } finally {
@@ -169,6 +179,12 @@ export function AuthenticatedShell({ area, goalID = null, user, onSignOut, onSes
   signingOut?: boolean;
   signOutError?: string;
 }) {
+  useEffect(() => {
+    pendingFinancialWrite.bindOwner(user.id);
+    const warn = (event: BeforeUnloadEvent) => { const s = pendingFinancialWrite.status(); if (s.kind === "pending" || s.kind === "corrupted") { event.preventDefault(); event.returnValue = ""; } };
+    window.addEventListener("beforeunload", warn);
+    return () => { window.removeEventListener("beforeunload", warn); pendingFinancialWrite.bindOwner(null); };
+  }, [user.id]);
   return (
     <div className="app-layout">
       <a className="skip-link" href="#main-content">Skip to content</a>

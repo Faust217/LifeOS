@@ -6,6 +6,14 @@
 .money-section { display: grid; gap: .75rem; min-width: 0; }
 .money-section .section-heading { margin-bottom: .2rem; }
 .money-feedback { margin: 0; border-radius: 1rem; padding: 1rem 1.2rem; line-height: 1.5; }
+.money-recovery { display: grid; justify-items: start; gap: .55rem; min-width: 0; border: 1px solid #bad3c0; padding: .9rem 1rem; color: var(--ink); background: #eef6ef; overflow-wrap: anywhere; }
+.money-recovery h2 { margin: 0; font-size: 1.08rem; line-height: 1.3; }
+.money-recovery p { margin: 0; color: var(--muted); font-size: .93rem; line-height: 1.45; }
+.money-recovery > .button, .money-recovery details .button { min-height: 44px; }
+.money-recovery details { width: 100%; margin-top: .1rem; border-top: 1px solid var(--border); }
+.money-recovery summary { min-height: 44px; padding: .62rem 0; color: var(--accent); cursor: pointer; font-size: .9rem; font-weight: 650; }
+.money-recovery details p { margin: .25rem 0 .7rem; }
+.money-recovery .money-choice { display: flex; align-items: flex-start; gap: .6rem; min-height: 44px; margin-bottom: .65rem; }
 .money-success { color: #185b48; background: #e0f2e7; }
 .money-error, .money-field-error { color: #8a372a; background: #fff0e9; }
 .money-retry-read { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; }

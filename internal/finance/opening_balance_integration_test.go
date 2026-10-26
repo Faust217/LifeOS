@@ -100,16 +100,16 @@ func TestOpeningBalanceIntegration(t *testing.T) {
 		if err != nil || *p.BalanceAfterMinor != "950" || *p.BalanceChangeMinor != "100" {
 			t.Fatal(p, err)
 		}
-		if _, err = service.ConfirmOpeningBalance(ctx, owner, bank.ID, at, chosen, 0, false); !errors.Is(err, ErrInvalidInput) {
+		if _, err = service.ConfirmOpeningBalance(ctx, owner, bank.ID, at, chosen, 0, false, newFinancialWriteKey()); !errors.Is(err, ErrInvalidInput) {
 			t.Fatal("unacknowledged change", err)
 		}
 		balance(bank, 850)
 	})
 	t.Run("stale preview and one time preservation", func(t *testing.T) {
-		if _, err := service.PostExpense(ctx, owner, EventInput{AccountID: bank.ID, AmountMinor: 1, Currency: "MYR", OccurredAt: at.Add(-2 * time.Microsecond)}); err != nil {
+		if _, err := service.PostExpense(ctx, owner, EventInput{AccountID: bank.ID, AmountMinor: 1, Currency: "MYR", OccurredAt: at.Add(-2 * time.Microsecond)}, newFinancialWriteKey()); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := service.ConfirmOpeningBalance(ctx, owner, bank.ID, at, 900, 0, false); !errors.Is(err, ErrConflict) {
+		if _, err := service.ConfirmOpeningBalance(ctx, owner, bank.ID, at, 900, 0, false, newFinancialWriteKey()); !errors.Is(err, ErrConflict) {
 			t.Fatal(err)
 		}
 		p, err := service.PreviewOpeningBalance(ctx, owner, bank.ID, at, nil)
@@ -117,11 +117,11 @@ func TestOpeningBalanceIntegration(t *testing.T) {
 			t.Fatal(err)
 		}
 		revision, _ := strconv.ParseInt(p.BalanceRevision, 10, 64)
-		if _, err = service.ConfirmOpeningBalance(ctx, owner, bank.ID, at, 899, revision, false); err != nil {
+		if _, err = service.ConfirmOpeningBalance(ctx, owner, bank.ID, at, 899, revision, false, newFinancialWriteKey()); err != nil {
 			t.Fatal(err)
 		}
 		balance(bank, 849)
-		if _, err = service.ConfirmOpeningBalance(ctx, owner, bank.ID, at, 899, revision, false); !errors.Is(err, ErrConflict) {
+		if _, err = service.ConfirmOpeningBalance(ctx, owner, bank.ID, at, 899, revision, false, newFinancialWriteKey()); !errors.Is(err, ErrConflict) {
 			t.Fatal("repeat", err)
 		}
 		var count int
@@ -131,34 +131,34 @@ func TestOpeningBalanceIntegration(t *testing.T) {
 	})
 	makeAccount := func(name, currency string, opening int64, when time.Time) Account {
 		t.Helper()
-		a, e := service.CreateAccount(ctx, owner, AccountInput{Name: name, Type: "bank", Currency: currency, OpeningBalanceMinor: opening, OpeningBalanceAt: &when})
+		a, e := service.CreateAccount(ctx, owner, AccountInput{Name: name, Type: "bank", Currency: currency, OpeningBalanceMinor: opening, OpeningBalanceAt: &when}, newFinancialWriteKey())
 		if e != nil {
 			t.Fatal(e)
 		}
 		return a
 	}
 	t.Run("new account validation and exact instant", func(t *testing.T) {
-		if _, err := service.CreateAccount(ctx, owner, AccountInput{Name: "Missing date", Type: "bank", Currency: "MYR"}); !errors.Is(err, ErrInvalidInput) {
+		if _, err := service.CreateAccount(ctx, owner, AccountInput{Name: "Missing date", Type: "bank", Currency: "MYR"}, newFinancialWriteKey()); !errors.Is(err, ErrInvalidInput) {
 			t.Fatal(err)
 		}
 		future := time.Now().Add(time.Hour)
-		if _, err := service.CreateAccount(ctx, owner, AccountInput{Name: "Future", Type: "bank", Currency: "MYR", OpeningBalanceAt: &future}); !errors.Is(err, ErrInvalidInput) {
+		if _, err := service.CreateAccount(ctx, owner, AccountInput{Name: "Future", Type: "bank", Currency: "MYR", OpeningBalanceAt: &future}, newFinancialWriteKey()); !errors.Is(err, ErrInvalidInput) {
 			t.Fatal(err)
 		}
 		a := makeAccount("Exact boundary", "MYR", 1000, at)
 		for _, when := range []time.Time{at.Add(-time.Microsecond), at, at.Add(time.Microsecond)} {
-			if _, e := service.PostExpense(ctx, owner, EventInput{AccountID: a.ID, AmountMinor: 10, Currency: "MYR", OccurredAt: when}); e != nil {
+			if _, e := service.PostExpense(ctx, owner, EventInput{AccountID: a.ID, AmountMinor: 10, Currency: "MYR", OccurredAt: when}, newFinancialWriteKey()); e != nil {
 				t.Fatal(e)
 			}
 		}
 		balance(a, 980)
 		// The application truncates sub-microsecond input before both validation and PostgreSQL storage.
-		e, err := service.PostExpense(ctx, owner, EventInput{AccountID: a.ID, AmountMinor: 10, Currency: "MYR", OccurredAt: at.Add(-time.Nanosecond)})
+		e, err := service.PostExpense(ctx, owner, EventInput{AccountID: a.ID, AmountMinor: 10, Currency: "MYR", OccurredAt: at.Add(-time.Nanosecond)}, newFinancialWriteKey())
 		if err != nil || !e.OccurredAt.Equal(at.Add(-time.Microsecond)) {
 			t.Fatal("inconsistent timestamp precision", e, err)
 		}
 		balance(a, 980)
-		if _, e := service.PostIncome(ctx, owner, EventInput{AccountID: a.ID, AmountMinor: 1, Currency: "MYR", OccurredAt: time.Now().Add(24 * time.Hour)}); e != nil {
+		if _, e := service.PostIncome(ctx, owner, EventInput{AccountID: a.ID, AmountMinor: 1, Currency: "MYR", OccurredAt: time.Now().Add(24 * time.Hour)}, newFinancialWriteKey()); e != nil {
 			t.Fatal(e)
 		}
 		balance(a, 981)
@@ -166,38 +166,38 @@ func TestOpeningBalanceIntegration(t *testing.T) {
 	t.Run("mixed transfer and pre anchor void delete", func(t *testing.T) {
 		a := makeAccount("Dated", "MYR", 1000, at)
 		b := legacy("Undated", 200)
-		e, err := service.Transfer(ctx, owner, TransferInput{FromAccountID: a.ID, ToAccountID: b.ID, AmountMinor: 100, Currency: "MYR", OccurredAt: at.Add(-time.Microsecond)})
+		e, err := service.Transfer(ctx, owner, TransferInput{FromAccountID: a.ID, ToAccountID: b.ID, AmountMinor: 100, Currency: "MYR", OccurredAt: at.Add(-time.Microsecond)}, newFinancialWriteKey())
 		if err != nil {
 			t.Fatal(err)
 		}
 		balance(a, 1000)
 		balance(b, 300)
-		if err = service.VoidEvent(ctx, owner, e.ID, ""); err != nil {
+		if err = service.VoidEvent(ctx, owner, e.ID, "", newFinancialWriteKey()); err != nil {
 			t.Fatal(err)
 		}
 		balance(a, 1000)
 		balance(b, 200)
-		if err = service.DeleteEvent(ctx, owner, e.ID); err != nil {
+		if err = service.DeleteEvent(ctx, owner, e.ID, newFinancialWriteKey()); err != nil {
 			t.Fatal(err)
 		}
-		if err = service.DeleteEvent(ctx, owner, e.ID); err != nil {
+		if err = service.DeleteEvent(ctx, owner, e.ID, newFinancialWriteKey()); err != nil {
 			t.Fatal(err)
 		}
 		balance(a, 1000)
 		balance(b, 200)
-		e, err = service.Transfer(ctx, owner, TransferInput{FromAccountID: a.ID, ToAccountID: b.ID, AmountMinor: 100, Currency: "MYR", OccurredAt: at})
+		e, err = service.Transfer(ctx, owner, TransferInput{FromAccountID: a.ID, ToAccountID: b.ID, AmountMinor: 100, Currency: "MYR", OccurredAt: at}, newFinancialWriteKey())
 		if err != nil {
 			t.Fatal(err)
 		}
 		balance(a, 900)
 		balance(b, 300)
-		if err = service.DeleteEvent(ctx, owner, e.ID); err != nil {
+		if err = service.DeleteEvent(ctx, owner, e.ID, newFinancialWriteKey()); err != nil {
 			t.Fatal(err)
 		}
 		balance(a, 1000)
 		balance(b, 200)
 		c := makeAccount("Later date", "MYR", 400, at.Add(time.Hour))
-		e, err = service.Transfer(ctx, owner, TransferInput{FromAccountID: a.ID, ToAccountID: c.ID, AmountMinor: 50, Currency: "MYR", OccurredAt: at})
+		e, err = service.Transfer(ctx, owner, TransferInput{FromAccountID: a.ID, ToAccountID: c.ID, AmountMinor: 50, Currency: "MYR", OccurredAt: at}, newFinancialWriteKey())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -230,7 +230,7 @@ func TestOpeningBalanceIntegration(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		e, err := service.PostExpense(ctx, owner, EventInput{AccountID: a.ID, AmountMinor: 100, Currency: "MYR", OccurredAt: at.Add(-time.Second), Allocations: []AllocationInput{{CategoryID: c1.ID, AmountMinor: 70}, {CategoryID: c2.ID, AmountMinor: 30}}})
+		e, err := service.PostExpense(ctx, owner, EventInput{AccountID: a.ID, AmountMinor: 100, Currency: "MYR", OccurredAt: at.Add(-time.Second), Allocations: []AllocationInput{{CategoryID: c1.ID, AmountMinor: 70}, {CategoryID: c2.ID, AmountMinor: 30}}}, newFinancialWriteKey())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -239,7 +239,7 @@ func TestOpeningBalanceIntegration(t *testing.T) {
 		if err != nil || spent != 70 {
 			t.Fatal(spent, err)
 		}
-		if err = service.VoidEvent(ctx, owner, e.ID, ""); err != nil {
+		if err = service.VoidEvent(ctx, owner, e.ID, "", newFinancialWriteKey()); err != nil {
 			t.Fatal(err)
 		}
 		balance(a, 1000)
@@ -247,12 +247,12 @@ func TestOpeningBalanceIntegration(t *testing.T) {
 		if err != nil || spent != 0 {
 			t.Fatal(spent, err)
 		}
-		e, err = service.PostExpense(ctx, owner, EventInput{AccountID: a.ID, AmountMinor: 100, Currency: "MYR", OccurredAt: at, Allocations: []AllocationInput{{CategoryID: c1.ID, AmountMinor: 100}}})
+		e, err = service.PostExpense(ctx, owner, EventInput{AccountID: a.ID, AmountMinor: 100, Currency: "MYR", OccurredAt: at, Allocations: []AllocationInput{{CategoryID: c1.ID, AmountMinor: 100}}}, newFinancialWriteKey())
 		if err != nil {
 			t.Fatal(err)
 		}
 		balance(a, 900)
-		if err = service.DeleteEvent(ctx, owner, e.ID); err != nil {
+		if err = service.DeleteEvent(ctx, owner, e.ID, newFinancialWriteKey()); err != nil {
 			t.Fatal(err)
 		}
 		balance(a, 1000)
@@ -269,21 +269,21 @@ func TestOpeningBalanceIntegration(t *testing.T) {
 		if err != nil || p.SuggestedRepresentable || p.SuggestedOpeningMinor != "9223372036854775808" || p.ChosenOpeningMinor != nil {
 			t.Fatal(p, err)
 		}
-		if _, err = service.ConfirmOpeningBalance(ctx, owner, a.ID, at, math.MaxInt64, 0, true); err != nil {
+		if _, err = service.ConfirmOpeningBalance(ctx, owner, a.ID, at, math.MaxInt64, 0, true, newFinancialWriteKey()); err != nil {
 			t.Fatal(err)
 		}
 		balance(a, math.MaxInt64-1)
 		max := makeAccount("Maximum", "MYR", math.MaxInt64, at)
-		if _, err = service.PostIncome(ctx, owner, EventInput{AccountID: max.ID, AmountMinor: 1, Currency: "MYR", OccurredAt: at.Add(-time.Microsecond)}); err != nil {
+		if _, err = service.PostIncome(ctx, owner, EventInput{AccountID: max.ID, AmountMinor: 1, Currency: "MYR", OccurredAt: at.Add(-time.Microsecond)}, newFinancialWriteKey()); err != nil {
 			t.Fatal("pre anchor overflow false positive", err)
 		}
 		balance(max, math.MaxInt64)
-		if _, err = service.PostIncome(ctx, owner, EventInput{AccountID: max.ID, AmountMinor: 1, Currency: "MYR", OccurredAt: at}); !errors.Is(err, ErrOverflow) {
+		if _, err = service.PostIncome(ctx, owner, EventInput{AccountID: max.ID, AmountMinor: 1, Currency: "MYR", OccurredAt: at}, newFinancialWriteKey()); !errors.Is(err, ErrOverflow) {
 			t.Fatal(err)
 		}
 		balance(max, math.MaxInt64)
 		min := makeAccount("Minimum", "MYR", math.MinInt64, at)
-		if _, err = service.PostExpense(ctx, owner, EventInput{AccountID: min.ID, AmountMinor: 1, Currency: "MYR", OccurredAt: at}); !errors.Is(err, ErrOverflow) {
+		if _, err = service.PostExpense(ctx, owner, EventInput{AccountID: min.ID, AmountMinor: 1, Currency: "MYR", OccurredAt: at}, newFinancialWriteKey()); !errors.Is(err, ErrOverflow) {
 			t.Fatal(err)
 		}
 		balance(min, math.MinInt64)
@@ -294,7 +294,7 @@ func TestOpeningBalanceIntegration(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, err = service.ConfirmOpeningBalance(ctx, owner, a.ID, at, 50, 0, false)
+		_, err = service.ConfirmOpeningBalance(ctx, owner, a.ID, at, 50, 0, false, newFinancialWriteKey())
 		if err == nil {
 			t.Fatal("injected failure succeeded")
 		}
@@ -316,11 +316,11 @@ func TestOpeningBalanceIntegration(t *testing.T) {
 		wg.Add(2)
 		go func() {
 			defer wg.Done()
-			_, confirmErr = service.ConfirmOpeningBalance(ctx, owner, a.ID, at, 1000, 0, false)
+			_, confirmErr = service.ConfirmOpeningBalance(ctx, owner, a.ID, at, 1000, 0, false, newFinancialWriteKey())
 		}()
 		go func() {
 			defer wg.Done()
-			_, postErr = service.PostExpense(ctx, owner, EventInput{AccountID: a.ID, AmountMinor: 10, Currency: "MYR", OccurredAt: at.Add(-time.Second)})
+			_, postErr = service.PostExpense(ctx, owner, EventInput{AccountID: a.ID, AmountMinor: 10, Currency: "MYR", OccurredAt: at.Add(-time.Second)}, newFinancialWriteKey())
 		}()
 		wg.Wait()
 		if postErr != nil || confirmErr != nil && !errors.Is(confirmErr, ErrConflict) {
@@ -340,7 +340,7 @@ func TestOpeningBalanceIntegration(t *testing.T) {
 				if pre {
 					when = at.Add(-time.Second)
 				}
-				e, err := service.PostExpense(ctx, owner, EventInput{AccountID: a.ID, AmountMinor: 10, Currency: "MYR", OccurredAt: when})
+				e, err := service.PostExpense(ctx, owner, EventInput{AccountID: a.ID, AmountMinor: 10, Currency: "MYR", OccurredAt: when}, newFinancialWriteKey())
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -355,14 +355,14 @@ func TestOpeningBalanceIntegration(t *testing.T) {
 				wg.Add(2)
 				go func() {
 					defer wg.Done()
-					_, confirmErr = service.ConfirmOpeningBalance(ctx, owner, a.ID, at, amount, revision, false)
+					_, confirmErr = service.ConfirmOpeningBalance(ctx, owner, a.ID, at, amount, revision, false, newFinancialWriteKey())
 				}()
 				go func() {
 					defer wg.Done()
 					if remove == "void" {
-						removeErr = service.VoidEvent(ctx, owner, e.ID, "")
+						removeErr = service.VoidEvent(ctx, owner, e.ID, "", newFinancialWriteKey())
 					} else {
-						removeErr = service.DeleteEvent(ctx, owner, e.ID)
+						removeErr = service.DeleteEvent(ctx, owner, e.ID, newFinancialWriteKey())
 					}
 				}()
 				wg.Wait()
@@ -404,6 +404,7 @@ func TestOpeningBalanceIntegration(t *testing.T) {
 			req.Header.Set("Content-Type", "application/json")
 			req.Header.Set("Origin", origin)
 			req.Header.Set("X-CSRF-Token", csrf)
+			req.Header.Set("Idempotency-Key", newFinancialWriteKey())
 			res, e := server.Client().Do(req)
 			if e != nil {
 				t.Fatal(e)
@@ -460,7 +461,7 @@ func TestOpeningBalanceIntegration(t *testing.T) {
 		if status, _ := request(confirmPath, strings.ReplaceAll(confirmInput, `,"acknowledge_change":false`, ""), "anchor-owner", moneyTestOrigin, me.CSRF); status != 400 {
 			t.Fatal("missing acknowledgement field", status)
 		}
-		if _, err = service.ConfirmOpeningBalance(ctx, other, a.ID, at, 1000, 0, false); !errors.Is(err, ErrNotFound) {
+		if _, err = service.ConfirmOpeningBalance(ctx, other, a.ID, at, 1000, 0, false, newFinancialWriteKey()); !errors.Is(err, ErrNotFound) {
 			t.Fatal("foreign confirmation", err)
 		}
 		if status, _ := request("/accounts/"+a.ID+"/opening-balance/confirm", `{"opening_balance_at":"2026-10-01T00:00:00Z","opening_balance_minor":"1000","balance_revision":"0","acknowledge_change":false}`, "anchor-owner", moneyTestOrigin, me.CSRF); status != 200 {

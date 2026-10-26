@@ -51,3 +51,8 @@ pwsh -File scripts/verify-migrations.ps1
 The script rejects missing production migrations, invalid or duplicate six-digit versions, and missing paired down files. It applies the complete production chain, checks the latest clean version, proves repeated `up` is a no-op, and exercises the isolated smoke fixture through up/version/down.
 
 GitHub Actions runs this script against a clean pinned PostgreSQL 18 service. Its credential is an isolated CI-only value and is never printed by the script. The workflow does not access a development or production database.
+
+
+## v9 financial write request markers
+
+Issue #34 / accepted ADR-019 adds only `finance_write_requests`, with owner/key uniqueness and a versioned 32-byte fingerprint. Upgrade v8→v9 does not rewrite any ledger, anchor, Goal, preference or export. Empty-table v9 down is supported; populated v9 down explicitly refuses to lose successful-key protection. Do not clear markers to roll back, edit migrations v1–v8, or run an old unprotected writer against populated v9. Use reviewed forward corrections and consistent backups. Personal database access/upgrade still requires separate authorization and restore verification.

@@ -76,6 +76,12 @@ Offline transaction synchronization is V0.2 work. It needs a separate **accepted
 | --- | --- | --- |
 | [ADR-018](ADR-018-opening-balance-effective-instant.md) | Known-balance instant, explicit legacy conversion and versioned export compatibility | Accepted 2026-10-20; #33 visual/export review passed and final delivery authorized 2026-10-23 |
 
+## Accepted financial-write retry decision
+
+| ADR | Decision | Status |
+| --- | --- | --- |
+| [ADR-019](ADR-019-owner-scoped-financial-write-idempotency.md) | Owner-scoped request keys, atomic PostgreSQL success markers, content-free replay, capacity warning and frozen draft recovery | Accepted 2026-10-26; Issue #34 final UX approved and delivery authorized; deployment remains separate |
+
 ## Naming
 
 Use the `ADR-` prefix, a zero-padded three-digit number, and a concise slug:

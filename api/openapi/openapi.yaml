@@ -57,6 +57,7 @@ paths:
       operationId: confirmOpeningBalance
       security: [{ sessionCookie: [] }]
       parameters:
+        - { $ref: "#/components/parameters/FinancialIdempotencyKey" }
         - { $ref: "#/components/parameters/MoneyAccountID" }
         - { $ref: "#/components/parameters/MoneyOrigin" }
         - { $ref: "#/components/parameters/MoneyCSRF" }
@@ -67,10 +68,15 @@ paths:
             schema: { $ref: "#/components/schemas/MoneyOpeningConfirmRequest" }
       responses:
         "200":
-          description: Complete owner-scoped confirmed account; repeat/stale confirmations conflict without another change.
+          description: First committed confirmation returns the owned Account (replay=false); a matching committed key returns only already_applied (replay=true), before current revision checks. A new key must satisfy current preconditions.
+          headers:
+            Idempotency-Replayed: { $ref: "#/components/headers/IdempotencyReplayed" }
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/MoneyAccount" }
+              schema:
+                oneOf:
+                  - { $ref: "#/components/schemas/MoneyAccount" }
+                  - { $ref: "#/components/schemas/FinancialWriteReplay" }
         "400": { $ref: "#/components/responses/MoneyBadRequest" }
         "401": { $ref: "#/components/responses/MoneyUnauthorized" }
         "403": { $ref: "#/components/responses/MoneyForbidden" }
@@ -80,7 +86,7 @@ paths:
         "415": { $ref: "#/components/responses/MoneyUnsupportedMediaType" }
         "422": { $ref: "#/components/responses/MoneyOverflow" }
         "500": { $ref: "#/components/responses/MoneyInternalError" }
-        "503": { $ref: "#/components/responses/MoneyUnavailable" }
+        "503": { $ref: "#/components/responses/FinancialWriteUnavailable" }
   /api/v1/me/export:
     post:
       tags: [Export]
@@ -296,6 +302,7 @@ paths:
       operationId: createMoneyAccount
       security: [{ sessionCookie: [] }]
       parameters:
+        - { $ref: "#/components/parameters/FinancialIdempotencyKey" }
         - { $ref: "#/components/parameters/MoneyOrigin" }
         - { $ref: "#/components/parameters/MoneyCSRF" }
       requestBody:
@@ -304,8 +311,11 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/MoneyAccountCreate" }
       responses:
+        "200": { $ref: "#/components/responses/FinancialWriteReplay" }
         "201":
           description: Account created.
+          headers:
+            Idempotency-Replayed: { $ref: "#/components/headers/IdempotencyFirstSuccess" }
           content:
             application/json:
               schema: { $ref: "#/components/schemas/MoneyAccount" }
@@ -315,7 +325,9 @@ paths:
         "413": { $ref: "#/components/responses/MoneyTooLarge" }
         "415": { $ref: "#/components/responses/MoneyUnsupportedMediaType" }
         "500": { $ref: "#/components/responses/MoneyInternalError" }
-        "503": { $ref: "#/components/responses/MoneyUnavailable" }
+        "503": { $ref: "#/components/responses/FinancialWriteUnavailable" }
+        "409": { $ref: "#/components/responses/MoneyConflict" }
+
   /api/v1/accounts/{accountID}/balance:
     get:
       tags: [Money]
@@ -527,6 +539,7 @@ paths:
       operationId: postMoneyEvent
       security: [{ sessionCookie: [] }]
       parameters:
+        - { $ref: "#/components/parameters/FinancialIdempotencyKey" }
         - { $ref: "#/components/parameters/MoneyOrigin" }
         - { $ref: "#/components/parameters/MoneyCSRF" }
       requestBody:
@@ -535,8 +548,11 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/MoneyEventCreate" }
       responses:
+        "200": { $ref: "#/components/responses/FinancialWriteReplay" }
         "201":
           description: Atomic financial event with its movement and zero or more allocations. An empty allocation array means Uncategorized.
+          headers:
+            Idempotency-Replayed: { $ref: "#/components/headers/IdempotencyFirstSuccess" }
           content:
             application/json:
               schema: { $ref: "#/components/schemas/MoneyEvent" }
@@ -549,7 +565,7 @@ paths:
         "415": { $ref: "#/components/responses/MoneyUnsupportedMediaType" }
         "422": { $ref: "#/components/responses/MoneyOverflow" }
         "500": { $ref: "#/components/responses/MoneyInternalError" }
-        "503": { $ref: "#/components/responses/MoneyUnavailable" }
+        "503": { $ref: "#/components/responses/FinancialWriteUnavailable" }
   /api/v1/transfers:
     post:
       tags: [Money]
@@ -557,6 +573,7 @@ paths:
       operationId: postMoneyTransfer
       security: [{ sessionCookie: [] }]
       parameters:
+        - { $ref: "#/components/parameters/FinancialIdempotencyKey" }
         - { $ref: "#/components/parameters/MoneyOrigin" }
         - { $ref: "#/components/parameters/MoneyCSRF" }
       requestBody:
@@ -565,8 +582,11 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/MoneyTransferCreate" }
       responses:
+        "200": { $ref: "#/components/responses/FinancialWriteReplay" }
         "201":
           description: Transfer event with equal opposite movements and no allocations.
+          headers:
+            Idempotency-Replayed: { $ref: "#/components/headers/IdempotencyFirstSuccess" }
           content:
             application/json:
               schema: { $ref: "#/components/schemas/MoneyEvent" }
@@ -579,14 +599,16 @@ paths:
         "415": { $ref: "#/components/responses/MoneyUnsupportedMediaType" }
         "422": { $ref: "#/components/responses/MoneyOverflow" }
         "500": { $ref: "#/components/responses/MoneyInternalError" }
-        "503": { $ref: "#/components/responses/MoneyUnavailable" }
+        "503": { $ref: "#/components/responses/FinancialWriteUnavailable" }
   /api/v1/events/{eventID}/void:
     post:
       tags: [Money]
+      description: Required owner-scoped UUIDv4 key; first success has Idempotency-Replayed=false. Matching replay acknowledges the original committed command without financial contents. Different normalized data under a committed key fails 409. All attempts recheck session, Origin and CSRF. See ADR-019.
       summary: Void an event with an optional note while retaining history
       operationId: voidMoneyEvent
       security: [{ sessionCookie: [] }]
       parameters:
+        - { $ref: "#/components/parameters/FinancialIdempotencyKey" }
         - { $ref: "#/components/parameters/MoneyEventID" }
         - { $ref: "#/components/parameters/MoneyOrigin" }
         - { $ref: "#/components/parameters/MoneyCSRF" }
@@ -596,6 +618,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/MoneyVoidRequest" }
       responses:
+        "200": { $ref: "#/components/responses/FinancialWriteReplay" }
         "204": { description: Event voided; history remains available. }
         "400": { $ref: "#/components/responses/MoneyBadRequest" }
         "401": { $ref: "#/components/responses/MoneyUnauthorized" }
@@ -606,7 +629,7 @@ paths:
         "415": { $ref: "#/components/responses/MoneyUnsupportedMediaType" }
         "422": { $ref: "#/components/responses/MoneyOverflow" }
         "500": { $ref: "#/components/responses/MoneyInternalError" }
-        "503": { $ref: "#/components/responses/MoneyUnavailable" }
+        "503": { $ref: "#/components/responses/FinancialWriteUnavailable" }
   /api/v1/events/{eventID}/delete:
     post:
       tags: [Money]
@@ -619,10 +642,12 @@ paths:
       operationId: deleteMoneyEvent
       security: [{ sessionCookie: [] }]
       parameters:
+        - { $ref: "#/components/parameters/FinancialIdempotencyKey" }
         - { $ref: "#/components/parameters/MoneyEventID" }
         - { $ref: "#/components/parameters/MoneyOrigin" }
         - { $ref: "#/components/parameters/MoneyCSRF" }
       responses:
+        "200": { $ref: "#/components/responses/FinancialWriteReplay" }
         "204": { description: Event is deleted from normal views; no response body. }
         "400": { $ref: "#/components/responses/MoneyBadRequest" }
         "401": { $ref: "#/components/responses/MoneyUnauthorized" }
@@ -631,7 +656,7 @@ paths:
         "409": { $ref: "#/components/responses/MoneyConflict" }
         "422": { $ref: "#/components/responses/MoneyOverflow" }
         "500": { $ref: "#/components/responses/MoneyInternalError" }
-        "503": { $ref: "#/components/responses/MoneyUnavailable" }
+        "503": { $ref: "#/components/responses/FinancialWriteUnavailable" }
   /api/v1/goals:
     get:
       tags: [Goals]
@@ -888,6 +913,14 @@ components:
       in: cookie
       name: lifeos_session
   parameters:
+    FinancialIdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Exactly one cryptographically random lowercase UUIDv4 for this logical Save, retained with the frozen payload across uncertain retries. Scoped to the authenticated owner across all six covered writes; never expire/evict successful keys. Missing/invalid key fails 400; changed committed intent fails 409.
+      schema:
+        type: string
+        pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
     MoneyAccountID:
       in: path
       name: accountID
@@ -941,6 +974,22 @@ components:
       required: true
       schema: { type: string, format: uuid }
   responses:
+    FinancialWriteReplay:
+      description: Original command committed; no reapplication or prior financial contents. Refresh normal authorized reads because the record may subsequently have changed or disappeared. Private/no-store.
+      headers:
+        Idempotency-Replayed: { $ref: "#/components/headers/IdempotencyCommittedReplay" }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/FinancialWriteReplay" }
+    FinancialWriteUnavailable:
+      description: Bounded busy/rollback (financial_write_busy), uncertain commit (financial_write_outcome_unknown), unsupported fingerprint version, or session validation unavailable. Keep and manually retry the SAME key and frozen body; do not infer that an earlier attempt rolled back.
+      headers:
+        Retry-After:
+          description: Present as 1 for financial_write_busy; absent when no retry delay can be promised.
+          schema: { type: string, const: "1" }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/MoneyErrorResponse" }
     GoalOK:
       description: Owner-scoped Goal and current checklist progress.
       content:
@@ -1047,12 +1096,27 @@ components:
         application/json:
           schema: { $ref: "#/components/schemas/MoneyErrorResponse" }
   headers:
+    IdempotencyFirstSuccess:
+      description: First committed success. Private/no-store; retain the key until a valid response is received.
+      schema: { type: string, const: "false" }
+    IdempotencyCommittedReplay:
+      description: Previously committed command; acknowledgement contains no old financial contents.
+      schema: { type: string, const: "true" }
+    IdempotencyReplayed:
+      description: false on first committed success; true on the content-free already_applied acknowledgement. All successes are private and no-store.
+      schema: { type: string, enum: ["false", "true"] }
     RequestId:
       description: Identifier used to correlate a request with structured server logs.
       schema:
         type: string
         minLength: 1
   schemas:
+    FinancialWriteReplay:
+      type: object
+      additionalProperties: false
+      required: [outcome]
+      properties:
+        outcome: { type: string, const: already_applied }
     OwnerExportRequest:
       type: object
       additionalProperties: false
@@ -1153,7 +1217,7 @@ components:
           properties:
             code:
               type: string
-              enum: [invalid_json, invalid_input, unsupported_media_type, request_too_large, authentication_required, invalid_origin, invalid_csrf, owner_override, method_not_allowed, session_unavailable, currency_mismatch, not_found, archived_record, conflict, amount_overflow, internal_error]
+              enum: [idempotency_key_required, invalid_idempotency_key, idempotency_key_conflict, idempotency_capacity_exceeded, financial_write_busy, financial_write_outcome_unknown, idempotency_version_unsupported, invalid_json, invalid_input, unsupported_media_type, request_too_large, authentication_required, invalid_origin, invalid_csrf, owner_override, method_not_allowed, session_unavailable, currency_mismatch, not_found, archived_record, conflict, amount_overflow, internal_error]
             message: { type: string }
     MoneyAccountCreate:
       type: object
