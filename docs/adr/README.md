@@ -80,7 +80,13 @@ Offline transaction synchronization is V0.2 work. It needs a separate **accepted
 
 | ADR | Decision | Status |
 | --- | --- | --- |
-| [ADR-019](ADR-019-owner-scoped-financial-write-idempotency.md) | Owner-scoped request keys, atomic PostgreSQL success markers, content-free replay, capacity warning and frozen draft recovery | Accepted 2026-10-26; Issue #34 final UX approved and delivery authorized; deployment remains separate |
+| [ADR-019](ADR-019-owner-scoped-financial-write-idempotency.md) | Owner-scoped request keys, atomic PostgreSQL success markers, content-free replay, capacity warning and frozen draft recovery | Accepted 2026-10-26; Issue #34 delivered and closed at `884b013d98d65f52d8f0e2dab424cfb03916539f`; deployment remains separate |
+
+## Accepted atomic editing decision
+
+| ADR | Decision | Status |
+| --- | --- | --- |
+| [ADR-020](ADR-020-atomic-financial-event-edit-revisions.md) | Stable-ID atomic Edit, current-only ledger, immutable internal snapshots and revision-guarded idempotent writes | Accepted 2026-10-27; Issue #35 final UI/financial evidence accepted and delivery authorized 2026-11-02 |
 
 ## Naming
 

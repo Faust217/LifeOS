@@ -172,15 +172,15 @@ func TestOpeningBalanceIntegration(t *testing.T) {
 		}
 		balance(a, 1000)
 		balance(b, 300)
-		if err = service.VoidEvent(ctx, owner, e.ID, "", newFinancialWriteKey()); err != nil {
+		if err = service.VoidEvent(ctx, owner, e.ID, "", newFinancialWriteKey(), testEventRevision(t, service, owner, e.ID)); err != nil {
 			t.Fatal(err)
 		}
 		balance(a, 1000)
 		balance(b, 200)
-		if err = service.DeleteEvent(ctx, owner, e.ID, newFinancialWriteKey()); err != nil {
+		if err = service.DeleteEvent(ctx, owner, e.ID, newFinancialWriteKey(), testEventRevision(t, service, owner, e.ID)); err != nil {
 			t.Fatal(err)
 		}
-		if err = service.DeleteEvent(ctx, owner, e.ID, newFinancialWriteKey()); err != nil {
+		if err = service.DeleteEvent(ctx, owner, e.ID, newFinancialWriteKey(), testEventRevision(t, service, owner, e.ID)); err != nil {
 			t.Fatal(err)
 		}
 		balance(a, 1000)
@@ -191,7 +191,7 @@ func TestOpeningBalanceIntegration(t *testing.T) {
 		}
 		balance(a, 900)
 		balance(b, 300)
-		if err = service.DeleteEvent(ctx, owner, e.ID, newFinancialWriteKey()); err != nil {
+		if err = service.DeleteEvent(ctx, owner, e.ID, newFinancialWriteKey(), testEventRevision(t, service, owner, e.ID)); err != nil {
 			t.Fatal(err)
 		}
 		balance(a, 1000)
@@ -239,7 +239,7 @@ func TestOpeningBalanceIntegration(t *testing.T) {
 		if err != nil || spent != 70 {
 			t.Fatal(spent, err)
 		}
-		if err = service.VoidEvent(ctx, owner, e.ID, "", newFinancialWriteKey()); err != nil {
+		if err = service.VoidEvent(ctx, owner, e.ID, "", newFinancialWriteKey(), testEventRevision(t, service, owner, e.ID)); err != nil {
 			t.Fatal(err)
 		}
 		balance(a, 1000)
@@ -252,7 +252,7 @@ func TestOpeningBalanceIntegration(t *testing.T) {
 			t.Fatal(err)
 		}
 		balance(a, 900)
-		if err = service.DeleteEvent(ctx, owner, e.ID, newFinancialWriteKey()); err != nil {
+		if err = service.DeleteEvent(ctx, owner, e.ID, newFinancialWriteKey(), testEventRevision(t, service, owner, e.ID)); err != nil {
 			t.Fatal(err)
 		}
 		balance(a, 1000)
@@ -360,9 +360,9 @@ func TestOpeningBalanceIntegration(t *testing.T) {
 				go func() {
 					defer wg.Done()
 					if remove == "void" {
-						removeErr = service.VoidEvent(ctx, owner, e.ID, "", newFinancialWriteKey())
+						removeErr = service.VoidEvent(ctx, owner, e.ID, "", newFinancialWriteKey(), testEventRevision(t, service, owner, e.ID))
 					} else {
-						removeErr = service.DeleteEvent(ctx, owner, e.ID, newFinancialWriteKey())
+						removeErr = service.DeleteEvent(ctx, owner, e.ID, newFinancialWriteKey(), testEventRevision(t, service, owner, e.ID))
 					}
 				}()
 				wg.Wait()

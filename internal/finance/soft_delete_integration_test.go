@@ -89,10 +89,10 @@ func TestFinanceSoftDelete(t *testing.T) {
 	}
 	deleteEvent := func(event Event) {
 		t.Helper()
-		if err := service.DeleteEvent(ctx, owner, event.ID, newFinancialWriteKey()); err != nil {
+		if err := service.DeleteEvent(ctx, owner, event.ID, newFinancialWriteKey(), testEventRevision(t, service, owner, event.ID)); err != nil {
 			t.Fatalf("delete %s: %v", event.ID, err)
 		}
-		if err := service.DeleteEvent(ctx, owner, event.ID, newFinancialWriteKey()); err != nil {
+		if err := service.DeleteEvent(ctx, owner, event.ID, newFinancialWriteKey(), testEventRevision(t, service, owner, event.ID)); err != nil {
 			t.Fatalf("repeat delete %s: %v", event.ID, err)
 		}
 		history, err := service.History(ctx, owner, 100, 0)
@@ -109,14 +109,14 @@ func TestFinanceSoftDelete(t *testing.T) {
 	expense := postExpense(1000, now, []AllocationInput{{CategoryID: food.ID, AmountMinor: 1000}})
 	checkBalance(bank.ID, 9000)
 	checkSpending(1000)
-	if err := service.DeleteEvent(ctx, other, expense.ID, newFinancialWriteKey()); !errors.Is(err, ErrNotFound) {
+	if err := service.DeleteEvent(ctx, other, expense.ID, newFinancialWriteKey(), testEventRevision(t, service, other, expense.ID)); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("cross-owner delete=%v", err)
 	}
 	deleteEvent(expense)
 	checkBalance(bank.ID, 10000)
 	checkSpending(0)
 	checkStored(expense.ID, "posted", 1, 1, "")
-	if err := service.VoidEvent(ctx, owner, expense.ID, "late void", newFinancialWriteKey()); !errors.Is(err, ErrConflict) {
+	if err := service.VoidEvent(ctx, owner, expense.ID, "late void", newFinancialWriteKey(), testEventRevision(t, service, owner, expense.ID)); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("void deleted event=%v", err)
 	}
 
@@ -161,7 +161,7 @@ func TestFinanceSoftDelete(t *testing.T) {
 	checkStored(uncategorized.ID, "posted", 1, 0, "")
 
 	voided := postExpense(100, now.Add(4*time.Minute), []AllocationInput{{CategoryID: food.ID, AmountMinor: 100}})
-	if err := service.VoidEvent(ctx, owner, voided.ID, "Owner correction", newFinancialWriteKey()); err != nil {
+	if err := service.VoidEvent(ctx, owner, voided.ID, "Owner correction", newFinancialWriteKey(), testEventRevision(t, service, owner, voided.ID)); err != nil {
 		t.Fatal(err)
 	}
 	checkBalance(bank.ID, 10000)
@@ -200,7 +200,7 @@ func TestFinanceSoftDelete(t *testing.T) {
 		go func() {
 			defer group.Done()
 			<-start
-			results <- service.DeleteEvent(ctx, owner, concurrent.ID, newFinancialWriteKey())
+			results <- service.DeleteEvent(ctx, owner, concurrent.ID, newFinancialWriteKey(), testEventRevision(t, service, owner, concurrent.ID))
 		}()
 	}
 	close(start)
@@ -221,16 +221,19 @@ func TestFinanceSoftDelete(t *testing.T) {
 	go func() {
 		defer group.Done()
 		<-start
-		voidErr = service.VoidEvent(ctx, owner, race.ID, "Race correction", newFinancialWriteKey())
+		voidErr = service.VoidEvent(ctx, owner, race.ID, "Race correction", newFinancialWriteKey(), testEventRevision(t, service, owner, race.ID))
 	}()
 	go func() {
 		defer group.Done()
 		<-start
-		deleteErr = service.DeleteEvent(ctx, owner, race.ID, newFinancialWriteKey())
+		deleteErr = service.DeleteEvent(ctx, owner, race.ID, newFinancialWriteKey(), testEventRevision(t, service, owner, race.ID))
 	}()
 	close(start)
 	group.Wait()
-	if deleteErr != nil || (voidErr != nil && !errors.Is(voidErr, ErrConflict)) {
+	if errors.Is(deleteErr, ErrRevisionConflict) && voidErr == nil {
+		deleteErr = service.DeleteEvent(ctx, owner, race.ID, newFinancialWriteKey(), testEventRevision(t, service, owner, race.ID))
+	}
+	if deleteErr != nil || (voidErr != nil && !errors.Is(voidErr, ErrRevisionConflict) && !errors.Is(voidErr, ErrNotFound)) {
 		t.Fatalf("void/delete race void=%v delete=%v", voidErr, deleteErr)
 	}
 	checkBalance(bank.ID, 10000)
@@ -251,7 +254,7 @@ func TestFinanceSoftDelete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := service.DeleteEvent(ctx, owner, maxExpense.ID, newFinancialWriteKey()); !errors.Is(err, ErrOverflow) {
+	if err := service.DeleteEvent(ctx, owner, maxExpense.ID, newFinancialWriteKey(), testEventRevision(t, service, owner, maxExpense.ID)); !errors.Is(err, ErrOverflow) {
 		t.Fatalf("overflow delete=%v", err)
 	}
 	var deletedAt *time.Time
@@ -276,7 +279,7 @@ func TestFinanceSoftDelete(t *testing.T) {
 		FOR EACH ROW EXECUTE FUNCTION lifeos_test_reject_soft_delete()`); err != nil {
 		t.Fatal(err)
 	}
-	if err := service.DeleteEvent(ctx, owner, failed.ID, newFinancialWriteKey()); err == nil {
+	if err := service.DeleteEvent(ctx, owner, failed.ID, newFinancialWriteKey(), testEventRevision(t, service, owner, failed.ID)); err == nil {
 		t.Fatal("injected update failure unexpectedly succeeded")
 	}
 	if err := pool.QueryRow(ctx, `SELECT deleted_at FROM financial_events WHERE id = $1`, failed.ID).Scan(&deletedAt); err != nil || deletedAt != nil {
@@ -315,7 +318,7 @@ func TestFinanceSoftDelete(t *testing.T) {
 	if err := pool.QueryRow(ctx, `SELECT deleted_at FROM financial_events WHERE id = $1`, failed.ID).Scan(&deletedAt); err != nil || deletedAt == nil {
 		t.Fatalf("failed down changed marker=%v err=%v", deletedAt, err)
 	}
-	if err := service.DeleteEvent(ctx, identity.OwnerID{}, expense.ID, newFinancialWriteKey()); !errors.Is(err, ErrUnauthorized) {
+	if err := service.DeleteEvent(ctx, identity.OwnerID{}, expense.ID, newFinancialWriteKey(), testEventRevision(t, service, identity.OwnerID{}, expense.ID)); !errors.Is(err, ErrUnauthorized) {
 		t.Fatalf("zero owner delete=%v", err)
 	}
 }

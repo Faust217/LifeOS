@@ -28,6 +28,7 @@ type movementSpec struct {
 }
 
 type postSpec struct {
+	requestKey  string
 	kind        string
 	amount      int64
 	currency    string
@@ -257,7 +258,12 @@ func (r *repository) categorySpending(ctx context.Context, owner identity.OwnerI
 }
 
 func (r *repository) history(ctx context.Context, owner identity.OwnerID, limit, offset int) ([]Event, error) {
-	rows, err := r.pool.Query(ctx, `SELECT id, kind, amount_minor, currency, occurred_at, note, status, voided_at, void_reason
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+	rows, err := tx.Query(ctx, `SELECT event_revision, id, kind, amount_minor, currency, occurred_at, note, status, voided_at, void_reason
 		FROM financial_events WHERE owner_id = $1 AND deleted_at IS NULL
 		ORDER BY occurred_at DESC, id DESC LIMIT $2 OFFSET $3`, owner.String(), limit, offset)
 	if err != nil {
@@ -268,7 +274,7 @@ func (r *repository) history(ctx context.Context, owner identity.OwnerID, limit,
 		var event Event
 		var voided sql.NullTime
 		var reason sql.NullString
-		if err := rows.Scan(&event.ID, &event.Kind, &event.AmountMinor, &event.Currency, &event.OccurredAt,
+		if err := rows.Scan(&event.Revision, &event.ID, &event.Kind, &event.AmountMinor, &event.Currency, &event.OccurredAt,
 			&event.Note, &event.Status, &voided, &reason); err != nil {
 			rows.Close()
 			return nil, fmt.Errorf("scan event: %w", err)
@@ -287,20 +293,23 @@ func (r *repository) history(ctx context.Context, owner identity.OwnerID, limit,
 		return nil, fmt.Errorf("read history rows: %w", err)
 	}
 	for i := range events {
-		events[i].Movements, err = r.eventMovements(ctx, owner, events[i].ID)
+		events[i].Movements, err = eventMovementsInTx(ctx, tx, owner, events[i].ID)
 		if err != nil {
 			return nil, err
 		}
-		events[i].Allocations, err = r.eventAllocations(ctx, owner, events[i].ID)
+		events[i].Allocations, err = eventAllocationsInTx(ctx, tx, owner, events[i].ID)
 		if err != nil {
 			return nil, err
 		}
 	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
 	return events, nil
 }
 
-func (r *repository) eventMovements(ctx context.Context, owner identity.OwnerID, eventID string) ([]Movement, error) {
-	rows, err := r.pool.Query(ctx, `SELECT id, account_id, amount_minor, currency FROM account_movements
+func eventMovementsInTx(ctx context.Context, tx pgx.Tx, owner identity.OwnerID, eventID string) ([]Movement, error) {
+	rows, err := tx.Query(ctx, `SELECT id, account_id, amount_minor, currency FROM account_movements
 		WHERE owner_id = $1 AND event_id = $2 ORDER BY created_at, id`, owner.String(), eventID)
 	if err != nil {
 		return nil, fmt.Errorf("read movements: %w", err)
@@ -317,8 +326,8 @@ func (r *repository) eventMovements(ctx context.Context, owner identity.OwnerID,
 	return movements, rows.Err()
 }
 
-func (r *repository) eventAllocations(ctx context.Context, owner identity.OwnerID, eventID string) ([]Allocation, error) {
-	rows, err := r.pool.Query(ctx, `SELECT id, category_id, amount_minor, currency FROM category_allocations
+func eventAllocationsInTx(ctx context.Context, tx pgx.Tx, owner identity.OwnerID, eventID string) ([]Allocation, error) {
+	rows, err := tx.Query(ctx, `SELECT id, category_id, amount_minor, currency FROM category_allocations
 		WHERE owner_id = $1 AND event_id = $2 ORDER BY created_at, id`, owner.String(), eventID)
 	if err != nil {
 		return nil, fmt.Errorf("read allocations: %w", err)
@@ -382,7 +391,7 @@ func (r *repository) postInTx(ctx context.Context, tx pgx.Tx, owner identity.Own
 	if err != nil {
 		return Event{}, fmt.Errorf("insert financial event: %w", err)
 	}
-	event := Event{ID: id, Kind: spec.kind, AmountMinor: spec.amount, Currency: spec.currency,
+	event := Event{Revision: 1, ID: id, Kind: spec.kind, AmountMinor: spec.amount, Currency: spec.currency,
 		OccurredAt: spec.occurredAt, Note: spec.note, Status: "posted"}
 	for _, planned := range spec.movements {
 		movementID, err := newUUID()
@@ -417,19 +426,32 @@ func (r *repository) postInTx(ctx context.Context, tx pgx.Tx, owner identity.Own
 	if err := bumpBalanceRevisions(ctx, tx, owner, spec.movements); err != nil {
 		return Event{}, err
 	}
+	if err := captureRevision(ctx, tx, owner, event.ID, "create", spec.requestKey); err != nil {
+		return Event{}, err
+	}
 	return event, nil
 }
 
-func (r *repository) voidEventInTx(ctx context.Context, tx pgx.Tx, owner identity.OwnerID, eventID, reason string) error {
+func (r *repository) voidEventInTx(ctx context.Context, tx pgx.Tx, owner identity.OwnerID, eventID, reason string, expected int64, requestKey string) error {
 	var status string
 	var deleted bool
 	var occurredAt time.Time
-	err := tx.QueryRow(ctx, `SELECT status, deleted_at IS NOT NULL, occurred_at FROM financial_events WHERE owner_id = $1 AND id = $2 FOR UPDATE`, owner.String(), eventID).Scan(&status, &deleted, &occurredAt)
+	var revision int64
+	err := tx.QueryRow(ctx, `SELECT status, deleted_at IS NOT NULL, occurred_at, event_revision FROM financial_events WHERE owner_id = $1 AND id = $2 FOR UPDATE`, owner.String(), eventID).Scan(&status, &deleted, &occurredAt, &revision)
 	if err != nil {
 		return notFoundOr("find event", err)
 	}
-	if deleted || status != "posted" {
-		return ErrConflict
+	if deleted {
+		return ErrNotFound
+	}
+	if revision != expected {
+		return ErrRevisionConflict
+	}
+	if status != "posted" {
+		return ErrNotEditable
+	}
+	if revision == math.MaxInt64 {
+		return ErrOverflow
 	}
 	movements, err := eventMovementSpecs(ctx, tx, owner, eventID)
 	if err != nil {
@@ -438,7 +460,7 @@ func (r *repository) voidEventInTx(ctx context.Context, tx pgx.Tx, owner identit
 	if err := checkRemovalBalances(ctx, tx, owner, movements, occurredAt); err != nil {
 		return err
 	}
-	_, err = tx.Exec(ctx, `UPDATE financial_events SET status = 'voided', voided_at = now(), void_reason = $3
+	_, err = tx.Exec(ctx, `UPDATE financial_events SET event_revision=event_revision+1, status = 'voided', voided_at = now(), void_reason = $3
 		WHERE owner_id = $1 AND id = $2 AND status = 'posted' AND deleted_at IS NULL`, owner.String(), eventID, reason)
 	if err != nil {
 		return fmt.Errorf("void event: %w", err)
@@ -446,19 +468,26 @@ func (r *repository) voidEventInTx(ctx context.Context, tx pgx.Tx, owner identit
 	if err := bumpBalanceRevisions(ctx, tx, owner, movements); err != nil {
 		return err
 	}
-	return nil
+	return captureRevision(ctx, tx, owner, eventID, "void", requestKey)
 }
 
-func (r *repository) deleteEventInTx(ctx context.Context, tx pgx.Tx, owner identity.OwnerID, eventID string) error {
+func (r *repository) deleteEventInTx(ctx context.Context, tx pgx.Tx, owner identity.OwnerID, eventID string, expected int64, requestKey string) error {
 	var status string
 	var deleted bool
 	var occurredAt time.Time
-	err := tx.QueryRow(ctx, `SELECT status, deleted_at IS NOT NULL, occurred_at FROM financial_events WHERE owner_id = $1 AND id = $2 FOR UPDATE`, owner.String(), eventID).Scan(&status, &deleted, &occurredAt)
+	var revision int64
+	err := tx.QueryRow(ctx, `SELECT status, deleted_at IS NOT NULL, occurred_at, event_revision FROM financial_events WHERE owner_id = $1 AND id = $2 FOR UPDATE`, owner.String(), eventID).Scan(&status, &deleted, &occurredAt, &revision)
 	if err != nil {
 		return notFoundOr("find event", err)
 	}
 	if deleted {
 		return nil
+	}
+	if revision != expected {
+		return ErrRevisionConflict
+	}
+	if revision == math.MaxInt64 {
+		return ErrOverflow
 	}
 	movements, err := eventMovementSpecs(ctx, tx, owner, eventID)
 	if err != nil {
@@ -475,7 +504,7 @@ func (r *repository) deleteEventInTx(ctx context.Context, tx pgx.Tx, owner ident
 	} else {
 		return ErrConflict
 	}
-	_, err = tx.Exec(ctx, `UPDATE financial_events SET deleted_at = now()
+	_, err = tx.Exec(ctx, `UPDATE financial_events SET event_revision=event_revision+1, deleted_at = now()
 		WHERE owner_id = $1 AND id = $2 AND deleted_at IS NULL`, owner.String(), eventID)
 	if err != nil {
 		return fmt.Errorf("delete event: %w", err)
@@ -483,7 +512,7 @@ func (r *repository) deleteEventInTx(ctx context.Context, tx pgx.Tx, owner ident
 	if err := bumpBalanceRevisions(ctx, tx, owner, movements); err != nil {
 		return err
 	}
-	return nil
+	return captureRevision(ctx, tx, owner, eventID, "delete", requestKey)
 }
 
 func eventMovementSpecs(ctx context.Context, tx pgx.Tx, owner identity.OwnerID, eventID string) ([]movementSpec, error) {

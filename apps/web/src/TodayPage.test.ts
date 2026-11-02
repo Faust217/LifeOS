@@ -16,7 +16,7 @@ describe("Today read-only projections", () => {
   it("labels a transfer using its two movements, without an expense category", () => {
     const transfer = {
       id: "44444444-4444-4444-8444-444444444444", kind: "transfer", note: "", amount_minor: "2500", currency: "MYR",
-      occurred_at: "2026-10-13T00:00:00Z", status: "posted",
+      occurred_at: "2026-10-13T00:00:00Z", event_revision: "1", status: "posted",
       movements: [
         { id: "55555555-5555-4555-8555-555555555555", account_id: fromID, amount_minor: "-2500", currency: "MYR" },
         { id: "66666666-6666-4666-8666-666666666666", account_id: toID, amount_minor: "2500", currency: "MYR" },
@@ -40,7 +40,7 @@ describe("Today read-only projections", () => {
     for (const kind of ["income", "expense"] as const) {
       const event = {
         id: "77777777-7777-4777-8777-777777777777", kind, note: "", amount_minor: "100", currency: "MYR",
-        occurred_at: "2026-10-13T00:00:00Z", status: "posted",
+        occurred_at: "2026-10-13T00:00:00Z", event_revision: "1", status: "posted",
         allocations: [], movements: [{ id: "88888888-8888-4888-8888-888888888888", account_id: fromID, amount_minor: kind === "expense" ? "-100" : "100", currency: "MYR" }],
       } satisfies MoneyEvent;
       expect(eventLabel(event, categories)).toBe("Uncategorized");

@@ -101,6 +101,8 @@ func TestFinancialWriteIdempotencyIntegration(t *testing.T) {
 		return owner
 	}
 	owner := ownerFrom(cookie)
+	var tagsMu sync.Mutex
+	tags := map[string]string{}
 	send := func(path, body, key string, c *http.Cookie, token string, change func(*http.Request)) (*httptest.ResponseRecorder, error) {
 		req, _ := http.NewRequest("POST", server.URL+"/api/v1"+path, strings.NewReader(body))
 		req.AddCookie(c)
@@ -111,6 +113,22 @@ func TestFinancialWriteIdempotencyIntegration(t *testing.T) {
 		}
 		if key != "" {
 			req.Header.Set("Idempotency-Key", key)
+		}
+		if strings.HasSuffix(path, "/void") || strings.HasSuffix(path, "/delete") {
+			tagsMu.Lock()
+			tag, ok := tags[key]
+			if !ok {
+				var rev int64
+				id := strings.Split(strings.TrimPrefix(path, "/events/"), "/")[0]
+				_ = pool.QueryRow(ctx, `SELECT event_revision FROM financial_events WHERE id=$1`, id).Scan(&rev)
+				if rev == 0 {
+					rev = 1
+				}
+				tag = strconv.Quote(strconv.FormatInt(rev, 10))
+				tags[key] = tag
+			}
+			tagsMu.Unlock()
+			req.Header.Set("If-Match", tag)
 		}
 		if change != nil {
 			change(req)
@@ -235,7 +253,7 @@ func TestFinancialWriteIdempotencyIntegration(t *testing.T) {
 			t.Fatal("replay reversed twice")
 		}
 		// New intent still observes deleted status, and a different operation cannot reuse K.
-		moneyStatus(t, request("/events/"+e.ID+"/void", `{}`, newFinancialWriteKey()), 409)
+		moneyStatus(t, request("/events/"+e.ID+"/void", `{}`, newFinancialWriteKey()), 404)
 		moneyStatus(t, request("/events/"+e.ID+"/delete", "", key), 409)
 	})
 	t.Run("income transfer and posted deletion preserve amounts", func(t *testing.T) {
@@ -399,7 +417,7 @@ func TestFinancialWriteIdempotencyIntegration(t *testing.T) {
 		done := make(chan error, 1)
 		go func() {
 			_, err := executeFinancialWrite(ctx, service.repo, owner, crashKey, financialCommand{operation: "event.create", parameters: []any{"crash"}}, func(ctx context.Context, tx pgx.Tx) (Event, error) {
-				e, err := service.repo.postInTx(ctx, tx, owner, postSpec{kind: "expense", amount: 3, currency: "MYR", occurredAt: input.OccurredAt, movements: []movementSpec{{bank.ID, -3}}})
+				e, err := service.repo.postInTx(ctx, tx, owner, postSpec{requestKey: crashKey, kind: "expense", amount: 3, currency: "MYR", occurredAt: input.OccurredAt, movements: []movementSpec{{bank.ID, -3}}})
 				if err != nil {
 					return e, err
 				}
@@ -559,7 +577,11 @@ func TestFinancialWriteRestartWorker(t *testing.T) {
 	}
 	defer pool.Close()
 	router, _, _ := idempotencyTestRouter(t, pool, os.Getenv("LIFEOS_I34_ISSUER"))
-	cookie := &http.Cookie{Name: "lifeos_session", Value: "idempotency-owner"}
+	secret := os.Getenv("LIFEOS_I35_SESSION")
+	if secret == "" {
+		secret = "idempotency-owner"
+	}
+	cookie := &http.Cookie{Name: "lifeos_session", Value: secret}
 	r := httptest.NewRequest("GET", "/api/v1/me", nil)
 	r.AddCookie(cookie)
 	rec := httptest.NewRecorder()
@@ -570,7 +592,14 @@ func TestFinancialWriteRestartWorker(t *testing.T) {
 	if json.Unmarshal(rec.Body.Bytes(), &me) != nil || me.CSRF == "" {
 		t.Fatal("worker session")
 	}
-	r = httptest.NewRequest("POST", "/api/v1/events", strings.NewReader(os.Getenv("LIFEOS_I34_BODY")))
+	path := os.Getenv("LIFEOS_I35_PATH")
+	if path == "" {
+		path = "/api/v1/events"
+	}
+	r = httptest.NewRequest("POST", path, strings.NewReader(os.Getenv("LIFEOS_I34_BODY")))
+	if tag := os.Getenv("LIFEOS_I35_TAG"); tag != "" {
+		r.Header.Set("If-Match", tag)
+	}
 	r.AddCookie(cookie)
 	r.Header.Set("Origin", moneyTestOrigin)
 	r.Header.Set("X-CSRF-Token", me.CSRF)

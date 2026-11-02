@@ -60,7 +60,7 @@ describe("Frozen financial command recovery", () => {
       expect(storage.getItem(FINANCIAL_PENDING_STORAGE)).toBe(corrupt);
       manager.clearAcknowledged(); expect((await manager.prepare("/api/v1/events", body)).key).toBe(key);
     }
-    const { manager, storage } = setup(); await manager.prepare(`/api/v1/events/${key}/void`, '{"reason":""}');
+    const { manager, storage } = setup(); await manager.prepare(`/api/v1/events/${key}/void`, '{"reason":""}', '"1"');
     const raw = JSON.parse(storage.getItem(FINANCIAL_PENDING_STORAGE)!); raw.path = "/api/v1/auth/logout";
     storage.setItem(FINANCIAL_PENDING_STORAGE, JSON.stringify(raw));
     expect(manager.status().kind).toBe("corrupted");
@@ -109,4 +109,23 @@ describe("Frozen financial command recovery", () => {
     await expect(manager.prepare("/api/v1/events", JSON.stringify({ note: "x".repeat(17000) }))).rejects.toThrow();
     expect(storage.data.size).toBe(0);
   });
+  it("retains a v9 pending key and original checksum without rewriting its request", async () => {
+    const { manager, storage } = setup();
+    const base = { version: 1 as const, owner: "owner-A", key, operation: "event.void", target: key, path: `/api/v1/events/${key}/void`, body: '{"reason":""}' };
+    const bytes = new TextEncoder().encode(JSON.stringify([base.version, base.owner, base.key, base.operation, base.target, base.path, base.body]));
+    const checksum = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)), (v) => v.toString(16).padStart(2,"0")).join("");
+    const saved = JSON.stringify({ ...base, checksum }); storage.setItem(FINANCIAL_PENDING_STORAGE, saved);
+    const original = manager.retry(); await manager.start(original); manager.finish(original, false);
+    expect(storage.getItem(FINANCIAL_PENDING_STORAGE)).toBe(saved);
+    expect(original.version).toBe(1); expect(original.ifMatch).toBeUndefined();
+  });
+  it("freezes the Edit precondition and detects its corruption", async () => {
+    const { manager, storage } = setup();
+    const record = await manager.prepare(`/api/v1/events/${key}/edit`, body, '"7"');
+    expect(record.ifMatch).toBe('"7"');
+    const changed = JSON.parse(storage.getItem(FINANCIAL_PENDING_STORAGE)!); changed.ifMatch = '"8"';
+    storage.setItem(FINANCIAL_PENDING_STORAGE, JSON.stringify(changed));
+    await expect(manager.start(manager.retry())).rejects.toMatchObject({ reason: "corrupted" });
+  });
+
 });

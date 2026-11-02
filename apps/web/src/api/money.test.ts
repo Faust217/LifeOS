@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { previewOpeningBalance, confirmOpeningBalance, retryFinancialWrite } from "./money";
+import { previewOpeningBalance, confirmOpeningBalance, retryFinancialWrite, editMoneyEvent, getMoneyEvent } from "./money";
 
 import { archiveMoneyAccount, archiveMoneyCategory, createMoneyAccount, deleteMoneyEvent, listMoneyAccounts, listMoneyHistory, MoneyApiError, postMoneyEvent, renameMoneyCategory, restoreMoneyAccount, restoreMoneyCategory, voidMoneyEvent } from "./money";
 
@@ -49,9 +49,9 @@ describe("Money API boundary", () => {
     vi.stubGlobal("fetch", request);
     await archiveMoneyAccount("csrf", "11111111-1111-4111-8111-111111111111");
     await restoreMoneyAccount("csrf", "11111111-1111-4111-8111-111111111111");
-    await voidMoneyEvent("csrf", "22222222-2222-4222-8222-222222222222", "Entered twice");
-    await voidMoneyEvent("csrf", "33333333-3333-4333-8333-333333333333");
-    await deleteMoneyEvent("csrf", "44444444-4444-4444-8444-444444444444");
+    await voidMoneyEvent("csrf", "22222222-2222-4222-8222-222222222222", "1", "Entered twice");
+    await voidMoneyEvent("csrf", "33333333-3333-4333-8333-333333333333", "1");
+    await deleteMoneyEvent("csrf", "44444444-4444-4444-8444-444444444444", "1");
     expect(request.mock.calls[0][0]).toBe("/api/v1/accounts/11111111-1111-4111-8111-111111111111/archive");
     expect(request.mock.calls[0][1].body).toBeUndefined();
     expect(request.mock.calls[1][0]).toBe("/api/v1/accounts/11111111-1111-4111-8111-111111111111/restore");
@@ -144,4 +144,31 @@ describe("Financial Save recovery API", () => {
   const request=vi.fn();vi.stubGlobal("fetch",request);
   await expect(retryFinancialWrite("csrf")).rejects.toMatchObject({reason:"corrupted"});expect(request).not.toHaveBeenCalled();
  });
+});
+
+describe("Atomic edit transport",()=>{
+ const id="11111111-1111-4111-8111-111111111111";
+ const input={kind:"expense" as const,currency:"MYR",amount_minor:"3500",occurred_at:"2026-10-20T00:00:00.123456Z",note:" exact note ",account_id:id,allocations:[{category_id:id,amount_minor:"2000"},{category_id:"22222222-2222-4222-8222-222222222222",amount_minor:"1500"}]};
+ it("freezes complete splits, exact instant and If-Match across a lost response",async()=>{
+  const request=vi.fn().mockRejectedValueOnce(new Error("lost")).mockImplementationOnce(async()=>new Response('{"outcome":"already_applied"}',{status:200,headers:{"Idempotency-Replayed":"true"}}));vi.stubGlobal("fetch",request);
+  await expect(editMoneyEvent("csrf",id,"7",input)).rejects.toThrow();const frozen=pendingFinancialWrite.retry();
+  await retryFinancialWrite("renewed");
+  expect(request.mock.calls[1][1].body).toBe(frozen.body);expect(JSON.parse(frozen.body!)).toEqual(input);
+  expect(request.mock.calls[1][1].headers).toMatchObject({"If-Match":'"7"',"Idempotency-Key":frozen.key,"X-CSRF-Token":"renewed"});
+  expect(pendingFinancialWrite.status().kind).toBe("empty");
+ });
+ it("releases a definitive initial stale failure without changing the caller's draft",async()=>{
+  const original=JSON.stringify(input);vi.stubGlobal("fetch",vi.fn().mockImplementation(async()=>new Response('{"error":{"code":"event_revision_conflict"}}',{status:412})));
+  await expect(editMoneyEvent("csrf",id,"7",input)).rejects.toMatchObject({status:412});expect(JSON.stringify(input)).toBe(original);expect(pendingFinancialWrite.status().kind).toBe("empty");
+ });
+ it("reads the full event through the guarded owner-scoped route",async()=>{
+  const request=vi.fn().mockImplementation(async()=>new Response('{}',{status:200}));vi.stubGlobal("fetch",request);await getMoneyEvent(id);
+  expect(request).toHaveBeenCalledWith(`/api/v1/events/${id}`,expect.objectContaining({credentials:"same-origin",cache:"no-store"}));
+ });
+ it("keeps recovery when the Edit success omits its effective movements",async()=>{
+  const result={id,currency:"MYR",amount_minor:"3500",movements:[],allocations:[],note:"",occurred_at:input.occurred_at,kind:"expense",status:"posted",event_revision:"8"};
+  vi.stubGlobal("fetch",vi.fn().mockImplementation(async()=>new Response(JSON.stringify(result),{status:200,headers:{"Idempotency-Replayed":"false",ETag:'"8"'}})));
+  await expect(editMoneyEvent("csrf",id,"7",input)).rejects.toMatchObject({status:200});expect(pendingFinancialWrite.status().kind).toBe("pending");
+ });
+
 });

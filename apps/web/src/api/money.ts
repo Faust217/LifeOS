@@ -32,6 +32,9 @@ function moneyErrorMessage(status: number, code: MoneyErrorCode | "network_error
     case "currency_mismatch": return "These accounts use different currencies. Choose compatible accounts.";
     case "not_found": return "That record is no longer available. Refresh and try again.";
     case "archived_record": return "That account or category is archived. Choose an active one.";
+    case "event_revision_required": return "Open the transaction again before changing it.";
+    case "event_revision_conflict": return "This transaction changed. Your draft is kept; review the latest transaction before saving.";
+    case "event_not_editable": return "This transaction is no longer posted. Review its current state before changing it.";
     case "conflict": return "This change conflicts with the current record state. Refresh and try again.";
     case "amount_overflow": return "The amount is outside the supported range.";
     case "invalid_input": case "invalid_json": return "Please check the form details and try again.";
@@ -75,7 +78,7 @@ async function financialRequest<T>(csrfToken: string, command: PendingFinancialC
     try {
       response = await fetch(command.path, {
         method: "POST", credentials: "same-origin", cache: "no-store",
-        headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken, "Idempotency-Key": command.key },
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken, "Idempotency-Key": command.key, ...(command.version === 2 && command.ifMatch ? { "If-Match": command.ifMatch } : {}) },
         body: command.body ?? undefined,
       });
     } catch { throw new MoneyApiError(0, "network_error"); }
@@ -83,7 +86,7 @@ async function financialRequest<T>(csrfToken: string, command: PendingFinancialC
       const payload = await response.json().catch(() => null) as { error?: { code?: MoneyErrorCode } } | null;
       const code = payload?.error?.code ?? "internal_error";
       // A failed retry cannot establish that an earlier attempt did not commit.
-      resolved = !retry && [400, 404, 409, 413, 415, 422].includes(response.status) && code !== "idempotency_key_conflict";
+      resolved = !retry && [400, 404, 409, 412, 413, 415, 422, 428].includes(response.status) && code !== "idempotency_key_conflict";
       throw new MoneyApiError(response.status, code);
     }
     const replayed = response.headers.get("Idempotency-Replayed");
@@ -94,19 +97,25 @@ async function financialRequest<T>(csrfToken: string, command: PendingFinancialC
       return receipt;
     }
     const noContent = command.operation === "event.void" || command.operation === "event.delete";
-    const expectedStatus = noContent ? 204 : command.operation === "opening_balance.confirm" ? 200 : 201;
+    const expectedStatus = noContent ? 204 : (command.operation === "opening_balance.confirm" || command.operation === "event.edit") ? 200 : 201;
     if (replayed !== "false" || response.status !== expectedStatus) throw new MoneyApiError(response.status, "internal_error");
     if (noContent) { resolved = true; return undefined as T; }
     const result = await response.json().catch(() => null) as Record<string, unknown> | null;
     if (!result || typeof result.id !== "string" || !result.id || typeof result.currency !== "string" ||
       (command.operation === "account.create" || command.operation === "opening_balance.confirm" ? typeof result.opening_balance_minor !== "string" : typeof result.amount_minor !== "string" || !Array.isArray(result.movements))) throw new MoneyApiError(response.status, "internal_error");
+    if (command.operation === "event.edit") {
+      if (result.id !== command.target || typeof result.event_revision !== "string" || !/^[1-9][0-9]*$/.test(result.event_revision) ||
+        typeof result.note !== "string" || typeof result.occurred_at !== "string" || !["income", "expense", "transfer"].includes(String(result.kind)) ||
+        result.status !== "posted" || !Array.isArray(result.movements) || result.movements.length === 0 || !Array.isArray(result.allocations) || response.headers.get("ETag") !== `"${result.event_revision}"` ||
+        BigInt(result.event_revision) !== BigInt(command.ifMatch!.slice(1, -1)) + 1n) throw new MoneyApiError(response.status, "internal_error");
+    }
     resolved = true;
     return result as T;
   } finally { pendingFinancialWrite.finish(command, resolved); }
 }
 
-async function prepareFinancialRequest<T>(path: string, csrfToken: string, body?: object): Promise<T | FinancialReplay> {
-  return financialRequest<T>(csrfToken, await pendingFinancialWrite.prepare(path, body === undefined ? null : JSON.stringify(body)), false);
+async function prepareFinancialRequest<T>(path: string, csrfToken: string, body?: object, revision?: string): Promise<T | FinancialReplay> {
+  return financialRequest<T>(csrfToken, await pendingFinancialWrite.prepare(path, body === undefined ? null : JSON.stringify(body), revision ? `"${revision}"` : null), false);
 }
 
 export const retryFinancialWrite = (csrfToken: string) => financialRequest<unknown>(csrfToken, pendingFinancialWrite.retry(), true);
@@ -125,9 +134,13 @@ export const postMoneyEvent = (csrfToken: string, input: EventCreate) => prepare
 export const postMoneyTransfer = (csrfToken: string, input: TransferCreate) => prepareFinancialRequest<MoneyEvent>("/api/v1/transfers", csrfToken, input);
 export const archiveMoneyAccount = (csrfToken: string, id: string) => moneyRequest<void>(`/api/v1/accounts/${encodeURIComponent(id)}/archive`, csrfToken);
 export const restoreMoneyAccount = (csrfToken: string, id: string) => moneyRequest<void>(`/api/v1/accounts/${encodeURIComponent(id)}/restore`, csrfToken);
-export const voidMoneyEvent = (csrfToken: string, id: string, reason = "") => prepareFinancialRequest<void>(`/api/v1/events/${encodeURIComponent(id)}/void`, csrfToken, { reason } satisfies components["schemas"]["MoneyVoidRequest"]);
-export const deleteMoneyEvent = (csrfToken: string, id: string) => prepareFinancialRequest<void>(`/api/v1/events/${encodeURIComponent(id)}/delete`, csrfToken);
+export const voidMoneyEvent = (csrfToken: string, id: string, revision: string, reason = "") => prepareFinancialRequest<void>(`/api/v1/events/${encodeURIComponent(id)}/void`, csrfToken, { reason } satisfies components["schemas"]["MoneyVoidRequest"], revision);
+export const deleteMoneyEvent = (csrfToken: string, id: string, revision: string) => prepareFinancialRequest<void>(`/api/v1/events/${encodeURIComponent(id)}/delete`, csrfToken, undefined, revision);
 
 export type OpeningPreview = components["schemas"]["MoneyOpeningPreview"];
 export const previewOpeningBalance = (csrfToken: string, id: string, input: components["schemas"]["MoneyOpeningPreviewRequest"]) => moneyRequest<OpeningPreview>(`/api/v1/accounts/${encodeURIComponent(id)}/opening-balance/preview`, csrfToken, input);
 export const confirmOpeningBalance = (csrfToken: string, id: string, input: components["schemas"]["MoneyOpeningConfirmRequest"]) => prepareFinancialRequest<MoneyAccount>(`/api/v1/accounts/${encodeURIComponent(id)}/opening-balance/confirm`, csrfToken, input);
+
+export type EventEdit = components["schemas"]["MoneyEventEdit"];
+export const getMoneyEvent = (id: string) => moneyRequest<MoneyEvent>(`/api/v1/events/${encodeURIComponent(id)}`);
+export const editMoneyEvent = (csrfToken: string, id: string, revision: string, input: EventEdit) => prepareFinancialRequest<MoneyEvent>(`/api/v1/events/${encodeURIComponent(id)}/edit`, csrfToken, input, revision);

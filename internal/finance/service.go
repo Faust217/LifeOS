@@ -69,6 +69,7 @@ type Allocation struct {
 }
 
 type Event struct {
+	Revision    int64
 	ID          string
 	Kind        string
 	AmountMinor int64
@@ -232,7 +233,7 @@ func (s *Service) postSingleAccountEvent(ctx context.Context, owner identity.Own
 	cmd := financialCommand{operation: "event.create", parameters: []any{kind, input.AccountID, strconv.FormatInt(input.AmountMinor, 10), input.Currency, canonicalInstant(input.OccurredAt), input.Note, pairs}}
 	return executeFinancialWrite(ctx, s.repo, owner, requestKey, cmd, func(ctx context.Context, tx pgx.Tx) (Event, error) {
 		return s.repo.postInTx(ctx, tx, owner, postSpec{
-			kind: kind, amount: input.AmountMinor, currency: input.Currency,
+			requestKey: requestKey, kind: kind, amount: input.AmountMinor, currency: input.Currency,
 			occurredAt: input.OccurredAt.UTC().Truncate(time.Microsecond), note: input.Note,
 			movements:   []movementSpec{{accountID: input.AccountID, amount: amount}},
 			allocations: input.Allocations,
@@ -253,7 +254,7 @@ func (s *Service) Transfer(ctx context.Context, owner identity.OwnerID, input Tr
 	cmd := financialCommand{operation: "transfer.create", parameters: []any{input.FromAccountID, input.ToAccountID, strconv.FormatInt(input.AmountMinor, 10), input.Currency, canonicalInstant(input.OccurredAt), input.Note}}
 	return executeFinancialWrite(ctx, s.repo, owner, requestKey, cmd, func(ctx context.Context, tx pgx.Tx) (Event, error) {
 		return s.repo.postInTx(ctx, tx, owner, postSpec{
-			kind: "transfer", amount: input.AmountMinor, currency: input.Currency,
+			requestKey: requestKey, kind: "transfer", amount: input.AmountMinor, currency: input.Currency,
 			occurredAt: input.OccurredAt.UTC().Truncate(time.Microsecond), note: input.Note,
 			movements: []movementSpec{{accountID: input.FromAccountID, amount: -input.AmountMinor}, {accountID: input.ToAccountID, amount: input.AmountMinor}},
 		})
@@ -329,8 +330,9 @@ func (s *Service) RestoreAccount(ctx context.Context, owner identity.OwnerID, ac
 const noVoidReasonProvided = "No reason provided by owner"
 
 // VoidEvent keeps the original event, movements, and allocations for audit.
-// A corrected event is posted separately after the void succeeds.
-func (s *Service) VoidEvent(ctx context.Context, owner identity.OwnerID, eventID, reason, requestKey string) error {
+// Posted corrections use EditEvent; Void remains a separate visible audit action.
+// An omitted expected revision is allowed only to replay an already committed v9 key.
+func (s *Service) VoidEvent(ctx context.Context, owner identity.OwnerID, eventID, reason, requestKey string, expected ...int64) error {
 	if !owner.Valid() {
 		return ErrUnauthorized
 	}
@@ -346,16 +348,22 @@ func (s *Service) VoidEvent(ctx context.Context, owner identity.OwnerID, eventID
 		explicit = nil
 		reason = noVoidReasonProvided
 	}
-	cmd := financialCommand{operation: "event.void", target: eventID, parameters: []any{mode, explicit}}
+	revision := requestedRevision(expected)
+	cmd := financialCommand{operation: "event.void", target: eventID, parameters: []any{mode, explicit}, revisionRequired: revision == 0}
+	if revision > 0 {
+		cmd.version = 2
+		cmd.parameters = []any{strconv.FormatInt(revision, 10), mode, explicit}
+	}
 	_, err := executeFinancialWrite(ctx, s.repo, owner, requestKey, cmd, func(ctx context.Context, tx pgx.Tx) (struct{}, error) {
-		return struct{}{}, s.repo.voidEventInTx(ctx, tx, owner, eventID, reason)
+		return struct{}{}, s.repo.voidEventInTx(ctx, tx, owner, eventID, reason, revision, requestKey)
 	})
 	return err
 }
 
 // DeleteEvent hides an owned event from ordinary reads while retaining its ledger rows.
 // Repeating a successful deletion is safe and does not change balances again.
-func (s *Service) DeleteEvent(ctx context.Context, owner identity.OwnerID, eventID, requestKey string) error {
+// An omitted expected revision is allowed only to replay an already committed v9 key.
+func (s *Service) DeleteEvent(ctx context.Context, owner identity.OwnerID, eventID, requestKey string, expected ...int64) error {
 	if !owner.Valid() {
 		return ErrUnauthorized
 	}
@@ -363,9 +371,14 @@ func (s *Service) DeleteEvent(ctx context.Context, owner identity.OwnerID, event
 		return ErrInvalidInput
 	}
 	eventID = strings.ToLower(eventID)
-	cmd := financialCommand{operation: "event.delete", target: eventID, parameters: []any{}}
+	revision := requestedRevision(expected)
+	cmd := financialCommand{operation: "event.delete", target: eventID, parameters: []any{}, revisionRequired: revision == 0}
+	if revision > 0 {
+		cmd.version = 2
+		cmd.parameters = []any{strconv.FormatInt(revision, 10)}
+	}
 	_, err := executeFinancialWrite(ctx, s.repo, owner, requestKey, cmd, func(ctx context.Context, tx pgx.Tx) (struct{}, error) {
-		return struct{}{}, s.repo.deleteEventInTx(ctx, tx, owner, eventID)
+		return struct{}{}, s.repo.deleteEventInTx(ctx, tx, owner, eventID, revision, requestKey)
 	})
 	return err
 }

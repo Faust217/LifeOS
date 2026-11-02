@@ -56,3 +56,7 @@ GitHub Actions runs this script against a clean pinned PostgreSQL 18 service. It
 ## v9 financial write request markers
 
 Issue #34 / accepted ADR-019 adds only `finance_write_requests`, with owner/key uniqueness and a versioned 32-byte fingerprint. Upgrade v8→v9 does not rewrite any ledger, anchor, Goal, preference or export. Empty-table v9 down is supported; populated v9 down explicitly refuses to lose successful-key protection. Do not clear markers to roll back, edit migrations v1–v8, or run an old unprotected writer against populated v9. Use reviewed forward corrections and consistent backups. Personal database access/upgrade still requires separate authorization and restore verification.
+
+## v10 FinancialEvent revisions
+
+Issue #35 / accepted ADR-020 adds positive event revisions, one append-only snapshot table and the `event.edit` request-marker operation. A single transaction backfills every existing v9 event, including Voided/Soft Deleted, as a truthful `legacy_baseline` captured at upgrade with complete child IDs/values. It does not invent earlier audit states or alter balances/anchors. Current-row uniqueness constraints remain appropriate because audit copies are outside the ledger tables. Populated down refuses to discard events/audit or v2 retry evidence; use a reviewed forward correction. Preserve published v1–v9. Drain old writers and coordinate client/server activation before any approved upgrade; v9 binaries must not write to v10. Personal upgrades and deployment remain separately gated.

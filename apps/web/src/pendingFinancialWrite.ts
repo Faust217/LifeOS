@@ -3,7 +3,7 @@ export const FINANCIAL_PENDING_STORAGE = "lifeos.financial-write.v1";
 const KEY = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const UUID = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}";
 type StorageAccess = Pick<Storage, "getItem" | "setItem" | "removeItem">;
-export type PendingFinancialCommand = Readonly<{ version: 1; owner: string; key: string; operation: string; target: string | null; path: string; body: string | null; checksum: string }>;
+export type PendingFinancialCommand = Readonly<{ version: 1 | 2; ifMatch?: string | null; owner: string; key: string; operation: string; target: string | null; path: string; body: string | null; checksum: string }>;
 export type PendingStatus = { kind: "empty" | "hidden" | "unavailable" | "corrupted" | "other_owner" } | { kind: "pending"; command: PendingFinancialCommand; sending: boolean };
 
 export class FinancialRecoveryError extends Error {
@@ -23,16 +23,19 @@ function operation(path: string): { operation: string; target: string | null } |
   if (path === "/api/v1/transfers") return { operation: "transfer.create", target: null };
   const confirm = path.match(new RegExp(`^/api/v1/accounts/(${UUID})/opening-balance/confirm$`));
   if (confirm) return { operation: "opening_balance.confirm", target: confirm[1] };
-  const event = path.match(new RegExp(`^/api/v1/events/(${UUID})/(void|delete)$`));
+  const event = path.match(new RegExp(`^/api/v1/events/(${UUID})/(void|delete|edit)$`));
   return event ? { operation: `event.${event[2]}`, target: event[1] } : null;
 }
 
 function validRecord(value: unknown): value is PendingFinancialCommand {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const v = value as Record<string, unknown>;
-  if (Object.keys(v).sort().join() !== "body,checksum,key,operation,owner,path,target,version" || typeof v.checksum !== "string" || !/^[0-9a-f]{64}$/.test(v.checksum) || v.version !== 1 || typeof v.owner !== "string" || !v.owner || v.owner.length > 128 || typeof v.key !== "string" || !KEY.test(v.key) || typeof v.path !== "string") return false;
+  if (Object.keys(v).sort().join() !== (v.version === 2 ? "body,checksum,ifMatch,key,operation,owner,path,target,version" : "body,checksum,key,operation,owner,path,target,version") || typeof v.checksum !== "string" || !/^[0-9a-f]{64}$/.test(v.checksum) || (v.version !== 1 && v.version !== 2) || typeof v.owner !== "string" || !v.owner || v.owner.length > 128 || typeof v.key !== "string" || !KEY.test(v.key) || typeof v.path !== "string") return false;
   const expected = operation(v.path);
   if (!expected || v.operation !== expected.operation || v.target !== expected.target) return false;
+  if (v.version === 1 && expected.operation === "event.edit") return false;
+  if (v.version === 2 && (v.ifMatch !== null && (typeof v.ifMatch !== "string" || !/^"[1-9][0-9]*"$/.test(v.ifMatch)))) return false;
+  if (v.version === 2 && ["event.edit","event.void","event.delete"].includes(expected.operation) && !v.ifMatch) return false;
   if (expected.operation === "event.delete") return v.body === null;
   if (typeof v.body !== "string" || new TextEncoder().encode(v.body).length > 16 * 1024) return false;
   try { const body = JSON.parse(v.body); return body !== null && typeof body === "object" && !Array.isArray(body); } catch { return false; }
@@ -47,7 +50,7 @@ function newKey(): string {
 }
 
 async function commandChecksum(command: Omit<PendingFinancialCommand, "checksum">): Promise<string> {
-  const bytes = new TextEncoder().encode(JSON.stringify([command.version, command.owner, command.key, command.operation, command.target, command.path, command.body]));
+  const bytes = new TextEncoder().encode(JSON.stringify(command.version === 1 ? [command.version, command.owner, command.key, command.operation, command.target, command.path, command.body] : [command.version, command.owner, command.key, command.operation, command.target, command.path, command.body, command.ifMatch]));
   const digest = await crypto.subtle.digest("SHA-256", bytes);
   return Array.from(new Uint8Array(digest), (v) => v.toString(16).padStart(2, "0")).join("");
 }
@@ -85,7 +88,7 @@ export class PendingFinancialWrites {
     return current;
   }
 
-  async prepare(path: string, body: string | null): Promise<PendingFinancialCommand> {
+  async prepare(path: string, body: string | null, ifMatch: string | null = null): Promise<PendingFinancialCommand> {
     if (!this.owner) throw new FinancialRecoveryError("owner");
     const current = this.status();
     if (this.preparing || this.sending || current.kind === "pending") throw new FinancialRecoveryError("pending");
@@ -94,7 +97,7 @@ export class PendingFinancialWrites {
     if (!intent) throw new Error("Unsupported financial command");
     this.preparing = true;
     try {
-    const base = { version: 1 as const, owner: this.owner, key: this.makeKey(), ...intent, path, body };
+    const base = { version: 2 as const, ifMatch, owner: this.owner, key: this.makeKey(), ...intent, path, body };
     const record = Object.freeze({ ...base, checksum: await commandChecksum(base) });
     if (this.owner !== base.owner || this.read().kind !== "empty") throw new FinancialRecoveryError("pending");
     if (!validRecord(record)) throw new FinancialRecoveryError("corrupted");

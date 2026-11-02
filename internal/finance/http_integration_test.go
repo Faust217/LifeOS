@@ -69,6 +69,21 @@ func moneyTestSession(t *testing.T, pool *pgxpool.Pool, userID, secret, state st
 func moneyHTTP(t *testing.T, router http.Handler, method, path, body string, cookie *http.Cookie, origin, csrf string) *httptest.ResponseRecorder {
 	t.Helper()
 	request := httptest.NewRequest(method, path, strings.NewReader(body))
+	if method == http.MethodPost && (strings.Contains(path, "/void") || strings.Contains(path, "/delete")) {
+		id := strings.Split(strings.TrimPrefix(path, "/api/v1/events/"), "/")[0]
+		get := httptest.NewRequest("GET", "/api/v1/events/"+id, nil)
+		if cookie != nil {
+			get.AddCookie(cookie)
+		}
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, get)
+		tag := rec.Header().Get("ETag")
+		if tag == "" {
+			tag = `"1"`
+		}
+		request.Header.Set("If-Match", tag)
+	}
+
 	if body != "" {
 		request.Header.Set("Content-Type", "application/json")
 	}
@@ -391,7 +406,7 @@ func TestMoneyHTTPIntegration(t *testing.T) {
 		t.Fatalf("restored account lost historical balance=%s", cardBalance.AmountMinor)
 	}
 	moneyStatus(t, request(http.MethodPost, "/api/v1/events/"+expense.ID+"/void", `{}`, ownerCookie, ownerCSRF), http.StatusNoContent)
-	moneyError(t, request(http.MethodPost, "/api/v1/events/"+expense.ID+"/void", `{"reason":"Again"}`, ownerCookie, ownerCSRF), http.StatusConflict, "conflict")
+	moneyError(t, request(http.MethodPost, "/api/v1/events/"+expense.ID+"/void", `{"reason":"Again"}`, ownerCookie, ownerCSRF), http.StatusConflict, "event_not_editable")
 	spending = moneyDecode[struct {
 		AmountMinor string `json:"amount_minor"`
 	}](t, request(http.MethodGet, spendingPath, "", ownerCookie, ""), http.StatusOK)
@@ -514,7 +529,7 @@ func TestMoneyHTTPIntegration(t *testing.T) {
 				t.Fatalf("spending before void=%s", spending.AmountMinor)
 			}
 			moneyStatus(t, request(http.MethodPost, voidPath, variant.body, ownerCookie, ownerCSRF), http.StatusNoContent)
-			moneyError(t, request(http.MethodPost, voidPath, variant.body, ownerCookie, ownerCSRF), http.StatusConflict, "conflict")
+			moneyError(t, request(http.MethodPost, voidPath, variant.body, ownerCookie, ownerCSRF), http.StatusConflict, "event_not_editable")
 			balance = moneyDecode[struct {
 				AmountMinor string `json:"amount_minor"`
 			}](t,
@@ -601,7 +616,7 @@ func TestMoneyHTTPIntegration(t *testing.T) {
 	if linkedMovements != 1 || linkedAllocations != 1 {
 		t.Fatalf("soft delete lost ledger links: movements=%d allocations=%d", linkedMovements, linkedAllocations)
 	}
-	moneyError(t, request(http.MethodPost, "/api/v1/events/"+toDelete.ID+"/void", `{}`, ownerCookie, ownerCSRF), http.StatusConflict, "conflict")
+	moneyError(t, request(http.MethodPost, "/api/v1/events/"+toDelete.ID+"/void", `{}`, ownerCookie, ownerCSRF), http.StatusNotFound, "not_found")
 	moneyStatus(t, request(http.MethodPost, "/api/v1/auth/logout", "", ownerCookie, ownerCSRF), http.StatusNoContent)
 	moneyError(t, request(http.MethodGet, "/api/v1/accounts", "", ownerCookie, ""), http.StatusUnauthorized, "authentication_required")
 }

@@ -3,13 +3,14 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type FormE
 import {
   archiveMoneyAccount, archiveMoneyCategory, createMoneyAccount, createMoneyCategory, deleteMoneyEvent, getMoneyBalance,
   listMoneyAccounts, listMoneyCategories, listMoneyHistory, MoneyApiError,
-  postMoneyEvent, postMoneyTransfer, renameMoneyCategory, restoreMoneyAccount, restoreMoneyCategory, voidMoneyEvent,
+  postMoneyEvent, postMoneyTransfer, renameMoneyCategory, restoreMoneyAccount, restoreMoneyCategory,
   type AccountCreate, type CategoryCreate, type EventCreate, type MoneyAccount,
   type MoneyBalance, type MoneyCategory, type MoneyEvent, type TransferCreate,
 } from "./api/money";
 import { FinancialWriteRecovery, usePendingFinancialWrite } from "./FinancialWriteRecovery";
 import { FinancialRecoveryError, pendingFinancialWrite } from "./pendingFinancialWrite";
 import { OpeningBalanceSheet, type OpeningBalanceDraft } from "./OpeningBalanceSheet";
+import { EditTransactionSheet } from "./EditTransactionSheet";
 import { Icon } from "./Icons";
 import { currencyDigits, formatLocalDate, formatLocalTime, formatLocalTimeWithZone, formatMinorUnits, localDateKey, localDateTimeValue, matchingInstants, minorUnitsToInput, parseAmountToMinor, toOccurredAt } from "./moneyAmount";
 import "./money.css";
@@ -61,6 +62,7 @@ function historyAccounts(event: MoneyEvent, accounts: MoneyAccount[]): string {
 export function MoneyPage({ csrfToken, timeZone, onSessionExpired }: { csrfToken: string; timeZone: string | null; onSessionExpired: () => void }) {
   const financialRecovery = usePendingFinancialWrite();
   const financialBlocked = financialRecovery.kind !== "empty" && financialRecovery.kind !== "hidden";
+  const [editID, setEditID] = useState<string | null>(null);
   const [balanceAccount, setBalanceAccount] = useState<MoneyAccount | null>(null);
   const openingDrafts = useRef<Record<string, OpeningBalanceDraft>>({});
   const [panel, setPanel] = useState<"overview" | "transactions">("transactions");
@@ -205,6 +207,7 @@ export function MoneyPage({ csrfToken, timeZone, onSessionExpired }: { csrfToken
   const hasExpenseCategory = data?.categories.some((category) => !category.archived_at && category.kind === "expense") ?? false;
   return (
     <div className="page-stack money-page">
+      {editID && data && timeZone && <EditTransactionSheet id={editID} csrfToken={csrfToken} timeZone={timeZone} accounts={data.accounts} categories={data.categories} onClose={() => setEditID(null)} onSaved={() => { setEditID(null); setNotice("Transaction updated."); void loadMoney(page); }} onSessionExpired={onSessionExpired} />}
       {balanceAccount && (timeZone ? <OpeningBalanceSheet account={balanceAccount} csrfToken={csrfToken} timeZone={timeZone} draft={openingDrafts.current[balanceAccount.id]} onDraft={(draft) => { openingDrafts.current[balanceAccount.id] = draft; }} onClose={() => setBalanceAccount(null)} onSaved={() => { delete openingDrafts.current[balanceAccount.id]; setBalanceAccount(null); setNotice("Balance date confirmed."); void loadMoney(page); }} onRecovered={() => { setBalanceAccount(null); setNotice("Save confirmed. Showing current records."); void loadMoney(page); }} onSessionExpired={onSessionExpired} /> : <section className="money-state"><p>Confirm your timezone in Me before choosing a balance date.</p><a className="button button-primary" href="/me#timezone">Open timezone settings</a><button type="button" className="money-text-action" onClick={() => setBalanceAccount(null)}>Cancel</button></section>)}
       <header className="money-page-header">
         <h1>Money</h1>
@@ -224,7 +227,7 @@ export function MoneyPage({ csrfToken, timeZone, onSessionExpired }: { csrfToken
         {timeZone && <nav className="money-view-switch" aria-label="Money views"><button type="button" aria-pressed={panel === "overview"} disabled={pending} onClick={() => setPanel("overview")}>Overview</button><button type="button" aria-pressed={panel === "transactions"} disabled={pending} onClick={() => setPanel("transactions")}>Transactions</button></nav>}
         {timeZone && (!hasActiveAccount || (page === 0 && data.events.length === 0)) && <section className="money-onboarding" aria-label="Get started with Money"><p className="eyebrow">GET STARTED</p><h2>Three small steps to your first record.</h2><ol><li className={hasActiveAccount ? "is-done" : ""}><span>1. Account</span>{hasActiveAccount ? "Ready" : <button type="button" disabled={financialBlocked} onClick={() => chooseSetup("account")}>Create an account</button>}</li><li className={hasExpenseCategory ? "is-done" : ""}><span>2. Category (optional)</span>{hasExpenseCategory ? "Ready" : <button type="button" disabled={financialBlocked} onClick={() => chooseSetup("category")}>Add a category</button>}</li><li className={data.events.length > 0 ? "is-done" : ""}><span>3. First transaction</span>{data.events.length > 0 ? "Ready" : <button type="button" disabled={financialBlocked} onClick={() => openTransaction("expense")}>Record an expense</button>}</li></ol><p>Categories are optional: you can record income or expenses as Uncategorized. For existing accounts, confirm a balance date in Overview before relying on older entries. New accounts use the balance and date you confirm.</p></section>}
         {(!timeZone || panel === "overview") && <AccountOverview onBalanceDate={setBalanceAccount} data={data} csrfToken={csrfToken} pending={pending || financialBlocked} runMutation={runMutation} operationError={operationError} onAddAccount={() => chooseSetup("account")} onCategories={() => chooseSetup("category")} />}
-        {timeZone && panel === "transactions" && <HistorySection data={data} timeZone={timeZone} page={page} setPage={setPage} csrfToken={csrfToken} pending={pending || financialBlocked} runMutation={runMutation} onReplace={openTransaction} operationError={operationError} />}
+        {timeZone && panel === "transactions" && <HistorySection data={data} timeZone={timeZone} page={page} setPage={setPage} csrfToken={csrfToken} pending={pending || financialBlocked} runMutation={runMutation} onEdit={setEditID} operationError={operationError} />}
         <dialog ref={setupDialogRef} className="money-transaction-dialog money-setup-dialog" aria-labelledby="money-setup-dialog-title" onCancel={(event) => { if (pending) event.preventDefault(); }} onClose={() => { if (!setupDialogRef.current?.open) closeSetup(); }} onClick={(event) => { if (event.target === setupDialogRef.current) closeSetup(); }}>
           <div className="money-dialog-content"><div className="money-dialog-head"><h2 id="money-setup-dialog-title">{setupAction === "account" ? "Add account" : "Categories"}</h2><button type="button" className="money-dialog-close" onClick={closeSetup} disabled={pending} aria-label="Close setup panel">×</button></div><FinancialWriteRecovery csrfToken={csrfToken} onSessionExpired={onSessionExpired} onRecovered={() => { closeTransaction(); closeSetup(); void loadMoney(page); }} />
             <div className="money-setup-pane" hidden={setupAction !== "account"}><AccountForm open={setupOpen && setupAction === "account"} timeZone={timeZone} csrfToken={csrfToken} pending={pending || financialBlocked} runMutation={runMutation} operationError={operationError} onSaved={closeSetup} /></div>
@@ -492,24 +495,14 @@ function TransferForm({ timeZone, accounts, csrfToken, pending, runMutation, onC
   </form>;
 }
 
-function HistorySection({ data, timeZone, page, setPage, csrfToken, pending, runMutation, onReplace, operationError }: { data: MoneyData; timeZone: string; page: number; setPage: (page: number) => void; csrfToken: string; pending: boolean; runMutation: RunMutation; onReplace: (kind: TransactionAction, initial: MoneyEvent | null) => void; operationError: string }) {
-  const [voidID, setVoidID] = useState<string | null>(null);
+export function HistorySection({ data, timeZone, page, setPage, csrfToken, pending, runMutation, onEdit, operationError }: { data: MoneyData; timeZone: string; page: number; setPage: (page: number) => void; csrfToken: string; pending: boolean; runMutation: RunMutation; onEdit: (id: string) => void; operationError: string }) {
   const [deleteID, setDeleteID] = useState<string | null>(null);
-  const [replacementCandidate, setReplacementCandidate] = useState<MoneyEvent | null>(null);
-  const [reason, setReason] = useState("");
-  const [reasonError, setReasonError] = useState("");
   useEffect(() => {
     if (deleteID) document.getElementById(`money-delete-cancel-${deleteID}`)?.focus();
   }, [deleteID]);
-  async function confirmVoid(event: MoneyEvent) {
-    const trimmed = reason.trim();
-    if (Array.from(trimmed).length > 500) { setReasonError("The optional note must be 500 characters or fewer."); return; }
-    if (await runMutation("Transaction voided. Its history remains visible.", () => voidMoneyEvent(csrfToken, event.id, trimmed))) { setVoidID(null); setReason(""); setReasonError(""); setReplacementCandidate(event); }
-  }
   async function confirmDelete(event: MoneyEvent) {
-    if (await runMutation("Transaction deleted from LifeOS views.", () => deleteMoneyEvent(csrfToken, event.id))) {
+    if (await runMutation("Transaction deleted from LifeOS views.", () => deleteMoneyEvent(csrfToken, event.id, event.event_revision))) {
       setDeleteID(null);
-      setReplacementCandidate((current) => current?.id === event.id ? null : current);
       if (page > 0 && data.events.length === 1 && !data.hasNext) setPage(page - 1);
       window.setTimeout(() => document.getElementById("money-history-title")?.focus(), 0);
     }
@@ -520,7 +513,6 @@ function HistorySection({ data, timeZone, page, setPage, csrfToken, pending, run
   }
   return <section className="money-section" aria-labelledby="money-history-title">
     <h2 id="money-history-title" className="money-screen-reader-only" tabIndex={-1}>Transactions</h2>
-    {replacementCandidate && <div className="money-replacement" role="status"><p>The transaction was voided. Your place in history is preserved.</p>{(replacementCandidate.kind === "transfer" || replacementCandidate.allocations.length <= 1) ? <button type="button" className="button button-outline" onClick={() => { onReplace(replacementCandidate.kind, replacementCandidate); setReplacementCandidate(null); }}>Review prefilled replacement</button> : <p>This record has multiple category allocations. Add a new transaction manually to avoid dropping any allocation.</p>}<button type="button" className="money-text-action" onClick={() => setReplacementCandidate(null)}>Dismiss</button></div>}
     {data.events.length === 0 ? <div className="money-empty"><Icon name="today" /><h3>{page === 0 ? "No transactions yet" : "No more transactions"}</h3><p>{page === 0 ? "Recorded income, expenses, and transfers will appear here." : "Go back to the previous page to see your activity."}</p></div> : <ol className="money-history-list">{data.events.map((event, index) => <Fragment key={event.id}>
       {(index === 0 || localDateKey(data.events[index - 1].occurred_at, timeZone) !== localDateKey(event.occurred_at, timeZone)) && <li className="money-date-heading"><h3>{formatLocalDate(event.occurred_at, timeZone)}</h3></li>}
       <li className="money-history-item"><details className="money-event-details"><summary aria-label={`View details for ${historyTitle(event, data.categories)}`}>
@@ -529,10 +521,12 @@ function HistorySection({ data, timeZone, page, setPage, csrfToken, pending, run
         <p><strong>Account movements</strong></p><ul>{event.movements.map((movement) => <li key={movement.id}>{accountName(data.accounts, movement.account_id)}: {formatMinorUnits(movement.amount_minor, movement.currency)}</li>)}</ul>
         {event.kind !== "transfer" && (event.allocations.length > 0 ? <><p><strong>Categories</strong></p><ul>{event.allocations.map((allocation) => <li key={allocation.id}>{categoryName(data.categories, allocation.category_id)}: {formatMinorUnits(allocation.amount_minor, allocation.currency)}</li>)}</ul></> : <p><strong>Category:</strong> Uncategorized</p>)}
         {event.status === "voided" && <p><strong>Void reason:</strong> {event.void_reason === AUTO_VOID_REASON ? "N/A" : event.void_reason || "Unavailable"}</p>}
-        {event.status === "posted" && (voidID === event.id ? <div className="money-confirm"><p>Void this transaction? Its balance effects will be removed while its history remains visible.</p><label>Note for voiding (optional)<textarea rows={2} value={reason} onChange={(change) => { setReason(change.target.value); setReasonError(""); }} placeholder="Add a note if useful" aria-invalid={!!reasonError} aria-describedby={reasonError ? "money-void-error" : undefined} /></label><p className="money-help">You can leave this blank. The history will show that no reason was provided.</p>{reasonError && <p id="money-void-error" className="money-field-error" role="alert">{reasonError}</p>}{operationError && <p className="money-field-error" role="alert">{operationError}</p>}<div className="money-confirm-actions"><button type="button" className="button button-outline" disabled={pending} onClick={() => { setVoidID(null); setReason(""); setReasonError(""); }}>Keep transaction</button><button type="button" className="button button-danger" disabled={pending} onClick={() => void confirmVoid(event)}>Confirm void</button></div></div>
-          : <button type="button" className="money-text-action" disabled={pending} onClick={() => { setDeleteID(null); setVoidID(event.id); setReason(""); setReasonError(""); }}>Void transaction</button>)}
+        <div className="money-event-actions">
+          {event.status === "posted" && <button type="button" className="button button-primary" aria-label="Edit transaction" disabled={pending} onClick={() => onEdit(event.id)}>Edit</button>}
+          {deleteID !== event.id && <button id={`money-delete-${event.id}`} type="button" className="money-text-action money-delete-action" aria-label="Delete transaction" disabled={pending} onClick={() => setDeleteID(event.id)}>Delete</button>}
+        </div>
         {deleteID === event.id ? <div className="money-confirm" role="group" aria-label="Confirm transaction deletion"><p>Delete this transaction? It will disappear from LifeOS. If posted, it will stop affecting balances and spending. Its data may remain in internal records and backups. You cannot undo this in the app.</p>{operationError && <p className="money-field-error" role="alert">{operationError}</p>}<div className="money-confirm-actions"><button id={`money-delete-cancel-${event.id}`} type="button" className="button button-outline" disabled={pending} onClick={() => cancelDelete(event.id)}>Keep transaction</button><button type="button" className="button button-danger" disabled={pending} onClick={() => void confirmDelete(event)}>Confirm delete</button></div></div>
-          : <button id={`money-delete-${event.id}`} type="button" className="money-text-action money-delete-action" disabled={pending} onClick={() => { setVoidID(null); setDeleteID(event.id); }}>Delete transaction</button>}
+          : null}
       </details>
     </li></Fragment>)}</ol>}
     <div className="money-pagination"><button type="button" className="button button-outline" disabled={page === 0 || pending} onClick={() => setPage(page - 1)}>Previous</button><span>Page {page + 1}</span><button type="button" className="button button-outline" disabled={!data.hasNext || pending} onClick={() => setPage(page + 1)}>Next</button></div>

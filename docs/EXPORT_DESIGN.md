@@ -240,3 +240,7 @@ Previously downloaded v1 artifacts retain their original meaning. Later Edit rev
 - Accepted [ADR-009](adr/ADR-009-import-export-bluecoins.md), [ADR-013](adr/ADR-013-life-first-multi-user-rebaseline.md), [ADR-014](adr/ADR-014-google-identity-invitations-owner-isolation.md), [ADR-016](adr/ADR-016-financial-event-soft-delete.md) and [V0.1 Scope](V0.1_SCOPE.md).
 - [ADR-015](adr/ADR-015-personal-import-boundary.md) is Proposed and unrelated to approving Export implementation.
 - [Go encoding/csv](https://pkg.go.dev/encoding/csv), [OWASP CSV Injection](https://community.owasp.org/attacks/CSV_Injection), and [PostgreSQL transaction isolation](https://www.postgresql.org/docs/18/transaction-iso.html).
+
+## Atomic Edit compatibility (ADR-020)
+
+Issue #35 retains the exact JSON/CSV v1/v2 schemas and golden fixtures. Each artifact is a snapshot of current visible events and current movements/allocations; editing a posted event keeps its event ID and changes that current state. Existing relationship IDs stay stable; changed relationships have new current child IDs. Internal revision snapshots, event concurrency tokens and request markers are excluded. Visible Voided records retain their stored text; Soft Deleted events and dependents stay excluded. The existing read-only repeatable-read export transaction prevents mixing pre-edit headers with post-edit children. No audit export or export v3 is introduced. ADR-018's restriction on exporting anchored accounts as v1 still applies.

@@ -225,18 +225,18 @@ func TestOwnerExportIntegration(t *testing.T) {
 	income := post(owner, bank, 1000, "income", "Uncategorized income", nil)
 	post(owner, bank, 50, "expense", "Uncategorized", nil)
 	voided := post(owner, bank, 75, "expense", "Visible voided", []finance.AllocationInput{{CategoryID: cat.ID, AmountMinor: 75}})
-	if err = f.VoidEvent(ctx, owner, voided.ID, "", newFinancialWriteKey()); err != nil {
+	if err = f.VoidEvent(ctx, owner, voided.ID, "", newFinancialWriteKey(), exportEventRevision(t, f, owner, voided.ID)); err != nil {
 		t.Fatal(err)
 	}
 	deleted := post(owner, bank, 33, "expense", "DELETED-CANARY", []finance.AllocationInput{{CategoryID: cat.ID, AmountMinor: 33}})
-	if err = f.DeleteEvent(ctx, owner, deleted.ID, newFinancialWriteKey()); err != nil {
+	if err = f.DeleteEvent(ctx, owner, deleted.ID, newFinancialWriteKey(), exportEventRevision(t, f, owner, deleted.ID)); err != nil {
 		t.Fatal(err)
 	}
 	deletedVoid := post(owner, bank, 10, "income", "DELETED-VOID-CANARY", nil)
-	if err = f.VoidEvent(ctx, owner, deletedVoid.ID, "explicit audit", newFinancialWriteKey()); err != nil {
+	if err = f.VoidEvent(ctx, owner, deletedVoid.ID, "explicit audit", newFinancialWriteKey(), exportEventRevision(t, f, owner, deletedVoid.ID)); err != nil {
 		t.Fatal(err)
 	}
-	if err = f.DeleteEvent(ctx, owner, deletedVoid.ID, newFinancialWriteKey()); err != nil {
+	if err = f.DeleteEvent(ctx, owner, deletedVoid.ID, newFinancialWriteKey(), exportEventRevision(t, f, owner, deletedVoid.ID)); err != nil {
 		t.Fatal(err)
 	}
 	transfer, err := f.Transfer(ctx, owner, finance.TransferInput{FromAccountID: bank.ID, ToAccountID: saving.ID, AmountMinor: 100, Currency: "MYR", OccurredAt: now, Note: "One transfer"}, newFinancialWriteKey())
@@ -530,7 +530,12 @@ func TestOwnerExportIntegration(t *testing.T) {
 		if _, err = pool.Exec(ctx, `UPDATE goals SET title='Changed after snapshot' WHERE owner_id=$1 AND id=$2`, owner.String(), goal.ID); err != nil {
 			t.Fatal(err)
 		}
-		if err = f.DeleteEvent(ctx, owner, income.ID, newFinancialWriteKey()); err != nil {
+		if err = f.DeleteEvent(ctx, owner, income.ID, newFinancialWriteKey(), exportEventRevision(t, f, owner, income.ID)); err != nil {
+			t.Fatal(err)
+		}
+
+		_, err = f.EditEvent(ctx, owner, expense.ID, exportEventRevision(t, f, owner, expense.ID), finance.EditInput{Kind: "expense", EventInput: finance.EventInput{AccountID: bank.ID, AmountMinor: 200, Currency: "MYR", OccurredAt: now, Note: "Edited during export", Allocations: []finance.AllocationInput{{CategoryID: cat.ID, AmountMinor: 140}, {CategoryID: cat2.ID, AmountMinor: 60}}}}, newFinancialWriteKey())
+		if err != nil {
 			t.Fatal(err)
 		}
 		close(release)
@@ -546,6 +551,15 @@ func TestOwnerExportIntegration(t *testing.T) {
 		fin := root["finance"].(map[string]any)
 		if findRecord(t, fin["accounts"], bank.ID)["name"] != "=PRIVATE-CANARY, \"bank\"\n第二行" || root["preferences"].(map[string]any)["time_zone"] != "Asia/Kuala_Lumpur" || findRecord(t, root["planning"].(map[string]any)["goals"], goal.ID)["title"] != "Owner Goal" {
 			t.Fatal("mixed snapshot")
+		}
+		if findRecord(t, fin["events"], expense.ID)["amount_minor"] != "100" {
+			t.Fatal("export mixed Edit header")
+		}
+		for _, row := range fin["allocations"].([]any) {
+			a := row.(map[string]any)
+			if a["event_id"] == expense.ID && a["amount_minor"] != "70" && a["amount_minor"] != "30" {
+				t.Fatal("export mixed Edit allocations")
+			}
 		}
 		_ = findRecord(t, fin["events"], income.ID)
 		_, next := export(0, "json")
@@ -734,9 +748,9 @@ func TestOwnerExportIntegration(t *testing.T) {
 			t.Fatal("revoked artifact released")
 		}
 	})
-	// Export itself leaves financial calculations unchanged (the intentional concurrent Delete above removed income).
+	// Export itself leaves financial calculations unchanged (the intentional concurrent Delete removed income and Edit added 100 expense minor units).
 	after, err := f.Balance(ctx, owner, bank.ID)
-	if err != nil || after.AmountMinor != before.AmountMinor-1000+10000 {
+	if err != nil || after.AmountMinor != before.AmountMinor-1000-100+10000 {
 		t.Fatalf("export changed money: before=%d after=%d err=%v", before.AmountMinor, after.AmountMinor, err)
 	}
 	if strings.Contains(logs.String(), "PRIVATE-CANARY") || strings.Contains(logs.String(), "PRIVATE-FAILURE") || strings.Contains(logs.String(), secrets[0]) || strings.Contains(logs.String(), "export0@example.invalid") {
@@ -853,4 +867,13 @@ func verifyJSONShape(t *testing.T, root map[string]any) {
 			t.Fatal("dangling checklist")
 		}
 	}
+}
+
+func exportEventRevision(t *testing.T, s *finance.Service, owner identity.OwnerID, id string) int64 {
+	t.Helper()
+	e, err := s.GetEvent(context.Background(), owner, id)
+	if err != nil {
+		return 1
+	}
+	return e.Revision
 }

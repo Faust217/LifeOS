@@ -269,7 +269,7 @@ func TestFinanceMigrationAndLedger(t *testing.T) {
 		AmountMinor: 100, Currency: "MYR", OccurredAt: now}, newFinancialWriteKey()); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("foreign transfer target=%v", err)
 	}
-	if err := service.VoidEvent(ctx, other, expense.ID, "not mine", newFinancialWriteKey()); !errors.Is(err, ErrNotFound) {
+	if err := service.VoidEvent(ctx, other, expense.ID, "not mine", newFinancialWriteKey(), testEventRevision(t, service, other, expense.ID)); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("cross-owner void=%v", err)
 	}
 	if _, err := service.CategorySpending(ctx, owner, otherFood.ID, "MYR"); !errors.Is(err, ErrNotFound) {
@@ -341,7 +341,7 @@ func TestFinanceMigrationAndLedger(t *testing.T) {
 	}
 	assertBalance(owner, overdraft.ID, -125)
 	assertBalance(owner, overdraftTarget.ID, 75)
-	if err := service.VoidEvent(ctx, owner, overdraftTransfer.ID, "Wrong transfer", newFinancialWriteKey()); err != nil {
+	if err := service.VoidEvent(ctx, owner, overdraftTransfer.ID, "Wrong transfer", newFinancialWriteKey(), testEventRevision(t, service, owner, overdraftTransfer.ID)); err != nil {
 		t.Fatalf("void overdraft transfer: %v", err)
 	}
 	assertBalance(owner, overdraft.ID, -50)
@@ -391,7 +391,7 @@ func TestFinanceMigrationAndLedger(t *testing.T) {
 		t.Fatalf("restore active account=%v", err)
 	}
 	assertBalance(owner, savings.ID, 5000)
-	if err := service.VoidEvent(ctx, owner, expense.ID, "", newFinancialWriteKey()); err != nil {
+	if err := service.VoidEvent(ctx, owner, expense.ID, "", newFinancialWriteKey(), testEventRevision(t, service, owner, expense.ID)); err != nil {
 		t.Fatal(err)
 	}
 	assertBalance(owner, bank.ID, 6000)
@@ -411,7 +411,7 @@ func TestFinanceMigrationAndLedger(t *testing.T) {
 	if !foundVoid {
 		t.Fatal("void lost financial history")
 	}
-	if err := service.VoidEvent(ctx, owner, expense.ID, "again", newFinancialWriteKey()); !errors.Is(err, ErrConflict) {
+	if err := service.VoidEvent(ctx, owner, expense.ID, "again", newFinancialWriteKey(), testEventRevision(t, service, owner, expense.ID)); !errors.Is(err, ErrNotEditable) {
 		t.Fatalf("repeat void=%v", err)
 	}
 
@@ -511,11 +511,11 @@ func TestFinanceMigrationAndLedger(t *testing.T) {
 		Currency: "MYR", OccurredAt: now, Allocations: []AllocationInput{{food.ID, 100}}}, newFinancialWriteKey()); err != nil {
 		t.Fatal(err)
 	}
-	if err := service.VoidEvent(ctx, owner, voidIncome.ID, "Income did not occur", newFinancialWriteKey()); err != nil {
+	if err := service.VoidEvent(ctx, owner, voidIncome.ID, "Income did not occur", newFinancialWriteKey(), testEventRevision(t, service, owner, voidIncome.ID)); err != nil {
 		t.Fatalf("void income into negative balance=%v", err)
 	}
 	assertBalance(owner, voidAccount.ID, -100)
-	if err := service.VoidEvent(ctx, owner, income.ID, "correct salary", newFinancialWriteKey()); err != nil {
+	if err := service.VoidEvent(ctx, owner, income.ID, "correct salary", newFinancialWriteKey(), testEventRevision(t, service, owner, income.ID)); err != nil {
 		t.Fatal(err)
 	}
 	assertBalance(owner, bank.ID, 3000)
@@ -588,7 +588,7 @@ func TestFinanceMigrationAndLedger(t *testing.T) {
 		owner.String(), uncategorizedExpense.ID, uncategorizedIncome.ID).Scan(&persistedAllocations); err != nil || persistedAllocations != 0 {
 		t.Fatalf("uncategorized allocations=%d err=%v", persistedAllocations, err)
 	}
-	if err := service.VoidEvent(ctx, owner, uncategorizedExpense.ID, "Correction", newFinancialWriteKey()); err != nil {
+	if err := service.VoidEvent(ctx, owner, uncategorizedExpense.ID, "Correction", newFinancialWriteKey(), testEventRevision(t, service, owner, uncategorizedExpense.ID)); err != nil {
 		t.Fatalf("void uncategorized expense=%v", err)
 	}
 	assertBalance(owner, bank.ID, 2950)

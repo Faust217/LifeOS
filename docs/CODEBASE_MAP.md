@@ -256,3 +256,33 @@ flowchart TD
 ```
 
 Exact inputs, outputs, error paths and tests are in the [Issue #34 English journal](../learning/journal/2026-10-26-financial-write-idempotency.md). The isolated fixture under ignored `.cache/issue34/` uses a real guarded Go API and a new PostgreSQL database, including a proxy that discards one completed HTTP response. No production test login/fault endpoint is shipped.
+
+## Issue #35 — atomic Edit and event revisions
+
+- `apps/web/src/MoneyPage.tsx`: `HistorySection` presents compact Edit/Delete actions; `confirmDelete` retains explicit confirmation, keyed revision-guarded deletion and refresh. Ordinary Void controls are hidden under the 2026-11-02 product decision; historical Voided labels/reasons and `api/money.ts` Void/retry compatibility remain. `MoneyPage.test.tsx` covers action visibility, historical states and protected pending actions.
+- `apps/web/src/EditTransactionSheet.tsx`: `EditTransactionSheet` loads a complete owned event; `EditForm.submit` preserves complete splits/exact unchanged UTC input and performs one Save. `reviewLatest` preserves stale drafts until an explicit review choice.
+- `apps/web/src/editDialogLifecycle.ts`: `openEditDialog` locks the background at its saved position while the native modal's content scrolls independently, then restores inline styles, scroll position and connected return focus with `preventScroll`. `editDialogLifecycle.test.ts` verifies the DOM-interface lifecycle, not physical browser scrolling or mobile keyboards.
+- `apps/web/src/api/money.ts`: `getMoneyEvent` / `editMoneyEvent` use guarded full-event reads and keyed Edit writes. `financialRequest` sends the frozen If-Match; `pendingFinancialWrite.ts` retains v1 records and checksums while new v2 records bind the precondition.
+- `internal/finance/edit_http.go`: `eventPrecondition` validates one strong positive tag; `moneyHandler.getEvent/editEvent` validate complete kind-specific inputs and return privacy-safe DTO/error contracts. `http.go` adds revision strings to API event DTOs, excluding normal export schemas.
+- `internal/finance/edit.go`: `Service.EditEvent` builds canonical v2 intent; `repository.editEventInTx` checks current revision/status, ordered union account/category locks, archived association eligibility and exact net per-anchor effects. Current child IDs survive unchanged relationships; changed relationships get new IDs. `captureRevision` calls the shared SQL snapshot function.
+- `internal/finance/idempotency.go`: `executeFinancialWrite` commits marker/current state/audit together, retaining v1 normalization and content-free replay before state checks. New Void/Delete preconditions also record snapshots; old successful v9 keys cannot execute another mutation.
+- `internal/finance/event_read.go` and `repository.history`: event/header/children reads share a read-only repeatable-read transaction. Export already shares a complete module snapshot; audit tables never enter ordinary projections.
+- `db/migrations/000010_financial_event_revisions.*.sql`: truthful populated-v9 baseline, positive event revision, internal immutable snapshot table, capture function and new operation constraint. Down refuses populated evidence; migrations v1–v9 remain unchanged.
+- `internal/finance/edit_integration_test.go`, `idempotency_test.go`, `testdata/financial-command-v2.json` and updated export tests cover the new contract and compatibility. Actual inputs/errors/tests and browser limitations are in the [Issue #35 English journal](../learning/journal/2026-10-27-atomic-financial-event-edit.md).
+
+```mermaid
+flowchart TD
+  A[HistorySection Edit] --> B[EditTransactionSheet / getMoneyEvent]
+  B --> C[getEvent / Service.GetEvent / readEventInTx]
+  C --> D[Complete event and revision]
+  D --> E[EditForm.submit / editMoneyEvent]
+  E --> F[PendingFinancialWrites.prepare/start / financialRequest]
+  F --> G[RequireMutation / financialMutation / editEvent]
+  G --> H[Service.EditEvent / executeFinancialWrite]
+  H -->|new| I[editEventInTx / locks / net anchor effects]
+  I --> J[current rows / captureRevision / shared commit]
+  H -->|committed key| K[already_applied]
+  J --> L[finishFinancialWrite / RevalidateOwner]
+  K --> L
+  L --> M[PendingFinancialWrites.finish / loadMoney]
+```

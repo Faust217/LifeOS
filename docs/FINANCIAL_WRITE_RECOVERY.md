@@ -4,7 +4,7 @@ Accepted [ADR-019](adr/ADR-019-owner-scoped-financial-write-idempotency.md) gove
 
 ## Client and API contract
 
-Account creation, income/expense creation, transfer, opening-balance confirmation, Void and Soft Delete require one cryptographically random lowercase UUIDv4 `Idempotency-Key`. The session determines the owner. All six service entry points also require the explicit key. No unprotected fallback is available.
+Account creation, income/expense creation, transfer, opening-balance confirmation, Void, Soft Delete and atomic Edit require one cryptographically random lowercase UUIDv4 `Idempotency-Key`. The session determines the owner. All seven service entry points also require the explicit key. No unprotected fallback is available.
 
 The original successful DTO/status has `Idempotency-Replayed: false`. A matching committed retry returns only `200 {"outcome":"already_applied"}` with `Idempotency-Replayed: true`; refresh current records, because a record may since have been Voided, Deleted or changed. Responses are private/no-store. A different normalized command under a committed key gets `409 idempotency_key_conflict`. Do not rotate the key automatically.
 
@@ -67,3 +67,9 @@ If capacity is already full, existing-key retries continue to work while the ope
 - Database backups must include marker and ledger state together. An older restored backup can lack newer commands/keys. Reconcile stale clients and pending retries before reopening writes; never promise exactly-once effects across such a restore. The Personal Data Ready backup/restore gate remains open.
 
 See the [English learning journal](../learning/journal/2026-10-26-financial-write-idempotency.md) for actual function flow and verification evidence. No real financial data or personal database is needed for the Issue #34 tests.
+
+## v10 Edit and precondition recovery
+
+Accepted ADR-020 adds Edit and event revision preconditions to new Edit/Void/Delete commands. The browser freezes the exact If-Match value in a version-2 pending record and checksum; retries never substitute a freshly read revision. Version-1 records keep their original bytes/checksum and remain readable under the same storage key. Retained committed v9 Void/Delete keys without If-Match can acknowledge success only; an uncommitted old-style request fails 428 and cannot mutate. A lost key cannot be reconstructed.
+
+A new stale command fails 412 without committing a marker. Keep the draft, read and compare the latest transaction, then explicitly choose latest values or retain the draft against that reviewed state before a new Save. An uncertain retry that returns an error still cannot disprove the earlier commit; preserve its original command/key until resolved. Coordinate v10 activation and drain old writers; never let a v9 binary write unversioned status changes against v10. Capacity, retention, privacy-safe warnings and the restore reconciliation gate remain unchanged.

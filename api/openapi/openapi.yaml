@@ -600,6 +600,68 @@ paths:
         "422": { $ref: "#/components/responses/MoneyOverflow" }
         "500": { $ref: "#/components/responses/MoneyInternalError" }
         "503": { $ref: "#/components/responses/FinancialWriteUnavailable" }
+  /api/v1/events/{eventID}:
+    get:
+      tags: [Money]
+      summary: Read a complete visible event from one consistent snapshot
+      operationId: getMoneyEvent
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/MoneyEventID" }]
+      responses:
+        "200":
+          description: Current owned event including complete allocations. Deleted events are not exposed. Private/no-store.
+          headers:
+            ETag: { description: Strong quoted decimal event revision., schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MoneyEvent" }
+        "400": { $ref: "#/components/responses/MoneyBadRequest" }
+        "401": { $ref: "#/components/responses/MoneyUnauthorized" }
+        "404": { $ref: "#/components/responses/MoneyNotFound" }
+        "500": { $ref: "#/components/responses/MoneyInternalError" }
+        "503": { $ref: "#/components/responses/MoneyUnavailable" }
+  /api/v1/events/{eventID}/edit:
+    post:
+      tags: [Money]
+      summary: Atomically replace editable fields of a posted event with the same ID
+      description: Complete payload including every allocation; kind and currency immutable. Same-key committed replay precedes current state checks and returns no old contents. Existing archived associations may be retained; newly selected ones must be active. Snapshot audit is internal and excluded from normal exports.
+      operationId: editMoneyEvent
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/MoneyEventID" }
+        - { $ref: "#/components/parameters/FinancialIdempotencyKey" }
+        - { $ref: "#/components/parameters/EventIfMatch" }
+        - { $ref: "#/components/parameters/MoneyOrigin" }
+        - { $ref: "#/components/parameters/MoneyCSRF" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MoneyEventEdit" }
+      responses:
+        "200":
+          description: Updated event on first success, or content-free already_applied receipt on replay. Private/no-store.
+          headers:
+            Idempotency-Replayed: { schema: { type: string, enum: ["true", "false"] } }
+            ETag: { description: New strong revision on first success only; absent on replay., schema: { type: string } }
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - { $ref: "#/components/schemas/MoneyEvent" }
+                  - { $ref: "#/components/schemas/FinancialWriteReplay" }
+        "400": { $ref: "#/components/responses/MoneyBadRequest" }
+        "401": { $ref: "#/components/responses/MoneyUnauthorized" }
+        "403": { $ref: "#/components/responses/MoneyForbidden" }
+        "404": { $ref: "#/components/responses/MoneyNotFound" }
+        "409": { $ref: "#/components/responses/MoneyConflict" }
+        "412": { $ref: "#/components/responses/EventRevisionConflict" }
+        "413": { $ref: "#/components/responses/MoneyTooLarge" }
+        "415": { $ref: "#/components/responses/MoneyUnsupportedMediaType" }
+        "422": { $ref: "#/components/responses/MoneyOverflow" }
+        "428": { $ref: "#/components/responses/EventRevisionRequired" }
+        "500": { $ref: "#/components/responses/MoneyInternalError" }
+        "503": { $ref: "#/components/responses/FinancialWriteUnavailable" }
   /api/v1/events/{eventID}/void:
     post:
       tags: [Money]
@@ -609,6 +671,7 @@ paths:
       security: [{ sessionCookie: [] }]
       parameters:
         - { $ref: "#/components/parameters/FinancialIdempotencyKey" }
+        - { $ref: "#/components/parameters/LegacyEventIfMatch" }
         - { $ref: "#/components/parameters/MoneyEventID" }
         - { $ref: "#/components/parameters/MoneyOrigin" }
         - { $ref: "#/components/parameters/MoneyCSRF" }
@@ -624,6 +687,8 @@ paths:
         "401": { $ref: "#/components/responses/MoneyUnauthorized" }
         "403": { $ref: "#/components/responses/MoneyForbidden" }
         "404": { $ref: "#/components/responses/MoneyNotFound" }
+        "412": { $ref: "#/components/responses/EventRevisionConflict" }
+        "428": { $ref: "#/components/responses/EventRevisionRequired" }
         "409": { $ref: "#/components/responses/MoneyConflict" }
         "413": { $ref: "#/components/responses/MoneyTooLarge" }
         "415": { $ref: "#/components/responses/MoneyUnsupportedMediaType" }
@@ -643,6 +708,7 @@ paths:
       security: [{ sessionCookie: [] }]
       parameters:
         - { $ref: "#/components/parameters/FinancialIdempotencyKey" }
+        - { $ref: "#/components/parameters/LegacyEventIfMatch" }
         - { $ref: "#/components/parameters/MoneyEventID" }
         - { $ref: "#/components/parameters/MoneyOrigin" }
         - { $ref: "#/components/parameters/MoneyCSRF" }
@@ -653,6 +719,8 @@ paths:
         "401": { $ref: "#/components/responses/MoneyUnauthorized" }
         "403": { $ref: "#/components/responses/MoneyForbidden" }
         "404": { $ref: "#/components/responses/MoneyNotFound" }
+        "412": { $ref: "#/components/responses/EventRevisionConflict" }
+        "428": { $ref: "#/components/responses/EventRevisionRequired" }
         "409": { $ref: "#/components/responses/MoneyConflict" }
         "422": { $ref: "#/components/responses/MoneyOverflow" }
         "500": { $ref: "#/components/responses/MoneyInternalError" }
@@ -913,11 +981,23 @@ components:
       in: cookie
       name: lifeos_session
   parameters:
+    EventIfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Exactly one strong quoted positive decimal event_revision. No wildcard, weak tag or list. Frozen in the v2 fingerprint; stale revision fails 412.
+      schema: { type: string, pattern: '^"[1-9][0-9]*"$' }
+    LegacyEventIfMatch:
+      name: If-Match
+      in: header
+      required: false
+      description: Required for every NEW Void/Delete command (428 otherwise). May be omitted only to replay an already committed v9 v1 key with its original payload. A new-key Delete of an already-deleted owned event remains a 204 no-op.
+      schema: { type: string, pattern: '^"[1-9][0-9]*"$' }
     FinancialIdempotencyKey:
       name: Idempotency-Key
       in: header
       required: true
-      description: Exactly one cryptographically random lowercase UUIDv4 for this logical Save, retained with the frozen payload across uncertain retries. Scoped to the authenticated owner across all six covered writes; never expire/evict successful keys. Missing/invalid key fails 400; changed committed intent fails 409.
+      description: Exactly one cryptographically random lowercase UUIDv4 for this logical Save, retained with the frozen payload across uncertain retries. Scoped to the authenticated owner across all seven covered writes; never expire/evict successful keys. Missing/invalid key fails 400; changed committed intent fails 409.
       schema:
         type: string
         pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
@@ -974,6 +1054,16 @@ components:
       required: true
       schema: { type: string, format: uuid }
   responses:
+    EventRevisionRequired:
+      description: event_revision_required; read current event before a new command. No mutation.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/MoneyErrorResponse" }
+    EventRevisionConflict:
+      description: event_revision_conflict; current visible event changed. Preserve draft and review fresh state. No mutation.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/MoneyErrorResponse" }
     FinancialWriteReplay:
       description: Original command committed; no reapplication or prior financial contents. Refresh normal authorized reads because the record may subsequently have changed or disappeared. Private/no-store.
       headers:
@@ -1217,7 +1307,7 @@ components:
           properties:
             code:
               type: string
-              enum: [idempotency_key_required, invalid_idempotency_key, idempotency_key_conflict, idempotency_capacity_exceeded, financial_write_busy, financial_write_outcome_unknown, idempotency_version_unsupported, invalid_json, invalid_input, unsupported_media_type, request_too_large, authentication_required, invalid_origin, invalid_csrf, owner_override, method_not_allowed, session_unavailable, currency_mismatch, not_found, archived_record, conflict, amount_overflow, internal_error]
+              enum: [event_revision_required, event_revision_conflict, event_not_editable, idempotency_key_required, invalid_idempotency_key, idempotency_key_conflict, idempotency_capacity_exceeded, financial_write_busy, financial_write_outcome_unknown, idempotency_version_unsupported, invalid_json, invalid_input, unsupported_media_type, request_too_large, authentication_required, invalid_origin, invalid_csrf, owner_override, method_not_allowed, session_unavailable, currency_mismatch, not_found, archived_record, conflict, amount_overflow, internal_error]
             message: { type: string }
     MoneyAccountCreate:
       type: object
@@ -1343,6 +1433,37 @@ components:
       properties:
         category_id: { type: string, format: uuid }
         amount_minor: { $ref: "#/components/schemas/MoneyPositiveMinorUnits" }
+    MoneyEventEdit:
+      oneOf:
+        - { $ref: "#/components/schemas/MoneySingleEventEdit" }
+        - { $ref: "#/components/schemas/MoneyTransferEdit" }
+    MoneySingleEventEdit:
+      type: object
+      additionalProperties: false
+      required: [note, kind, account_id, amount_minor, currency, occurred_at, allocations]
+      properties:
+        kind: { type: string, enum: [income, expense] }
+        account_id: { type: string, format: uuid }
+        amount_minor: { $ref: "#/components/schemas/MoneyPositiveMinorUnits" }
+        currency: { $ref: "#/components/schemas/MoneyCurrency" }
+        occurred_at: { type: string, format: date-time }
+        note: { type: string, maxLength: 1000 }
+        allocations:
+          type: array
+          description: Explicit empty array means Uncategorized. If nonempty, the positive allocations must sum exactly to amount_minor.
+          items: { $ref: "#/components/schemas/MoneyAllocationCreate" }
+    MoneyTransferEdit:
+      type: object
+      additionalProperties: false
+      required: [kind, note, from_account_id, to_account_id, amount_minor, currency, occurred_at]
+      properties:
+        kind: { type: string, const: transfer }
+        from_account_id: { type: string, format: uuid }
+        to_account_id: { type: string, format: uuid }
+        amount_minor: { $ref: "#/components/schemas/MoneyPositiveMinorUnits" }
+        currency: { $ref: "#/components/schemas/MoneyCurrency" }
+        occurred_at: { type: string, format: date-time }
+        note: { type: string, maxLength: 1000 }
     MoneyEventCreate:
       type: object
       additionalProperties: false
@@ -1390,8 +1511,9 @@ components:
     MoneyEvent:
       type: object
       additionalProperties: false
-      required: [id, kind, amount_minor, currency, occurred_at, note, status, movements, allocations]
+      required: [event_revision, id, kind, amount_minor, currency, occurred_at, note, status, movements, allocations]
       properties:
+        event_revision: { type: string, pattern: "^[1-9][0-9]*$", description: Current optimistic concurrency token; not an export field. }
         id: { type: string, format: uuid }
         kind: { type: string, enum: [income, expense, transfer] }
         amount_minor: { $ref: "#/components/schemas/MoneyPositiveMinorUnits" }

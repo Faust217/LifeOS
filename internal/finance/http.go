@@ -42,6 +42,8 @@ func RegisterRoutes(router chi.Router, auth *identity.Auth, service *Service) {
 	router.MethodFunc(http.MethodPost, "/categories/{categoryID}/archive", auth.RequireMutation(handler.archiveCategory))
 	router.MethodFunc(http.MethodPost, "/categories/{categoryID}/restore", auth.RequireMutation(handler.restoreCategory))
 	router.MethodFunc(http.MethodGet, "/categories/{categoryID}/spending", auth.RequireRead(handler.categorySpending))
+	router.MethodFunc(http.MethodGet, "/events/{eventID}", auth.RequireRead(handler.getEvent))
+	router.MethodFunc(http.MethodPost, "/events/{eventID}/edit", handler.financialMutation(handler.editEvent))
 	router.MethodFunc(http.MethodGet, "/events", auth.RequireRead(handler.history))
 	router.MethodFunc(http.MethodPost, "/events", handler.financialMutation(handler.postEvent))
 	router.MethodFunc(http.MethodPost, "/transfers", handler.financialMutation(handler.transfer))
@@ -129,17 +131,18 @@ type allocationResponse struct {
 }
 
 type eventResponse struct {
-	ID          string               `json:"id"`
-	Kind        string               `json:"kind"`
-	AmountMinor string               `json:"amount_minor"`
-	Currency    string               `json:"currency"`
-	OccurredAt  time.Time            `json:"occurred_at"`
-	Note        string               `json:"note"`
-	Status      string               `json:"status"`
-	VoidedAt    *time.Time           `json:"voided_at,omitempty"`
-	VoidReason  string               `json:"void_reason,omitempty"`
-	Movements   []movementResponse   `json:"movements"`
-	Allocations []allocationResponse `json:"allocations"`
+	EventRevision string               `json:"event_revision"`
+	ID            string               `json:"id"`
+	Kind          string               `json:"kind"`
+	AmountMinor   string               `json:"amount_minor"`
+	Currency      string               `json:"currency"`
+	OccurredAt    time.Time            `json:"occurred_at"`
+	Note          string               `json:"note"`
+	Status        string               `json:"status"`
+	VoidedAt      *time.Time           `json:"voided_at,omitempty"`
+	VoidReason    string               `json:"void_reason,omitempty"`
+	Movements     []movementResponse   `json:"movements"`
+	Allocations   []allocationResponse `json:"allocations"`
 }
 
 func accountDTO(account Account) accountResponse {
@@ -160,7 +163,7 @@ func categoryDTO(category Category) categoryResponse {
 }
 
 func eventDTO(event Event) eventResponse {
-	result := eventResponse{ID: event.ID, Kind: event.Kind, AmountMinor: strconv.FormatInt(event.AmountMinor, 10),
+	result := eventResponse{EventRevision: strconv.FormatInt(event.Revision, 10), ID: event.ID, Kind: event.Kind, AmountMinor: strconv.FormatInt(event.AmountMinor, 10),
 		Currency: event.Currency, OccurredAt: event.OccurredAt.UTC(), Note: event.Note, Status: event.Status,
 		VoidedAt: event.VoidedAt, VoidReason: event.VoidReason,
 		Movements:   make([]movementResponse, 0, len(event.Movements)),
@@ -471,7 +474,12 @@ func (h moneyHandler) voidEvent(w http.ResponseWriter, r *http.Request, owner id
 	if !decodeMoneyJSON(w, r, &input) {
 		return
 	}
-	err := h.service.VoidEvent(r.Context(), owner, chi.URLParam(r, "eventID"), input.Reason, r.Header.Get("Idempotency-Key"))
+	revision, err := eventPrecondition(r)
+	if err != nil {
+		writeMoneyError(w, err)
+		return
+	}
+	err = h.service.VoidEvent(r.Context(), owner, chi.URLParam(r, "eventID"), input.Reason, r.Header.Get("Idempotency-Key"), revision)
 	h.finishFinancialWrite(w, r, owner, http.StatusNoContent, nil, err)
 }
 
@@ -483,7 +491,12 @@ func (h moneyHandler) deleteEvent(w http.ResponseWriter, r *http.Request, owner 
 	if !emptyMoneyBody(w, r) {
 		return
 	}
-	err := h.service.DeleteEvent(r.Context(), owner, chi.URLParam(r, "eventID"), r.Header.Get("Idempotency-Key"))
+	revision, err := eventPrecondition(r)
+	if err != nil {
+		writeMoneyError(w, err)
+		return
+	}
+	err = h.service.DeleteEvent(r.Context(), owner, chi.URLParam(r, "eventID"), r.Header.Get("Idempotency-Key"), revision)
 	h.finishFinancialWrite(w, r, owner, http.StatusNoContent, nil, err)
 }
 
@@ -581,6 +594,12 @@ func writeMoneyJSON(w http.ResponseWriter, status int, value any) {
 
 func writeMoneyError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, ErrRevisionRequired):
+		writeMoneyErrorStatus(w, 428, "event_revision_required", "Read the transaction before changing it")
+	case errors.Is(err, ErrRevisionConflict):
+		writeMoneyErrorStatus(w, 412, "event_revision_conflict", "This transaction changed. Review the latest record; your draft is kept")
+	case errors.Is(err, ErrNotEditable):
+		writeMoneyErrorStatus(w, 409, "event_not_editable", "Only posted transactions can be edited")
 	case errors.Is(err, ErrKeyRequired):
 		writeMoneyErrorStatus(w, 400, "idempotency_key_required", "A request key is required")
 	case errors.Is(err, ErrInvalidKey):

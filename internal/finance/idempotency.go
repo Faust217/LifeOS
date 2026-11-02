@@ -33,9 +33,11 @@ var (
 )
 
 type financialCommand struct {
-	operation  string
-	target     any
-	parameters []any
+	version          int16
+	revisionRequired bool
+	operation        string
+	target           any
+	parameters       []any
 }
 
 type financialAdmissionKey struct{}
@@ -56,7 +58,11 @@ func canonicalFinancialCommand(owner identity.OwnerID, cmd financialCommand) ([]
 }
 
 func canonicalFinancialBytes(owner string, cmd financialCommand) ([]byte, [32]byte, error) {
-	data, err := json.Marshal([]any{"lifeos-finance-command-v1", owner, cmd.operation, cmd.target, cmd.parameters})
+	tag := "lifeos-finance-command-v1"
+	if cmd.version == 2 {
+		tag = "lifeos-finance-command-v2"
+	}
+	data, err := json.Marshal([]any{tag, owner, cmd.operation, cmd.target, cmd.parameters})
 	return data, sha256.Sum256(data), err
 }
 
@@ -68,7 +74,7 @@ type writeQuery interface {
 	QueryRow(context.Context, string, ...any) pgx.Row
 }
 
-func committedCommand(ctx context.Context, db writeQuery, owner identity.OwnerID, key string, digest [32]byte) (bool, error) {
+func committedCommand(ctx context.Context, db writeQuery, owner identity.OwnerID, key string, requestedVersion int16, digest [32]byte) (bool, error) {
 	var version int16
 	var stored []byte
 	err := db.QueryRow(ctx, `SELECT fingerprint_version, request_fingerprint FROM finance_write_requests WHERE owner_id=$1 AND request_key=$2`, owner.String(), key).Scan(&version, &stored)
@@ -78,10 +84,10 @@ func committedCommand(ctx context.Context, db writeQuery, owner identity.OwnerID
 	if err != nil {
 		return false, financialWriteError(err)
 	}
-	if version != 1 {
+	if version != 1 && version != 2 {
 		return false, ErrFingerprintVersion
 	}
-	if !bytes.Equal(stored, digest[:]) {
+	if version != requestedVersion || !bytes.Equal(stored, digest[:]) {
 		return false, ErrKeyConflict
 	}
 	return true, nil
@@ -111,6 +117,9 @@ func executeFinancialWrite[T any](parent context.Context, r *repository, owner i
 	if err = validateRequestKey(key); err != nil {
 		return zero, err
 	}
+	if cmd.version == 0 {
+		cmd.version = 1
+	}
 	_, digest, err := canonicalFinancialCommand(owner, cmd)
 	if err != nil {
 		return zero, ErrInvalidInput
@@ -125,7 +134,7 @@ func executeFinancialWrite[T any](parent context.Context, r *repository, owner i
 			return zero, ErrWriteBusy
 		}
 	}
-	if found, err := committedCommand(ctx, r.pool, owner, key, digest); err != nil {
+	if found, err := committedCommand(ctx, r.pool, owner, key, cmd.version, digest); err != nil {
 		return zero, err
 	} else if found {
 		return zero, ErrAlreadyApplied
@@ -147,10 +156,13 @@ func executeFinancialWrite[T any](parent context.Context, r *repository, owner i
 		return zero, financialWriteError(err)
 	}
 	// A new READ COMMITTED statement after waiting sees the previous writer's commit.
-	if found, err := committedCommand(ctx, tx, owner, key, digest); err != nil {
+	if found, err := committedCommand(ctx, tx, owner, key, cmd.version, digest); err != nil {
 		return zero, err
 	} else if found {
 		return zero, ErrAlreadyApplied
+	}
+	if cmd.revisionRequired {
+		return zero, ErrRevisionRequired
 	}
 	var count int64
 	if err = tx.QueryRow(ctx, `SELECT count(*) FROM finance_write_requests WHERE owner_id=$1`, owner.String()).Scan(&count); err != nil {
@@ -160,12 +172,12 @@ func executeFinancialWrite[T any](parent context.Context, r *repository, owner i
 		r.capacityObserver(count, r.keyLimit)
 		return zero, ErrKeyCapacity
 	}
-	inserted, err := tx.Exec(ctx, `INSERT INTO finance_write_requests(owner_id,request_key,operation,fingerprint_version,request_fingerprint) VALUES($1,$2,$3,1,$4) ON CONFLICT(owner_id,request_key) DO NOTHING`, owner.String(), key, cmd.operation, digest[:])
+	inserted, err := tx.Exec(ctx, `INSERT INTO finance_write_requests(owner_id,request_key,operation,fingerprint_version,request_fingerprint) VALUES($1,$2,$3,$4,$5) ON CONFLICT(owner_id,request_key) DO NOTHING`, owner.String(), key, cmd.operation, cmd.version, digest[:])
 	if err != nil {
 		return zero, financialWriteError(err)
 	}
 	if inserted.RowsAffected() == 0 {
-		if found, err := committedCommand(ctx, tx, owner, key, digest); err != nil {
+		if found, err := committedCommand(ctx, tx, owner, key, cmd.version, digest); err != nil {
 			return zero, err
 		} else if found {
 			return zero, ErrAlreadyApplied

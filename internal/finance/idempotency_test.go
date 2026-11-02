@@ -79,3 +79,27 @@ func TestFinancialCanonicalV1Golden(t *testing.T) {
 		t.Fatal("domain error lost")
 	}
 }
+
+func TestFinancialFingerprintV2GoldenFixtures(t *testing.T) {
+	data, err := os.ReadFile("testdata/financial-command-v2.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixtures []struct {
+		Owner, Operation  string
+		Target            any
+		Parameters        []any
+		Canonical, SHA256 string
+	}
+	if err = json.Unmarshal(data, &fixtures); err != nil {
+		t.Fatal(err)
+	}
+	for _, fixture := range fixtures {
+		t.Run(fixture.Operation, func(t *testing.T) {
+			bytes, digest, err := canonicalFinancialBytes(fixture.Owner, financialCommand{version: 2, operation: fixture.Operation, target: fixture.Target, parameters: fixture.Parameters})
+			if err != nil || string(bytes) != fixture.Canonical || hex.EncodeToString(digest[:]) != fixture.SHA256 {
+				t.Fatal("immutable v2 fingerprint changed", err)
+			}
+		})
+	}
+}

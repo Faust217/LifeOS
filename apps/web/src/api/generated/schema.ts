@@ -350,6 +350,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/events/{eventID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a complete visible event from one consistent snapshot */
+        get: operations["getMoneyEvent"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/events/{eventID}/edit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Atomically replace editable fields of a posted event with the same ID
+         * @description Complete payload including every allocation; kind and currency immutable. Same-key committed replay precedes current state checks and returns no old contents. Existing archived associations may be retained; newly selected ones must be active. Snapshot audit is internal and excluded from normal exports.
+         */
+        post: operations["editMoneyEvent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/events/{eventID}/void": {
         parameters: {
             query?: never;
@@ -678,7 +715,7 @@ export interface components {
         MoneyErrorResponse: {
             error: {
                 /** @enum {string} */
-                code: "idempotency_key_required" | "invalid_idempotency_key" | "idempotency_key_conflict" | "idempotency_capacity_exceeded" | "financial_write_busy" | "financial_write_outcome_unknown" | "idempotency_version_unsupported" | "invalid_json" | "invalid_input" | "unsupported_media_type" | "request_too_large" | "authentication_required" | "invalid_origin" | "invalid_csrf" | "owner_override" | "method_not_allowed" | "session_unavailable" | "currency_mismatch" | "not_found" | "archived_record" | "conflict" | "amount_overflow" | "internal_error";
+                code: "event_revision_required" | "event_revision_conflict" | "event_not_editable" | "idempotency_key_required" | "invalid_idempotency_key" | "idempotency_key_conflict" | "idempotency_capacity_exceeded" | "financial_write_busy" | "financial_write_outcome_unknown" | "idempotency_version_unsupported" | "invalid_json" | "invalid_input" | "unsupported_media_type" | "request_too_large" | "authentication_required" | "invalid_origin" | "invalid_csrf" | "owner_override" | "method_not_allowed" | "session_unavailable" | "currency_mismatch" | "not_found" | "archived_record" | "conflict" | "amount_overflow" | "internal_error";
                 message: string;
             };
         };
@@ -791,6 +828,33 @@ export interface components {
             category_id: string;
             amount_minor: components["schemas"]["MoneyPositiveMinorUnits"];
         };
+        MoneyEventEdit: components["schemas"]["MoneySingleEventEdit"] | components["schemas"]["MoneyTransferEdit"];
+        MoneySingleEventEdit: {
+            /** @enum {string} */
+            kind: "income" | "expense";
+            /** Format: uuid */
+            account_id: string;
+            amount_minor: components["schemas"]["MoneyPositiveMinorUnits"];
+            currency: components["schemas"]["MoneyCurrency"];
+            /** Format: date-time */
+            occurred_at: string;
+            note: string;
+            /** @description Explicit empty array means Uncategorized. If nonempty, the positive allocations must sum exactly to amount_minor. */
+            allocations: components["schemas"]["MoneyAllocationCreate"][];
+        };
+        MoneyTransferEdit: {
+            /** @constant */
+            kind: "transfer";
+            /** Format: uuid */
+            from_account_id: string;
+            /** Format: uuid */
+            to_account_id: string;
+            amount_minor: components["schemas"]["MoneyPositiveMinorUnits"];
+            currency: components["schemas"]["MoneyCurrency"];
+            /** Format: date-time */
+            occurred_at: string;
+            note: string;
+        };
         MoneyEventCreate: {
             /** @enum {string} */
             kind: "income" | "expense";
@@ -832,6 +896,8 @@ export interface components {
             currency: components["schemas"]["MoneyCurrency"];
         };
         MoneyEvent: {
+            /** @description Current optimistic concurrency token; not an export field. */
+            event_revision: string;
             /** Format: uuid */
             id: string;
             /** @enum {string} */
@@ -1325,6 +1391,24 @@ export interface components {
         };
     };
     responses: {
+        /** @description event_revision_required; read current event before a new command. No mutation. */
+        EventRevisionRequired: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["MoneyErrorResponse"];
+            };
+        };
+        /** @description event_revision_conflict; current visible event changed. Preserve draft and review fresh state. No mutation. */
+        EventRevisionConflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["MoneyErrorResponse"];
+            };
+        };
         /** @description Original command committed; no reapplication or prior financial contents. Refresh normal authorized reads because the record may subsequently have changed or disappeared. Private/no-store. */
         FinancialWriteReplay: {
             headers: {
@@ -1537,7 +1621,11 @@ export interface components {
         };
     };
     parameters: {
-        /** @description Exactly one cryptographically random lowercase UUIDv4 for this logical Save, retained with the frozen payload across uncertain retries. Scoped to the authenticated owner across all six covered writes; never expire/evict successful keys. Missing/invalid key fails 400; changed committed intent fails 409. */
+        /** @description Exactly one strong quoted positive decimal event_revision. No wildcard, weak tag or list. Frozen in the v2 fingerprint; stale revision fails 412. */
+        EventIfMatch: string;
+        /** @description Required for every NEW Void/Delete command (428 otherwise). May be omitted only to replay an already committed v9 v1 key with its original payload. A new-key Delete of an already-deleted owned event remains a 204 no-op. */
+        LegacyEventIfMatch: string;
+        /** @description Exactly one cryptographically random lowercase UUIDv4 for this logical Save, retained with the frozen payload across uncertain retries. Scoped to the authenticated owner across all seven covered writes; never expire/evict successful keys. Missing/invalid key fails 400; changed committed intent fails 409. */
         FinancialIdempotencyKey: string;
         MoneyAccountID: string;
         MoneyCategoryID: string;
@@ -1612,7 +1700,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Exactly one cryptographically random lowercase UUIDv4 for this logical Save, retained with the frozen payload across uncertain retries. Scoped to the authenticated owner across all six covered writes; never expire/evict successful keys. Missing/invalid key fails 400; changed committed intent fails 409. */
+                /** @description Exactly one cryptographically random lowercase UUIDv4 for this logical Save, retained with the frozen payload across uncertain retries. Scoped to the authenticated owner across all seven covered writes; never expire/evict successful keys. Missing/invalid key fails 400; changed committed intent fails 409. */
                 "Idempotency-Key": components["parameters"]["FinancialIdempotencyKey"];
                 /** @description Must exactly match the configured public origin. */
                 Origin: components["parameters"]["MoneyOrigin"];
@@ -2000,7 +2088,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Exactly one cryptographically random lowercase UUIDv4 for this logical Save, retained with the frozen payload across uncertain retries. Scoped to the authenticated owner across all six covered writes; never expire/evict successful keys. Missing/invalid key fails 400; changed committed intent fails 409. */
+                /** @description Exactly one cryptographically random lowercase UUIDv4 for this logical Save, retained with the frozen payload across uncertain retries. Scoped to the authenticated owner across all seven covered writes; never expire/evict successful keys. Missing/invalid key fails 400; changed committed intent fails 409. */
                 "Idempotency-Key": components["parameters"]["FinancialIdempotencyKey"];
                 /** @description Must exactly match the configured public origin. */
                 Origin: components["parameters"]["MoneyOrigin"];
@@ -2351,7 +2439,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Exactly one cryptographically random lowercase UUIDv4 for this logical Save, retained with the frozen payload across uncertain retries. Scoped to the authenticated owner across all six covered writes; never expire/evict successful keys. Missing/invalid key fails 400; changed committed intent fails 409. */
+                /** @description Exactly one cryptographically random lowercase UUIDv4 for this logical Save, retained with the frozen payload across uncertain retries. Scoped to the authenticated owner across all seven covered writes; never expire/evict successful keys. Missing/invalid key fails 400; changed committed intent fails 409. */
                 "Idempotency-Key": components["parameters"]["FinancialIdempotencyKey"];
                 /** @description Must exactly match the configured public origin. */
                 Origin: components["parameters"]["MoneyOrigin"];
@@ -2394,7 +2482,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Exactly one cryptographically random lowercase UUIDv4 for this logical Save, retained with the frozen payload across uncertain retries. Scoped to the authenticated owner across all six covered writes; never expire/evict successful keys. Missing/invalid key fails 400; changed committed intent fails 409. */
+                /** @description Exactly one cryptographically random lowercase UUIDv4 for this logical Save, retained with the frozen payload across uncertain retries. Scoped to the authenticated owner across all seven covered writes; never expire/evict successful keys. Missing/invalid key fails 400; changed committed intent fails 409. */
                 "Idempotency-Key": components["parameters"]["FinancialIdempotencyKey"];
                 /** @description Must exactly match the configured public origin. */
                 Origin: components["parameters"]["MoneyOrigin"];
@@ -2433,12 +2521,93 @@ export interface operations {
             503: components["responses"]["FinancialWriteUnavailable"];
         };
     };
+    getMoneyEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                eventID: components["parameters"]["MoneyEventID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current owned event including complete allocations. Deleted events are not exposed. Private/no-store. */
+            200: {
+                headers: {
+                    /** @description Strong quoted decimal event revision. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MoneyEvent"];
+                };
+            };
+            400: components["responses"]["MoneyBadRequest"];
+            401: components["responses"]["MoneyUnauthorized"];
+            404: components["responses"]["MoneyNotFound"];
+            500: components["responses"]["MoneyInternalError"];
+            503: components["responses"]["MoneyUnavailable"];
+        };
+    };
+    editMoneyEvent: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Exactly one cryptographically random lowercase UUIDv4 for this logical Save, retained with the frozen payload across uncertain retries. Scoped to the authenticated owner across all seven covered writes; never expire/evict successful keys. Missing/invalid key fails 400; changed committed intent fails 409. */
+                "Idempotency-Key": components["parameters"]["FinancialIdempotencyKey"];
+                /** @description Exactly one strong quoted positive decimal event_revision. No wildcard, weak tag or list. Frozen in the v2 fingerprint; stale revision fails 412. */
+                "If-Match": components["parameters"]["EventIfMatch"];
+                /** @description Must exactly match the configured public origin. */
+                Origin: components["parameters"]["MoneyOrigin"];
+                /** @description Session-bound token returned by GET /api/v1/me. */
+                "X-CSRF-Token": components["parameters"]["MoneyCSRF"];
+            };
+            path: {
+                eventID: components["parameters"]["MoneyEventID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MoneyEventEdit"];
+            };
+        };
+        responses: {
+            /** @description Updated event on first success, or content-free already_applied receipt on replay. Private/no-store. */
+            200: {
+                headers: {
+                    "Idempotency-Replayed"?: "true" | "false";
+                    /** @description New strong revision on first success only; absent on replay. */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MoneyEvent"] | components["schemas"]["FinancialWriteReplay"];
+                };
+            };
+            400: components["responses"]["MoneyBadRequest"];
+            401: components["responses"]["MoneyUnauthorized"];
+            403: components["responses"]["MoneyForbidden"];
+            404: components["responses"]["MoneyNotFound"];
+            409: components["responses"]["MoneyConflict"];
+            412: components["responses"]["EventRevisionConflict"];
+            413: components["responses"]["MoneyTooLarge"];
+            415: components["responses"]["MoneyUnsupportedMediaType"];
+            422: components["responses"]["MoneyOverflow"];
+            428: components["responses"]["EventRevisionRequired"];
+            500: components["responses"]["MoneyInternalError"];
+            503: components["responses"]["FinancialWriteUnavailable"];
+        };
+    };
     voidMoneyEvent: {
         parameters: {
             query?: never;
             header: {
-                /** @description Exactly one cryptographically random lowercase UUIDv4 for this logical Save, retained with the frozen payload across uncertain retries. Scoped to the authenticated owner across all six covered writes; never expire/evict successful keys. Missing/invalid key fails 400; changed committed intent fails 409. */
+                /** @description Exactly one cryptographically random lowercase UUIDv4 for this logical Save, retained with the frozen payload across uncertain retries. Scoped to the authenticated owner across all seven covered writes; never expire/evict successful keys. Missing/invalid key fails 400; changed committed intent fails 409. */
                 "Idempotency-Key": components["parameters"]["FinancialIdempotencyKey"];
+                /** @description Required for every NEW Void/Delete command (428 otherwise). May be omitted only to replay an already committed v9 v1 key with its original payload. A new-key Delete of an already-deleted owned event remains a 204 no-op. */
+                "If-Match"?: components["parameters"]["LegacyEventIfMatch"];
                 /** @description Must exactly match the configured public origin. */
                 Origin: components["parameters"]["MoneyOrigin"];
                 /** @description Session-bound token returned by GET /api/v1/me. */
@@ -2468,9 +2637,11 @@ export interface operations {
             403: components["responses"]["MoneyForbidden"];
             404: components["responses"]["MoneyNotFound"];
             409: components["responses"]["MoneyConflict"];
+            412: components["responses"]["EventRevisionConflict"];
             413: components["responses"]["MoneyTooLarge"];
             415: components["responses"]["MoneyUnsupportedMediaType"];
             422: components["responses"]["MoneyOverflow"];
+            428: components["responses"]["EventRevisionRequired"];
             500: components["responses"]["MoneyInternalError"];
             503: components["responses"]["FinancialWriteUnavailable"];
         };
@@ -2479,8 +2650,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Exactly one cryptographically random lowercase UUIDv4 for this logical Save, retained with the frozen payload across uncertain retries. Scoped to the authenticated owner across all six covered writes; never expire/evict successful keys. Missing/invalid key fails 400; changed committed intent fails 409. */
+                /** @description Exactly one cryptographically random lowercase UUIDv4 for this logical Save, retained with the frozen payload across uncertain retries. Scoped to the authenticated owner across all seven covered writes; never expire/evict successful keys. Missing/invalid key fails 400; changed committed intent fails 409. */
                 "Idempotency-Key": components["parameters"]["FinancialIdempotencyKey"];
+                /** @description Required for every NEW Void/Delete command (428 otherwise). May be omitted only to replay an already committed v9 v1 key with its original payload. A new-key Delete of an already-deleted owned event remains a 204 no-op. */
+                "If-Match"?: components["parameters"]["LegacyEventIfMatch"];
                 /** @description Must exactly match the configured public origin. */
                 Origin: components["parameters"]["MoneyOrigin"];
                 /** @description Session-bound token returned by GET /api/v1/me. */
@@ -2506,7 +2679,9 @@ export interface operations {
             403: components["responses"]["MoneyForbidden"];
             404: components["responses"]["MoneyNotFound"];
             409: components["responses"]["MoneyConflict"];
+            412: components["responses"]["EventRevisionConflict"];
             422: components["responses"]["MoneyOverflow"];
+            428: components["responses"]["EventRevisionRequired"];
             500: components["responses"]["MoneyInternalError"];
             503: components["responses"]["FinancialWriteUnavailable"];
         };

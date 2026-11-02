@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/Faust217/LifeOS/internal/identity"
@@ -69,6 +70,9 @@ func (h moneyHandler) finishFinancialWrite(w http.ResponseWriter, r *http.Reques
 			Outcome string `json:"outcome"`
 		}{"already_applied"})
 		return
+	}
+	if value, ok := value.(eventResponse); ok && status == 200 {
+		w.Header().Set("ETag", strconv.Quote(value.EventRevision))
 	}
 	if status == http.StatusNoContent {
 		w.WriteHeader(status)

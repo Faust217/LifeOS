@@ -147,6 +147,8 @@
 .money-event-details p { margin: .6rem 0; line-height: 1.5; }
 .money-event-details ul { display: grid; gap: .35rem; margin: .35rem 0 .85rem; padding-left: 1.2rem; overflow-wrap: anywhere; }
 .money-event-details .money-confirm { margin-top: .75rem; }
+.money-event-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; margin-top: .75rem; }
+.money-event-actions > button { min-height: 44px; max-width: 100%; margin: 0; }
 .money-pagination { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
 .money-pagination span { color: var(--muted); font-size: .85rem; white-space: nowrap; }
 .money-pagination .button { min-height: 44px; }
@@ -182,3 +184,12 @@
 .money-opening-summary dt { color: var(--muted); }
 .money-opening-summary dd { margin: 0; font-weight: 650; overflow-wrap: anywhere; }
 .money-opening-review { overflow-wrap: anywhere; }
+
+.money-edit-form fieldset { min-width: 0; }
+.money-edit-allocations { min-width: 0; display: grid; gap: 1rem; }
+.money-edit-allocations h3 { margin: 0; font-size: 1rem; }
+.money-edit-part { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: .65rem; padding-bottom: .75rem; border-bottom: 1px solid var(--line); }
+.money-edit-part .money-text-action { grid-column: 1 / -1; justify-self: start; }
+@media (max-width: 360px) { .money-edit-part { grid-template-columns: minmax(0, 1fr); } }
+.money-edit-dialog { overflow: hidden; }
+.money-edit-dialog .money-dialog-content { overscroll-behavior-y: contain; }
