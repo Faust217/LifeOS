@@ -1,13 +1,29 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
-  addGoalItem, archiveGoal, createGoal, GoalApiError, listGoals, removeGoalItem,
+  addGoalItem, archiveGoal, createGoal, deleteGoal, GoalApiError, listGoals, removeGoalItem,
   renameGoal, renameGoalItem, restoreGoal, setGoalCompletion, setGoalItemCompletion,
 } from "./goals";
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe("Goals API boundary", () => {
+  it("accepts only empty 204 for Goal Delete and never parses it or sends financial keys", async () => {
+    const json=vi.fn(); const request=vi.fn().mockResolvedValue({ok:true,status:204,json});vi.stubGlobal("fetch",request);
+    await expect(deleteGoal("csrf", "same-goal")).resolves.toBeUndefined();
+    expect(json).not.toHaveBeenCalled();
+    expect(request.mock.calls[0][0]).toBe("/api/v1/goals/same-goal");
+    expect(request.mock.calls[0][1]).toMatchObject({method:"DELETE",body:undefined,credentials:"same-origin",cache:"no-store",headers:{"X-CSRF-Token":"csrf"}});
+    expect(JSON.stringify(request.mock.calls[0])).not.toContain("Idempotency-Key");
+    request.mockResolvedValue({ok:true,status:200,json:async()=>({})});
+    await expect(deleteGoal("csrf","same-goal")).rejects.toMatchObject({status:200,code:"internal_error"});
+  });
+  it("bounds an uncertain Delete without claiming its server transaction rolled back", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("fetch",vi.fn((_path,options)=>new Promise((_resolve,reject)=>options.signal.addEventListener("abort",()=>reject(new Error("aborted"))))));
+    const result=expect(deleteGoal("csrf","same-goal")).rejects.toMatchObject({status:0,code:"network_error"});
+    await vi.advanceTimersByTimeAsync(15_000); await result;
+  });
   it("reads the signed-in owner's Goals with same-origin cookies", async () => {
     const request = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ items: [] }) });
     vi.stubGlobal("fetch", request);

@@ -69,6 +69,18 @@ func (s *Service) GetGoal(ctx context.Context, owner identity.OwnerID, goalID st
 	return goals[0], nil
 }
 
+// DeleteGoal is a terminal, naturally retryable change to the owned Goal.
+// It neither deletes checklist rows nor creates a financial command/receipt.
+func (s *Service) DeleteGoal(ctx context.Context, owner identity.OwnerID, goalID string) error {
+	if !owner.Valid() {
+		return ErrUnauthorized
+	}
+	if !validID(goalID) {
+		return ErrInvalidInput
+	}
+	return s.repo.deleteGoal(ctx, owner, goalID)
+}
+
 func (s *Service) CreateGoal(ctx context.Context, owner identity.OwnerID, title string) (Goal, error) {
 	if !owner.Valid() {
 		return Goal{}, ErrUnauthorized

@@ -21,7 +21,7 @@ func (r *repository) listGoals(ctx context.Context, owner identity.OwnerID, goal
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	query := `SELECT id, title, completed_at, archived_at, created_at, updated_at
-        FROM goals WHERE owner_id = $1`
+        FROM goals WHERE owner_id = $1 AND deleted_at IS NULL`
 	args := []any{owner.String()}
 	if goalID != "" {
 		query += ` AND id = $2`
@@ -53,7 +53,9 @@ func (r *repository) listGoals(ctx context.Context, owner identity.OwnerID, goal
 	}
 
 	itemQuery := `SELECT goal_id, id, title, completed_at, created_at, updated_at
-        FROM goal_checklist_items WHERE owner_id = $1`
+        FROM goal_checklist_items WHERE owner_id = $1 AND EXISTS
+        (SELECT 1 FROM goals g WHERE g.owner_id=goal_checklist_items.owner_id
+         AND g.id=goal_checklist_items.goal_id AND g.deleted_at IS NULL)`
 	itemArgs := []any{owner.String()}
 	if goalID != "" {
 		itemQuery += ` AND goal_id = $2`
@@ -94,21 +96,21 @@ func (r *repository) createGoal(ctx context.Context, owner identity.OwnerID, id,
 func (r *repository) renameGoal(ctx context.Context, owner identity.OwnerID, goalID, title string) error {
 	var id string
 	err := r.pool.QueryRow(ctx, `UPDATE goals SET title = $3, updated_at = now()
-        WHERE owner_id = $1 AND id = $2 AND archived_at IS NULL RETURNING id`, owner.String(), goalID, title).Scan(&id)
+        WHERE owner_id = $1 AND id = $2 AND archived_at IS NULL AND deleted_at IS NULL RETURNING id`, owner.String(), goalID, title).Scan(&id)
 	return notFoundOr(err)
 }
 
 func (r *repository) archiveGoal(ctx context.Context, owner identity.OwnerID, goalID string) error {
 	var id string
 	err := r.pool.QueryRow(ctx, `UPDATE goals SET archived_at = now(), updated_at = now()
-        WHERE owner_id = $1 AND id = $2 AND archived_at IS NULL RETURNING id`, owner.String(), goalID).Scan(&id)
+        WHERE owner_id = $1 AND id = $2 AND archived_at IS NULL AND deleted_at IS NULL RETURNING id`, owner.String(), goalID).Scan(&id)
 	return notFoundOr(err)
 }
 
 func (r *repository) restoreGoal(ctx context.Context, owner identity.OwnerID, goalID string) error {
 	var id string
 	err := r.pool.QueryRow(ctx, `UPDATE goals SET archived_at = NULL, updated_at = now()
-        WHERE owner_id = $1 AND id = $2 AND archived_at IS NOT NULL RETURNING id`, owner.String(), goalID).Scan(&id)
+        WHERE owner_id = $1 AND id = $2 AND archived_at IS NOT NULL AND deleted_at IS NULL RETURNING id`, owner.String(), goalID).Scan(&id)
 	return notFoundOr(err)
 }
 
@@ -166,7 +168,7 @@ func (r *repository) withEditableGoal(ctx context.Context, owner identity.OwnerI
 func lockGoal(ctx context.Context, tx pgx.Tx, owner identity.OwnerID, goalID string) (*time.Time, *time.Time, error) {
 	var completed, archived *time.Time
 	err := tx.QueryRow(ctx, `SELECT completed_at, archived_at FROM goals
-        WHERE owner_id = $1 AND id = $2 FOR UPDATE`, owner.String(), goalID).Scan(&completed, &archived)
+        WHERE owner_id = $1 AND id = $2 AND deleted_at IS NULL FOR UPDATE`, owner.String(), goalID).Scan(&completed, &archived)
 	if err != nil {
 		return nil, nil, notFoundOr(err)
 	}
@@ -213,4 +215,31 @@ func notFoundOr(err error) error {
 		return ErrNotFound
 	}
 	return err
+}
+
+func (r *repository) deleteGoal(parent context.Context, owner identity.OwnerID, goalID string) error {
+	ctx, cancel := context.WithTimeout(parent, 10*time.Second)
+	defer cancel()
+	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+	if err != nil {
+		return err
+	}
+	defer func() {
+		cleanup, stop := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
+		defer stop()
+		_ = tx.Rollback(cleanup)
+	}()
+	if _, err = tx.Exec(ctx, `SET LOCAL lock_timeout='2s'; SET LOCAL statement_timeout='8s'; SET LOCAL idle_in_transaction_session_timeout='10s'`); err != nil {
+		return err
+	}
+	var deleted *time.Time
+	if err = tx.QueryRow(ctx, `SELECT deleted_at FROM goals WHERE owner_id=$1 AND id=$2 FOR UPDATE`, owner.String(), goalID).Scan(&deleted); err != nil {
+		return notFoundOr(err)
+	}
+	if deleted == nil {
+		if _, err = tx.Exec(ctx, `UPDATE goals SET deleted_at=now(),updated_at=now() WHERE owner_id=$1 AND id=$2 AND deleted_at IS NULL`, owner.String(), goalID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
 }

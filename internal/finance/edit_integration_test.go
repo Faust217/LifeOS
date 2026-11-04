@@ -496,9 +496,7 @@ func TestAtomicEditIntegration(t *testing.T) {
 		_, _ = pool.Exec(ctx, `UPDATE lifeos_sessions SET revoked_at=now() WHERE user_id=$1`, uid)
 		moneyStatus(t, request("POST", "/events/"+event.ID+"/edit", body, k, `"2"`, "edit-owner-session", moneyTestOrigin, auth.Token), 401)
 	})
-	if err = runner.Steps(-1); err == nil {
-		t.Fatal("populated audit rollback permitted")
-	}
+	assertPublishedFinanceDownRefused(t, pool, "000010_financial_event_revisions.down.sql")
 }
 
 // Old functional regressions use a freshly reviewed version; stale races have explicit tokens above.

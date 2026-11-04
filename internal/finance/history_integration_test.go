@@ -93,7 +93,7 @@ func TestRunningHistoryIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 	upgraded := make(chan error, 1)
-	go func() { upgraded <- runner.Up() }()
+	go func() { upgraded <- runner.Migrate(11) }()
 	select {
 	case err := <-upgraded:
 		t.Fatalf("upgrade did not wait for old writer: %v", err)
@@ -134,7 +134,7 @@ func TestRunningHistoryIntegration(t *testing.T) {
 	if err = runner.Steps(-1); err != nil {
 		t.Fatal("baseline-only v11 down", err)
 	}
-	if err = runner.Up(); err != nil {
+	if err = runner.Migrate(11); err != nil {
 		t.Fatal(err)
 	}
 	again, err := service.HistoryPage(ctx, owner, HistoryQuery{Limit: 10})

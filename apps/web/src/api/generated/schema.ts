@@ -459,7 +459,11 @@ export interface paths {
         get: operations["getGoal"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Soft delete an owned Goal and hide its retained checklist
+         * @description Empty body and query. Active, completed and archived Goals are eligible. First and repeat deletion of the same retained owned Goal return empty 204; repeat deletion preserves the first deletion timestamp. Unknown or foreign Goals return 404. Deleted Goals are unavailable to ordinary reads and other mutations. Every attempt repeats session, Origin, CSRF and owner checks. No financial idempotency key.
+         */
+        delete: operations["deleteGoal"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2827,6 +2831,37 @@ export interface operations {
             200: components["responses"]["GoalOK"];
             400: components["responses"]["GoalBadRequest"];
             401: components["responses"]["GoalUnauthorized"];
+            404: components["responses"]["GoalNotFound"];
+            500: components["responses"]["GoalInternalError"];
+            503: components["responses"]["GoalUnavailable"];
+        };
+    };
+    deleteGoal: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured public origin. */
+                Origin: components["parameters"]["MoneyOrigin"];
+                /** @description Session-bound token returned by GET /api/v1/me. */
+                "X-CSRF-Token": components["parameters"]["MoneyCSRF"];
+            };
+            path: {
+                goalID: components["parameters"]["GoalID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Goal is deleted; no content or receipt. Retained checklist rows are unchanged. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["GoalBadRequest"];
+            401: components["responses"]["GoalUnauthorized"];
+            403: components["responses"]["GoalForbidden"];
             404: components["responses"]["GoalNotFound"];
             500: components["responses"]["GoalInternalError"];
             503: components["responses"]["GoalUnavailable"];

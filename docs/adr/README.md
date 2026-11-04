@@ -88,6 +88,14 @@ Offline transaction synchronization is V0.2 work. It needs a separate **accepted
 | --- | --- | --- |
 | [ADR-020](ADR-020-atomic-financial-event-edit-revisions.md) | Stable-ID atomic Edit, current-only ledger, immutable internal snapshots and revision-guarded idempotent writes | Accepted 2026-10-27; Issue #35 final UI/financial evidence accepted and delivery authorized 2026-11-02 |
 
+## Accepted Goal deletion and narrow export exception
+
+| ADR | Decision | Status |
+| --- | --- | --- |
+| [ADR-021](ADR-021-goal-soft-delete.md) | Owner-scoped Goal Soft Delete; normal JSON v1/v2 excludes deleted Goals/checklists as an explicit exception to ADR-017 for this new state only | Accepted 2026-11-04; Issue #38 implemented, successful deletion manually verified by the Product Owner, final delivery approved; full responsive/focus/mobile coverage remains incomplete |
+
+ADR-017's historical file remains unchanged. Its other versioning/visibility requirements stay in force; this exception does not authorize future unversioned changes. ADR-015 remains Proposed.
+
 ## Naming
 
 Use the `ADR-` prefix, a zero-padded three-digit number, and a concise slug:

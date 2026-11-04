@@ -139,7 +139,7 @@ A `PlanItem` is an estimated future item such as a hotel budget. It does not aff
 
 ### ChecklistItem
 
-A `ChecklistItem` is a non-financial task within a Goal or later Plan and never affects account balances. Issue #25 tracks completion per item and derives progress as completed count over total count. A Goal can be marked complete only with at least one item and every item complete. Reopen a completed Goal before changing its checklist. Archived Goals retain their checklist and are read-only while archived; the owner can restore one without losing its steps.
+A `ChecklistItem` is a non-financial task within a Goal or later Plan and never affects account balances. Issue #25 tracks completion per item and derives progress as completed count over total count. A Goal can be marked complete only with at least one item and every item complete. Reopen a completed Goal before changing its checklist. Archived Goals retain their checklist and are read-only while archived; the owner can restore one without losing its steps. Accepted [ADR-021](adr/ADR-021-goal-soft-delete.md) permits a separate confirmed Delete even while archived.
 
 ### Planning Invariants
 
@@ -266,3 +266,9 @@ Accepted [ADR-020](adr/ADR-020-atomic-financial-event-edit-revisions.md) keeps o
 [History Balance Design](HISTORY_BALANCE_DESIGN.md) applies ADR-018/020 to complete current account ledgers. Ascending UTC occurrence/event-ID order determines each post-event account position; a Transfer retains one event and two independent positions. Pre-anchor values are reconstructed from recorded history, not verified bank balances. Unconfirmed legacy positions, Voided effects and historical int64 overflow return explicit unavailable values. Deleted and audit-only records never enter the calculation. Current account-card balances are not substituted for historical values.
 
 A read-only repeatable-read projection carries same-snapshot labels/timezone and an owner-bound epoch/revision token for stable keyset paging. This operational metadata is not a new financial fact, write precondition or export field. It advances with actual Finance changes, not replay/no-ops; changed pages require explicit refresh. Normal JSON/CSV v1/v2 remains current visible state, unchanged.
+
+## Goal deletion (Issue #38)
+
+A nullable UTC `goals.deleted_at` is terminal application Soft Delete, distinct from archive/completion. Active, completed and archived Goals can be deleted. Retain the parent and every current checklist row internally. Ordinary list/detail/Today/export reads exclude the marked parent and children; ordinary mutations return safe not-found. The owner may repeat Delete with 204 without changing the original marker. All competing Goal/checklist writes serialize on the parent row; no financial balance or History revision changes.
+
+Accepted ADR-021 narrowly permits this newly deleted state to be omitted from normal JSON v1/v2 without changing their schema/goldens. Visible archived/completed Goals remain exported. Normal JSON is not a database backup; internal storage/backups/earlier exports can retain deleted Goals and an old restore may resurface them. No Trash/undelete or physical-erasure promise is made.

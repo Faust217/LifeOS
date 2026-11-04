@@ -795,6 +795,27 @@ paths:
         "404": { $ref: "#/components/responses/GoalNotFound" }
         "500": { $ref: "#/components/responses/GoalInternalError" }
         "503": { $ref: "#/components/responses/GoalUnavailable" }
+    delete:
+      tags: [Goals]
+      summary: Soft delete an owned Goal and hide its retained checklist
+      description: >-
+        Empty body and query. Active, completed and archived Goals are eligible.
+        First and repeat deletion of the same retained owned Goal return empty 204;
+        repeat deletion preserves the first deletion timestamp. Unknown or foreign Goals
+        return 404. Deleted Goals are unavailable to ordinary reads and other mutations.
+        Every attempt repeats session, Origin, CSRF and owner checks. No financial idempotency key.
+      operationId: deleteGoal
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/GoalID" }, { $ref: "#/components/parameters/MoneyOrigin" }, { $ref: "#/components/parameters/MoneyCSRF" }]
+      responses:
+        "204":
+          description: Goal is deleted; no content or receipt. Retained checklist rows are unchanged.
+        "400": { $ref: "#/components/responses/GoalBadRequest" }
+        "401": { $ref: "#/components/responses/GoalUnauthorized" }
+        "403": { $ref: "#/components/responses/GoalForbidden" }
+        "404": { $ref: "#/components/responses/GoalNotFound" }
+        "500": { $ref: "#/components/responses/GoalInternalError" }
+        "503": { $ref: "#/components/responses/GoalUnavailable" }
   /api/v1/goals/{goalID}/rename:
     post:
       tags: [Goals]

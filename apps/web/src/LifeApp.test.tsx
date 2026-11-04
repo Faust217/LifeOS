@@ -41,7 +41,7 @@ describe("LifeOS application shell", () => {
     expect(money).not.toContain("MYR 0.00");
     expect(plans).toContain("Loading your Goals");
     expect(plans).not.toContain("Build a reading habit");
-    expect(plans).toContain("<h1>Plans</h1>");
+    expect(plans).toContain('<h1 id="plans-title" tabindex="-1">Plans</h1>');
     expect(plans).not.toContain("Give your goals room to grow");
   });
 

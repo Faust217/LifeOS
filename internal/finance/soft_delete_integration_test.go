@@ -312,9 +312,7 @@ func TestFinanceSoftDelete(t *testing.T) {
 	if err == nil {
 		t.Fatal("v6 down migration exposed deleted rows")
 	}
-	if err := runner.Steps(-1); err == nil {
-		t.Fatal("v9 down discarded financial request keys")
-	}
+	assertPublishedFinanceDownRefused(t, pool, "000009_financial_write_idempotency.down.sql")
 	if err := pool.QueryRow(ctx, `SELECT deleted_at FROM financial_events WHERE id = $1`, failed.ID).Scan(&deletedAt); err != nil || deletedAt == nil {
 		t.Fatalf("failed down changed marker=%v err=%v", deletedAt, err)
 	}

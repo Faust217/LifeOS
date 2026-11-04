@@ -27,11 +27,15 @@ import (
 
 const goalTestOrigin = "http://127.0.0.1:4173"
 
-func goalTestDatabase(t *testing.T) (*pgxpool.Pool, *migrate.Migrate) {
+func goalTestDatabase(t *testing.T, keys ...string) (*pgxpool.Pool, *migrate.Migrate) {
 	t.Helper()
-	dsn := os.Getenv("LIFEOS_GOALS_TEST_DATABASE_URL")
+	key := "LIFEOS_GOALS_TEST_DATABASE_URL"
+	if len(keys) > 0 {
+		key = keys[0]
+	}
+	dsn := os.Getenv(key)
 	if dsn == "" {
-		t.Skip("set LIFEOS_GOALS_TEST_DATABASE_URL to a fresh disposable *_test PostgreSQL database")
+		t.Skipf("set %s to a fresh disposable *_test PostgreSQL database", key)
 	}
 	parsed, err := url.Parse(dsn)
 	if err != nil || !strings.HasSuffix(strings.TrimPrefix(parsed.Path, "/"), "_test") {

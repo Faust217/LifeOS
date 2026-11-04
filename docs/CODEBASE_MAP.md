@@ -1,6 +1,6 @@
 # LifeOS Codebase Map
 
-**Current code:** Issues #26-#35 are delivered. Issue #36 complete-ledger historical balances, Option B and continuous History are implemented with forward migration v11 and accepted for final delivery on 2026-11-04. Final regressions and Product Owner manual 390px review passed; 320px/physical mobile/native automation remain unverified. This guide maps actual code; accepted ADRs and [History Balance Design](HISTORY_BALANCE_DESIGN.md) define the rules.
+**Current code:** Issues #26–#36 are delivered. Issue #38 Goal Delete is complete under Accepted ADR-021 with forward migration v12. Final automated/API checks passed; the Product Owner manually verified deletion and approved delivery on 2026-11-04. Full rendered 320px/390px/desktop, keyboard/focus and physical-mobile coverage remains incomplete. This guide maps actual code; accepted ADRs and [History Balance Design](HISTORY_BALANCE_DESIGN.md) define the rules.
 
 ## Start here
 
@@ -9,7 +9,7 @@
 | Web | [`apps/web/src/main.tsx`](../apps/web/src/main.tsx) mounts [`App`](../apps/web/src/LifeApp.tsx) through [`App.tsx`](../apps/web/src/App.tsx). `LifeApp.tsx` confirms the session before rendering [`AuthenticatedShell`](../apps/web/src/LifeApp.tsx). [`navigation.ts`](../apps/web/src/navigation.ts) resolves Today, Money, Plans, Me, and Goal detail URLs. [`lifeos.css`](../apps/web/src/lifeos.css), [`money.css`](../apps/web/src/money.css), and [`goals.css`](../apps/web/src/goals.css) carry the Sage Green UI. |
 | API | [`cmd/lifeos-api/main.go`](../cmd/lifeos-api/main.go) `run` creates services and registers identity, Finance, Planning and Export on one `/api/v1` chi router. [`httpapi.NewRouter`](../internal/platform/httpapi/router.go) mounts it beside health/readiness and request middleware. |
 | Identity | [`internal/identity/auth.go`](../internal/identity/auth.go) owns Google OIDC, sessions, `Auth.RequireRead`, and `Auth.RequireMutation`; [`owner.go`](../internal/identity/owner.go) defines the server-derived `OwnerID`. [`repository.go`](../internal/identity/repository.go) persists identity and sessions. [`cmd/lifeos-admin/main.go`](../cmd/lifeos-admin/main.go) is the trusted local invitation operator. |
-| Persistence | [`database.OpenPostgreSQL`](../internal/platform/database/postgres.go) opens the pool. [`db/migrations/`](../db/migrations/) holds numbered SQL; [`cmd/lifeos-migrate/main.go`](../cmd/lifeos-migrate/main.go) applies or reports them. v2/v3 add identity/sessions; v4 adds Money; v5 adds Goals; v6 adds the nullable Finance Soft Delete marker; v7 adds nullable owner `time_zone`; v8 adds dated opening balances; v9 adds financial request markers; v10 adds immutable event snapshots; v11 adds owner history versions and old-writer fencing. [`migrations.CurrentVersion`](../internal/platform/migrations/version.go) makes `/readyz` require v11. |
+| Persistence | [`database.OpenPostgreSQL`](../internal/platform/database/postgres.go) opens the pool. [`db/migrations/`](../db/migrations/) holds numbered SQL; [`cmd/lifeos-migrate/main.go`](../cmd/lifeos-migrate/main.go) applies or reports them. v2/v3 add identity/sessions; v4 adds Money; v5 adds Goals; v6 adds the nullable Finance Soft Delete marker; v7 adds nullable owner `time_zone`; v8 adds dated opening balances; v9 adds financial request markers; v10 adds immutable event snapshots; v11 adds owner history versions and old-writer fencing; v12 adds the nullable Goal deletion marker. [`migrations.CurrentVersion`](../internal/platform/migrations/version.go) makes `/readyz` require v12. |
 | Contracts and deployment | [`api/openapi/openapi.yaml`](../api/openapi/openapi.yaml) is the API contract; [`apps/web/src/api/generated/schema.ts`](../apps/web/src/api/generated/schema.ts) is generated from it. [`deploy/compose.yaml`](../deploy/compose.yaml) starts PostgreSQL, migration job, API, and web; the [`API`](../deploy/api.Dockerfile) and [`web`](../deploy/web.Dockerfile) Dockerfiles build their images. |
 
 ## Feature paths
@@ -295,7 +295,7 @@ flowchart TD
 - [`history_http.go`](../internal/finance/history_http.go) `privateHistoryRead` surrounds `Auth.RequireRead`; `moneyHandler.history` dispatches to `runningHistory` only for opt-in mode. The handler rejects unknown/duplicate/offset/body inputs and returns a complete projection; privacy headers also cover early guard failures.
 - [`history_page.go`](../internal/finance/history_page.go) `Service.HistoryPage` validates the query/canonical cursor and bounds the read. `repository.historyPage` opens one read-only REPEATABLE READ transaction, reads owner metadata and `identity.ExportProfile`, checks `historyProjectionToken`, selects keyset event IDs and obtains complete current children through `readEventInTx`. `readHistoryContexts` returns same-snapshot referenced labels; `readRunningBalancesInTx` applies exact numeric windows over complete relevant account partitions before selecting page events. Big-integer final range checking returns null per overflowing position. No audit-only or deleted rows enter the window.
 - [`history_write.go`](../internal/finance/history_write.go) `lockFinanceOwner` preserves the ADR-019 advisory key and sets the transaction-local v11 marker. `executeFinancialWrite` and `repository.withHistoryMutation` share it. `bumpHistoryRevision` runs once after actual ledger/management changes, in the same commit; existing-key replay, same-name rename and already-deleted no-op do not advance it. Counter failure rolls back domain state, audit and key registration.
-- [`000011_finance_history_revisions.up.sql`](../db/migrations/000011_finance_history_revisions.up.sql) adds owner/epoch/counter metadata, waits for old DML before baseline creation, and fences unmarked old writers. Down locks before refusing nonzero counters; baseline-only re-up gets new epochs. Readiness expects v11. Published migrations v1-v10 and normal export v1/v2 are unchanged.
+- [`000011_finance_history_revisions.up.sql`](../db/migrations/000011_finance_history_revisions.up.sql) adds owner/epoch/counter metadata, waits for old DML before baseline creation, and fences unmarked old writers. Down locks before refusing nonzero counters; baseline-only re-up gets new epochs. Readiness expected v11 at #36; #38 now expects v12. Published migrations v1-v10 and normal export v1/v2 are unchanged.
 - [`history_integration_test.go`](../internal/finance/history_integration_test.go), [`history_reference_test.go`](../internal/finance/history_reference_test.go) and [`history_page_test.go`](../internal/finance/history_page_test.go) and `history_optionb_test.go` cover exact 400 -> 800 reconstruction, 25-row append/edit/delete/reorder scenarios, independent many-page reconstruction, strict cursor bytes, owner/timezone boundaries, coherent concurrent reads, rollback/replay, populated upgrade/fences and down guards. [`history_performance_test.go`](../internal/finance/history_performance_test.go) is an explicitly isolated opt-in 10k/100k workload. Existing fixture pools alone set the v11 marker for deliberate SQL upgrade/fault fixtures; production pools do not.
 
 ```mermaid
@@ -315,4 +315,30 @@ flowchart TD
   N --> O[bumpHistoryRevision / atomic commit]
 ```
 
-See [History Balance Design](HISTORY_BALANCE_DESIGN.md) and the [English journal](../learning/journal/2026-11-02-historical-account-balances.md) for actual inputs/errors/tests, benchmark resources and browser limitations. Issue #36 passed final delivery checks and Product Owner manual 390px review on 2026-11-04; its GitHub record will carry the delivery SHA/closure after verified delivery. No subsequent implementation is authorized.
+See [History Balance Design](HISTORY_BALANCE_DESIGN.md) and the [English journal](../learning/journal/2026-11-02-historical-account-balances.md) for actual inputs/errors/tests, benchmark resources and browser limitations. Issue #36 passed final delivery checks and Product Owner manual 390px review on 2026-11-04 and closed at `98ec25af204d55c8928d7bcb465a0e1dff464445`. Issue #38 is separately authorized below.
+
+## Safe Goal Delete (#38; Product Owner accepted)
+
+`GoalsPage.openDelete` / `cancelDelete` / `deleteSelectedGoal` / `finishDelete` in [GoalsPage.tsx](../apps/web/src/GoalsPage.tsx) keep a fixed-ID in-memory attempt, preserve mounted GoalCard drafts, block competing mutations and handle status/focus/navigation. [GoalDeletePanel.tsx](../apps/web/src/GoalDeletePanel.tsx) is an inline labelled confirmation, not a modal. [goalDeleteState.ts](../apps/web/src/goalDeleteState.ts) distinguishes definite errors, uncertain results, still-visible Check and generic unavailability. [api/goals.ts](../apps/web/src/api/goals.ts) `deleteGoal` uses explicit 204-only handling and a 15-second client wait; ordinary Goal-returning calls still require JSON.
+
+```mermaid
+flowchart TD
+  A[GoalCard Delete action] --> B[GoalsPage.openDelete / GoalDeletePanel]
+  B --> C[GoalsPage.deleteSelectedGoal]
+  C --> D[api deleteGoal / goalRequest]
+  D --> E[DELETE goals/goalID]
+  E --> F[Auth.RequireMutation]
+  F --> G[goalHandler.deleteGoal / Service.DeleteGoal]
+  G --> H[repository.deleteGoal / owned parent FOR UPDATE]
+  H --> I[(v12 goals.deleted_at marker once)]
+  I --> J[commit / empty 204]
+  J --> K[finishDelete / remove local Goal / Plans status focus]
+  C -->|uncertain| L[goalDeleteFailure / same-ID Check or Retry]
+  M[Plans / Today listGoals] --> N[repository.listGoals RR eligible parents and children]
+  O[Service.Generate JSON] --> P[planning.WriteExport same RR eligible-parent set]
+```
+
+- [planning/http.go](../internal/planning/http.go) `RegisterRoutes` wraps `goalHandler.deleteGoal` in the existing mutation guard; `Service.DeleteGoal` validates owner/UUID before `repository.deleteGoal`. Its bounded READ COMMITTED transaction locks the owned parent including an existing marker, writes marker/update timestamp only once and commits. Parent mutation predicates and `lockGoal` reject deleted parents. [repository.go](../internal/planning/repository.go) `listGoals` filters parents and checklist via the same eligible owner set in RR; `GetGoal`, Plans and Today reuse it.
+- [planning/export.go](../internal/planning/export.go) `WriteExport` excludes marked parents/children in the coordinator's shared RR snapshot under Accepted ADR-021's narrow ADR-017 exception. Visible active/completed/archived data, v1/v2 schemas/goldens and Finance CSV are unchanged. Finance calculations, history revisions, audit/key state and pending frontend commands are not modified.
+- [v12 up/down](../db/migrations/000012_goal_soft_delete.up.sql) adds only the nullable marker; down locks/refuses marked Goals. Future activation must drain old Planning readers/writers/export processes; v11 Finance fencing does not cover Goals.
+- [delete_integration_test.go](../internal/planning/delete_integration_test.go), [delete_race_test.go](../internal/planning/delete_race_test.go), [export integration](../internal/exporting/export_integration_test.go), [GoalDeletePanel.test.tsx](../apps/web/src/GoalDeletePanel.test.tsx) and [Goals API tests](../apps/web/src/api/goals.test.ts) cover the contract. See the [English function-level journal](../learning/journal/2026-11-04-safe-goal-delete.md) for exact inputs/outputs, errors, evidence and browser limits.

@@ -60,6 +60,7 @@ func RegisterRoutes(router chi.Router, auth *identity.Auth, service *Service) {
 	router.MethodFunc(http.MethodGet, "/goals", auth.RequireRead(h.listGoals))
 	router.MethodFunc(http.MethodPost, "/goals", auth.RequireMutation(h.createGoal))
 	router.MethodFunc(http.MethodGet, "/goals/{goalID}", auth.RequireRead(h.getGoal))
+	router.MethodFunc(http.MethodDelete, "/goals/{goalID}", auth.RequireMutation(h.deleteGoal))
 	router.MethodFunc(http.MethodPost, "/goals/{goalID}/rename", auth.RequireMutation(h.renameGoal))
 	router.MethodFunc(http.MethodPost, "/goals/{goalID}/completion", auth.RequireMutation(h.completeGoal))
 	router.MethodFunc(http.MethodPost, "/goals/{goalID}/archive", auth.RequireMutation(h.archiveGoal))
@@ -100,6 +101,22 @@ func (h goalHandler) getGoal(w http.ResponseWriter, r *http.Request, owner ident
 		return
 	}
 	writeGoalJSON(w, http.StatusOK, goalDTO(goal))
+}
+
+func (h goalHandler) deleteGoal(w http.ResponseWriter, r *http.Request, owner identity.OwnerID) {
+	if !validQuery(r) {
+		writeGoalError(w, ErrInvalidInput)
+		return
+	}
+	if !emptyGoalBody(w, r) {
+		return
+	}
+	if err := h.service.DeleteGoal(r.Context(), owner, chi.URLParam(r, "goalID")); err != nil {
+		writeGoalError(w, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h goalHandler) createGoal(w http.ResponseWriter, r *http.Request, owner identity.OwnerID) {

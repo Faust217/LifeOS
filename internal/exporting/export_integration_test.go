@@ -606,6 +606,127 @@ func TestOwnerExportIntegration(t *testing.T) {
 		}
 		t.Logf("complete CSV ZIP artifact: %d bytes", len(data))
 	})
+	t.Run("Goal soft deletion preserves normal v1 v2 contracts and snapshots", func(t *testing.T) {
+		visible := []planning.Goal{}
+		for _, state := range []string{"active", "completed", "archived"} {
+			g, e := p.CreateGoal(ctx, owner, "Export visible "+state)
+			if e != nil {
+				t.Fatal(e)
+			}
+			g, e = p.AddItem(ctx, owner, g.ID, "Export retained step")
+			if e != nil {
+				t.Fatal(e)
+			}
+			if state == "completed" {
+				g, e = p.SetItemCompleted(ctx, owner, g.ID, g.Items[0].ID, true)
+				if e != nil {
+					t.Fatal(e)
+				}
+				g, e = p.SetGoalCompleted(ctx, owner, g.ID, true)
+				if e != nil {
+					t.Fatal(e)
+				}
+			}
+			if state == "archived" {
+				g, e = p.ArchiveGoal(ctx, owner, g.ID)
+				if e != nil {
+					t.Fatal(e)
+				}
+			}
+			visible = append(visible, g)
+		}
+		csvBefore, e := service.Generate(ctx, owner, "finance_csv", 2)
+		if e != nil {
+			t.Fatal(e)
+		}
+		beforeFiles := unzip(t, csvBefore.Data)
+		csvBefore.Close()
+		for _, version := range []int{1, 2} {
+			g, e := p.CreateGoal(ctx, owner, "Deleted export canary")
+			if e != nil {
+				t.Fatal(e)
+			}
+			g, e = p.AddItem(ctx, owner, g.ID, "Deleted checklist canary")
+			if e != nil {
+				t.Fatal(e)
+			}
+			reached, release := make(chan struct{}), make(chan struct{})
+			service.afterCollection = func(name string) error {
+				if name == "accounts" {
+					close(reached)
+					<-release
+				}
+				return nil
+			}
+			result := make(chan *Artifact, 1)
+			failure := make(chan error, 1)
+			go func() {
+				a, e := service.Generate(ctx, owner, "json", version)
+				if e != nil {
+					failure <- e
+				} else {
+					result <- a
+				}
+			}()
+			<-reached
+			if e = p.DeleteGoal(ctx, owner, g.ID); e != nil {
+				t.Fatal(e)
+			}
+			close(release)
+			var old *Artifact
+			select {
+			case old = <-result:
+			case e = <-failure:
+				t.Fatal(e)
+			}
+			service.afterCollection = nil
+			root := readJSON(old.Data)
+			old.Close()
+			planningRows := root["planning"].(map[string]any)
+			findRecord(t, planningRows["goals"], g.ID)
+			findRecord(t, planningRows["checklist_items"], g.Items[0].ID)
+			for _, kept := range visible {
+				record := findRecord(t, planningRows["goals"], kept.ID)
+				if len(record) != 6 {
+					t.Fatal("Goal schema changed")
+				}
+				findRecord(t, planningRows["checklist_items"], kept.Items[0].ID)
+			}
+			fresh, e := service.Generate(ctx, owner, "json", version)
+			if e != nil {
+				t.Fatal(e)
+			}
+			if bytes.Contains(fresh.Data, []byte(g.ID)) || bytes.Contains(fresh.Data, []byte(g.Items[0].ID)) || bytes.Contains(fresh.Data, []byte("deleted_at")) {
+				t.Fatal("deleted Goal/checklist/marker leaked")
+			}
+			root = readJSON(fresh.Data)
+			fresh.Close()
+			planningRows = root["planning"].(map[string]any)
+			counts := root["record_counts"].(map[string]any)
+			if counts["goals"] != float64(len(planningRows["goals"].([]any))) || counts["checklist_items"] != float64(len(planningRows["checklist_items"].([]any))) {
+				t.Fatal("deleted counts leaked")
+			}
+			for _, item := range planningRows["checklist_items"].([]any) {
+				findRecord(t, planningRows["goals"], item.(map[string]any)["goal_id"].(string))
+			}
+		}
+		for _, g := range visible {
+			if e := p.DeleteGoal(ctx, owner, g.ID); e != nil {
+				t.Fatal(e)
+			}
+		}
+		csvAfter, e := service.Generate(ctx, owner, "finance_csv", 2)
+		if e != nil {
+			t.Fatal(e)
+		}
+		afterFiles := unzip(t, csvAfter.Data)
+		csvAfter.Close()
+		for _, name := range []string{"accounts.csv", "categories.csv", "transactions.csv", "movements.csv", "allocations.csv"} {
+			if !bytes.Equal(beforeFiles[name], afterFiles[name]) {
+				t.Fatal("Goal deletion changed Finance CSV", name)
+			}
+		}
+	})
 	t.Run("v2 dates and v1 compatibility", func(t *testing.T) {
 		at := now.Add(time.Microsecond)
 		preview, err := f.PreviewOpeningBalance(ctx, owner, bank.ID, at, nil)

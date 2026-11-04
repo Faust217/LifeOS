@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 
 import {
-  addGoalItem, archiveGoal, createGoal, GoalApiError, listGoals, removeGoalItem, restoreGoal,
+  addGoalItem, archiveGoal, createGoal, deleteGoal, getGoal, GoalApiError, listGoals, removeGoalItem, restoreGoal,
   renameGoal, renameGoalItem, setGoalCompletion, setGoalItemCompletion, type Goal,
 } from "./api/goals";
 import { Icon } from "./Icons";
+import { GoalDeletePanel } from "./GoalDeletePanel";
+import { beginGoalDelete, goalDeleteChecked, goalDeleteFailure, type GoalDeleteAttempt } from "./goalDeleteState";
 import "./goals.css";
 
 type View = { status: "loading" } | { status: "error"; message: string } | { status: "ready"; goals: Goal[] };
@@ -28,12 +30,27 @@ export function GoalsPage({ goalID = null, csrfToken, onSessionExpired }: { goal
   const [notice, setNotice] = useState("");
   const [pending, setPending] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [deletion, setDeletion] = useState<GoalDeleteAttempt | null>(null);
+  const deleteSequence = useRef(0);
   const pendingRef = useRef(false);
   const requestSequence = useRef(0);
   const createButtonRef = useRef<HTMLButtonElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { if (showCreate) titleInputRef.current?.focus(); }, [showCreate]);
+  useEffect(() => {
+    const message = window.location.hash === "#goal-deleted" ? "Goal deleted." : window.location.hash === "#goal-unavailable" ? "This Goal is no longer available." : "";
+    if (message) {
+      setNotice(message);
+      window.history.replaceState(window.history.state, "", window.location.pathname + window.location.search);
+      window.requestAnimationFrame(() => document.getElementById("plans-title")?.focus());
+    }
+    return () => { deleteSequence.current += 1; };
+  }, []);
+  useEffect(() => {
+    if (deletion?.phase === "confirm") document.getElementById("goal-delete-keep")?.focus();
+    else if (deletion?.phase === "error" || deletion?.phase === "uncertain") document.getElementById("goal-delete-error")?.focus();
+  }, [deletion?.phase]);
 
   function openCreate() { setShowCreate(true); setCreateError(""); }
   function closeCreate() {
@@ -68,6 +85,7 @@ export function GoalsPage({ goalID = null, csrfToken, onSessionExpired }: { goal
   }, [refresh]);
 
   async function mutate(work: () => Promise<Goal>, message: string): Promise<void> {
+    if (deletion) throw new Error("Finish checking this Goal deletion before another change.");
     if (pendingRef.current) return;
     pendingRef.current = true;
     setPending(true);
@@ -88,6 +106,47 @@ export function GoalsPage({ goalID = null, csrfToken, onSessionExpired }: { goal
     }
   }
 
+  function openDelete(goal: Goal) {
+    if (pendingRef.current || deletion) return;
+    setDeletion(beginGoalDelete(goal));
+  }
+  function cancelDelete() {
+    if (!deletion || deletion.uncertain || pendingRef.current) return;
+    const id = deletion.targetGoalID;
+    setDeletion(null);
+    window.requestAnimationFrame(() => document.getElementById(`goal-delete-${id}`)?.focus({ preventScroll: true }));
+  }
+  function finishDelete(attempt: GoalDeleteAttempt, unavailable = false) {
+    setDeletion({ ...attempt, phase: unavailable ? "unavailable" : "done", error: "" });
+    setView((current) => current.status === "ready" ? { status: "ready", goals: current.goals.filter((goal) => goal.id !== attempt.targetGoalID) } : current);
+    window.setTimeout(() => {
+      try { window.location.replace(unavailable ? "/plans#goal-unavailable" : "/plans#goal-deleted"); }
+      catch { document.getElementById("goal-delete-result")?.focus(); }
+    }, 0);
+  }
+  async function deleteSelectedGoal(checkOnly = false) {
+    if (!deletion || pendingRef.current || deletion.phase === "done" || deletion.phase === "unavailable") return;
+    const attempt = deletion;
+    const request = ++deleteSequence.current;
+    pendingRef.current = true;
+    setPending(true);
+    setDeletion({ ...attempt, phase: checkOnly ? "checking" : "sending", error: "" });
+    try {
+      if (checkOnly) await getGoal(attempt.targetGoalID);
+      else await deleteGoal(csrfToken, attempt.targetGoalID);
+      if (request !== deleteSequence.current) return;
+      if (checkOnly) setDeletion(goalDeleteChecked(attempt));
+      else finishDelete(attempt);
+    } catch (cause) {
+      if (request !== deleteSequence.current) return;
+      if (cause instanceof GoalApiError && cause.status === 404) finishDelete(attempt, true);
+      else setDeletion(goalDeleteFailure(attempt, cause));
+      if (cause instanceof GoalApiError && cause.status === 401) onSessionExpired();
+    } finally {
+      if (request === deleteSequence.current) { pendingRef.current = false; setPending(false); }
+    }
+  }
+
   async function submitGoal(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setCreateError("");
@@ -105,16 +164,17 @@ export function GoalsPage({ goalID = null, csrfToken, onSessionExpired }: { goal
   const selected = goalID ? goals?.find((goal) => goal.id.toLowerCase() === goalID.toLowerCase()) : undefined;
   return <div className="page-stack goals-page">
     {goalID && <a className="goal-back-link" href="/plans">← All Goals</a>}
-    <header className="goals-heading"><h1>Plans</h1>{goals && !goalID && goals.length > 0 && !showCreate && <button ref={createButtonRef} className="button button-primary" type="button" onClick={openCreate}>+ New goal</button>}</header>
+    <header className="goals-heading"><h1 id="plans-title" tabIndex={-1}>Plans</h1>{goals && !goalID && goals.length > 0 && !showCreate && <button ref={createButtonRef} className="button button-primary" type="button" onClick={openCreate}>+ New goal</button>}</header>
     {view.status === "loading" && <section className="goals-state" role="status" aria-live="polite"><span className="loading-orb" aria-hidden="true" /><h2>Loading your Goals…</h2><p>Checking your latest steps.</p></section>}
     {view.status === "error" && <section className="goals-state" role="alert"><Icon name="shield" /><h2>Goals could not load.</h2><p>{view.message}</p><button className="button button-primary" type="button" onClick={() => void refresh()}>Try again</button></section>}
-    {goals && goalID && !selected && <section className="goals-state" role="alert"><h2>Goal not found.</h2><p>It may have been removed or belongs to another account.</p><a className="button button-outline" href="/plans">Return to Goals</a></section>}
+    {goals && goalID && !selected && !deletion && <section className="goals-state" role="alert"><h2>Goal not found.</h2><p>It may have been removed or belongs to another account.</p><a className="button button-outline" href="/plans">Return to Goals</a></section>}
     {goals && goalID && selected && <>
       {notice && <p className="goal-notice" role="status">{notice}</p>}
       {readError && <div className="goal-read-error"><p role="alert">{readError}</p><button type="button" className="button button-outline" onClick={() => void refresh()}>Refresh Goal</button></div>}
       {refreshing && <p className="goal-refreshing" role="status">Refreshing Goal…</p>}
-      <GoalCard goal={selected} csrfToken={csrfToken} pending={pending} mutate={mutate} />
+      <GoalCard key={selected.id} goal={selected} csrfToken={csrfToken} pending={pending || !!deletion} mutate={mutate} onDelete={() => openDelete(selected)} />
     </>}
+    {deletion && <GoalDeletePanel attempt={deletion} onCancel={cancelDelete} onDelete={() => void deleteSelectedGoal()} onCheck={() => void deleteSelectedGoal(true)} />}
     {goals && !goalID && <>
       {showCreate && <section className="goal-create-card" aria-labelledby="goal-create-title"><h2 id="goal-create-title">New goal</h2>
         <form onSubmit={(event) => void submitGoal(event)}><label htmlFor="goal-new-title">Goal title</label><input ref={titleInputRef} id="goal-new-title" value={title} onChange={(event) => { setTitle(event.target.value); setCreateError(""); }} maxLength={160} required placeholder="Build a reading habit" aria-invalid={!!createError} aria-describedby={createError ? "goal-create-error" : undefined} disabled={pending} /><p className="goal-soft-note">Add checklist steps after creating the Goal.</p>{createError && <p id="goal-create-error" className="goal-error" role="alert">{createError}</p>}<div className="goal-create-actions"><button className="button button-outline" type="button" disabled={pending} onClick={closeCreate}>Cancel</button><button className="button button-primary" type="submit" disabled={pending}>{pending ? "Saving…" : "Create Goal"}</button></div></form>
@@ -141,7 +201,7 @@ function GoalSummary({ goal }: { goal: Goal }) {
   </a>;
 }
 
-function GoalCard({ goal, csrfToken, pending, mutate }: { goal: Goal; csrfToken: string; pending: boolean; mutate: (work: () => Promise<Goal>, message: string) => Promise<void> }) {
+export function GoalCard({ goal, csrfToken, pending, mutate, onDelete }: { goal: Goal; csrfToken: string; pending: boolean; mutate: (work: () => Promise<Goal>, message: string) => Promise<void>; onDelete: () => void }) {
   const [renameOpen, setRenameOpen] = useState(false);
   const [titleDraft, setTitleDraft] = useState(goal.title);
   const [itemDraft, setItemDraft] = useState("");
@@ -178,6 +238,7 @@ function GoalCard({ goal, csrfToken, pending, mutate }: { goal: Goal; csrfToken:
     {!archived && <div className="goal-footer"><div className="goal-button-row">{completed ? <button type="button" className="button button-outline" onClick={() => void perform(() => setGoalCompletion(csrfToken, goal.id, false), "Goal reopened.")} disabled={pending}>Reopen Goal</button> : <button type="button" className="button button-primary" onClick={() => void perform(() => setGoalCompletion(csrfToken, goal.id, true), "Goal completed.")} disabled={pending || goal.total_count === 0 || goal.completed_count !== goal.total_count}>Complete Goal</button>}{!completed && (goal.total_count === 0 || goal.completed_count !== goal.total_count) && <span className="goal-soft-note">Finish every step first.</span>}</div>
       {archiveConfirm ? <div className="goal-remove-confirm"><p>Archive this Goal? Its checklist stays available in Archived Goals.</p><div className="goal-button-row"><button className="button button-danger" type="button" onClick={() => void perform(() => archiveGoal(csrfToken, goal.id), "Goal archived.", () => setArchiveConfirm(false))} disabled={pending}>Confirm archive</button><button className="button button-outline" type="button" onClick={() => setArchiveConfirm(false)} disabled={pending}>Keep Goal</button></div></div> : <button type="button" className="goal-link-action" onClick={() => setArchiveConfirm(true)} disabled={pending}>Archive Goal</button>}</div>}
     {archived && <div className="goal-footer"><p className="goal-soft-note">This Goal and its checklist are preserved.</p><button type="button" className="button button-outline" disabled={pending} onClick={() => void perform(() => restoreGoal(csrfToken, goal.id), "Goal restored.")}>Restore Goal</button></div>}
+    <button id={`goal-delete-${goal.id}`} type="button" className="goal-link-action goal-delete-action" disabled={pending} onClick={onDelete}>Delete Goal</button>
     {error && <p className="goal-error" role="alert">{error}</p>}
   </article>;
 }

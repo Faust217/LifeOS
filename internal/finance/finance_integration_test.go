@@ -22,8 +22,35 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// Check the intended immutable guard, rather than whichever migration is newest.
+// The dedicated transaction is always rolled back, so later migrations stay put.
+func assertPublishedFinanceDownRefused(t *testing.T, pool *pgxpool.Pool, filename string) {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join("../../db/migrations", filename))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx, err := pool.Begin(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Some published scripts own their transaction. Remove only that outer
+	// wrapper so even an unexpectedly passing guard cannot commit this test.
+	sql := strings.TrimSpace(string(data))
+	if strings.HasPrefix(sql, "BEGIN;") && strings.HasSuffix(sql, "COMMIT;") {
+		sql = strings.TrimSuffix(strings.TrimPrefix(sql, "BEGIN;"), "COMMIT;")
+	}
+	_, err = tx.Exec(context.Background(), sql)
+	_ = tx.Rollback(context.Background())
+	var guard *pgconn.PgError
+	if !errors.As(err, &guard) || guard.Code != "P0001" {
+		t.Fatalf("published down guard %s: %v", filename, err)
+	}
+}
 
 func financeTestDatabase(t *testing.T, environmentKey string) (*pgxpool.Pool, *migrate.Migrate) {
 	t.Helper()
@@ -623,9 +650,7 @@ func TestFinanceMigrationAndLedger(t *testing.T) {
 		t.Fatal("populated v4 down discarded ledger history")
 	}
 	// A populated v9 down refuses to discard retry protection or the ledger.
-	if err := runner.Steps(-1); err == nil {
-		t.Fatal("idempotency down migration removed committed keys")
-	}
+	assertPublishedFinanceDownRefused(t, pool, "000009_financial_write_idempotency.down.sql")
 	var remaining int
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM financial_events WHERE owner_id = $1`, owner.String()).Scan(&remaining); err != nil || remaining < 8 {
 		t.Fatalf("down migration lost events: count=%d err=%v", remaining, err)

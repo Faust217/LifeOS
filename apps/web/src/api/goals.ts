@@ -23,30 +23,41 @@ function goalErrorMessage(status: number, code: GoalErrorCode | "network_error")
   }
 }
 
-async function goalRequest<T>(path: string, method: "GET" | "POST" | "DELETE", csrfToken?: string, body?: object): Promise<T> {
-  let response: Response;
+async function goalRequest<T>(path: string, method: "GET" | "POST" | "DELETE", csrfToken?: string, body?: object, noContent = false): Promise<T> {
+  const controller = noContent ? new AbortController() : undefined;
+  const timeout = controller ? setTimeout(() => controller.abort(), 15_000) : undefined;
   try {
-    response = await fetch(path, {
-      method,
-      credentials: "same-origin",
-      cache: "no-store",
-      headers: csrfToken === undefined ? undefined : {
-        "X-CSRF-Token": csrfToken,
-        ...(body === undefined ? {} : { "Content-Type": "application/json" }),
-      },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
-  } catch {
-    throw new GoalApiError(0, "network_error");
-  }
-  if (!response.ok) {
-    const payload = await response.json().catch(() => null) as { error?: { code?: GoalErrorCode } } | null;
-    throw new GoalApiError(response.status, payload?.error?.code ?? "internal_error");
-  }
-  try {
-    return await response.json() as T;
-  } catch {
-    throw new GoalApiError(response.status, "internal_error");
+    let response: Response;
+    try {
+      response = await fetch(path, {
+        method,
+        ...(controller ? { signal: controller.signal } : {}),
+        credentials: "same-origin",
+        cache: "no-store",
+        headers: csrfToken === undefined ? undefined : {
+          "X-CSRF-Token": csrfToken,
+          ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+        },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+    } catch {
+      throw new GoalApiError(0, "network_error");
+    }
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null) as { error?: { code?: GoalErrorCode } } | null;
+      throw new GoalApiError(response.status, payload?.error?.code ?? "internal_error");
+    }
+    if (noContent) {
+      if (response.status !== 204) throw new GoalApiError(response.status, "internal_error");
+      return undefined as T;
+    }
+    try {
+      return await response.json() as T;
+    } catch {
+      throw new GoalApiError(response.status, "internal_error");
+    }
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout);
   }
 }
 
@@ -55,6 +66,7 @@ const itemPath = (goalID: string, itemID: string) => `${goalPath(goalID)}/items/
 
 export const listGoals = () => goalRequest<components["schemas"]["GoalsResponse"]>("/api/v1/goals", "GET");
 export const getGoal = (id: string) => goalRequest<Goal>(goalPath(id), "GET");
+export const deleteGoal = (csrf: string, id: string) => goalRequest<void>(goalPath(id), "DELETE", csrf, undefined, true);
 export const createGoal = (csrf: string, title: string) => goalRequest<Goal>("/api/v1/goals", "POST", csrf, { title });
 export const renameGoal = (csrf: string, id: string, title: string) => goalRequest<Goal>(`${goalPath(id)}/rename`, "POST", csrf, { title });
 export const setGoalCompletion = (csrf: string, id: string, completed: boolean) => goalRequest<Goal>(`${goalPath(id)}/completion`, "POST", csrf, { completed });

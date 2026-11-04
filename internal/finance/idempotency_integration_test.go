@@ -557,9 +557,7 @@ func TestFinancialWriteIdempotencyIntegration(t *testing.T) {
 		token = csrf(cookie)
 		receipt(request("/events", body, key))
 	})
-	if err := runner.Steps(-1); err == nil {
-		t.Fatal("populated v9 down discarded committed keys")
-	}
+	assertPublishedFinanceDownRefused(t, pool, "000009_financial_write_idempotency.down.sql")
 }
 
 // Invoked twice by the parent integration test in distinct OS processes.
