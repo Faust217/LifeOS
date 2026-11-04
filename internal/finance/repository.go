@@ -60,7 +60,7 @@ func (r *repository) createAccountInTx(ctx context.Context, tx pgx.Tx, owner ide
 	if err != nil {
 		return Account{}, err
 	}
-	return account, nil
+	return account, bumpHistoryRevision(ctx, tx, owner)
 }
 
 func (r *repository) createCategory(ctx context.Context, owner identity.OwnerID, input CategoryInput) (Category, error) {
@@ -68,30 +68,25 @@ func (r *repository) createCategory(ctx context.Context, owner identity.OwnerID,
 	if err != nil {
 		return Category{}, err
 	}
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return Category{}, fmt.Errorf("begin category creation: %w", err)
-	}
-	defer tx.Rollback(ctx)
-	if err := lockCategoryNames(ctx, tx, owner); err != nil {
-		return Category{}, err
-	}
-	conflict, err := categoryNameExists(ctx, tx, owner, input.Kind, input.Name, "00000000-0000-0000-0000-000000000000")
-	if err != nil {
-		return Category{}, err
-	}
-	if conflict {
-		return Category{}, ErrConflict
-	}
-	_, err = tx.Exec(ctx, `INSERT INTO finance_categories (id, owner_id, name, kind)
+	err = r.withHistoryMutation(ctx, owner, func(ctx context.Context, tx pgx.Tx) (bool, error) {
+		if err := lockCategoryNames(ctx, tx, owner); err != nil {
+			return false, err
+		}
+		conflict, err := categoryNameExists(ctx, tx, owner, input.Kind, input.Name, "00000000-0000-0000-0000-000000000000")
+		if err != nil {
+			return false, err
+		}
+		if conflict {
+			return false, ErrConflict
+		}
+		_, err = tx.Exec(ctx, `INSERT INTO finance_categories (id, owner_id, name, kind)
 		VALUES ($1, $2, $3, $4)`, id, owner.String(), input.Name, input.Kind)
-	if err != nil {
-		return Category{}, fmt.Errorf("create category: %w", err)
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return Category{}, fmt.Errorf("commit category creation: %w", err)
-	}
-	return Category{ID: id, Name: input.Name, Kind: input.Kind}, nil
+		if err != nil {
+			return false, fmt.Errorf("create category: %w", err)
+		}
+		return true, nil
+	})
+	return Category{ID: id, Name: input.Name, Kind: input.Kind}, err
 }
 
 // A row lock on the owner serializes category name writes without changing the v4 schema.
@@ -113,56 +108,59 @@ func categoryNameExists(ctx context.Context, tx pgx.Tx, owner identity.OwnerID, 
 }
 
 func (r *repository) renameCategory(ctx context.Context, owner identity.OwnerID, categoryID, name string) (Category, error) {
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return Category{}, fmt.Errorf("begin category rename: %w", err)
-	}
-	defer tx.Rollback(ctx)
-	if err := lockCategoryNames(ctx, tx, owner); err != nil {
-		return Category{}, err
-	}
 	var category Category
-	var archived sql.NullTime
-	err = tx.QueryRow(ctx, `SELECT id, kind, archived_at FROM finance_categories
+	err := r.withHistoryMutation(ctx, owner, func(ctx context.Context, tx pgx.Tx) (bool, error) {
+		if err := lockCategoryNames(ctx, tx, owner); err != nil {
+			return false, err
+		}
+		var archived sql.NullTime
+		var previousName string
+		err := tx.QueryRow(ctx, `SELECT id, kind, archived_at,name FROM finance_categories
 		WHERE owner_id = $1 AND id = $2 FOR UPDATE`, owner.String(), categoryID).
-		Scan(&category.ID, &category.Kind, &archived)
-	if err != nil {
-		return Category{}, notFoundOr("find category", err)
-	}
-	conflict, err := categoryNameExists(ctx, tx, owner, category.Kind, name, categoryID)
-	if err != nil {
-		return Category{}, err
-	}
-	if conflict {
-		return Category{}, ErrConflict
-	}
-	_, err = tx.Exec(ctx, `UPDATE finance_categories SET name = $3, updated_at = now()
+			Scan(&category.ID, &category.Kind, &archived, &previousName)
+		if err != nil {
+			return false, notFoundOr("find category", err)
+		}
+		category.Name = name
+		if archived.Valid {
+			category.ArchivedAt = &archived.Time
+		}
+		if name == previousName {
+			return false, nil
+		}
+		conflict, err := categoryNameExists(ctx, tx, owner, category.Kind, name, categoryID)
+		if err != nil {
+			return false, err
+		}
+		if conflict {
+			return false, ErrConflict
+		}
+		_, err = tx.Exec(ctx, `UPDATE finance_categories SET name = $3, updated_at = now()
 		WHERE owner_id = $1 AND id = $2`, owner.String(), categoryID, name)
-	if err != nil {
-		return Category{}, fmt.Errorf("rename category: %w", err)
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return Category{}, fmt.Errorf("commit category rename: %w", err)
-	}
-	category.Name = name
-	if archived.Valid {
-		category.ArchivedAt = &archived.Time
-	}
-	return category, nil
+		if err != nil {
+			return false, fmt.Errorf("rename category: %w", err)
+		}
+		return true, nil
+	})
+	return category, err
 }
 
 func (r *repository) archiveCategory(ctx context.Context, owner identity.OwnerID, categoryID string) error {
-	var id string
-	err := r.pool.QueryRow(ctx, `UPDATE finance_categories SET archived_at = now(), updated_at = now()
+	return r.withHistoryMutation(ctx, owner, func(ctx context.Context, tx pgx.Tx) (bool, error) {
+		var id string
+		err := tx.QueryRow(ctx, `UPDATE finance_categories SET archived_at = now(), updated_at = now()
 		WHERE owner_id = $1 AND id = $2 AND archived_at IS NULL RETURNING id`, owner.String(), categoryID).Scan(&id)
-	return notFoundOr("archive category", err)
+		return err == nil, notFoundOr("archive category", err)
+	})
 }
 
 func (r *repository) restoreCategory(ctx context.Context, owner identity.OwnerID, categoryID string) error {
-	var id string
-	err := r.pool.QueryRow(ctx, `UPDATE finance_categories SET archived_at = NULL, updated_at = now()
+	return r.withHistoryMutation(ctx, owner, func(ctx context.Context, tx pgx.Tx) (bool, error) {
+		var id string
+		err := tx.QueryRow(ctx, `UPDATE finance_categories SET archived_at = NULL, updated_at = now()
 		WHERE owner_id = $1 AND id = $2 AND archived_at IS NOT NULL RETURNING id`, owner.String(), categoryID).Scan(&id)
-	return notFoundOr("restore category", err)
+		return err == nil, notFoundOr("restore category", err)
+	})
 }
 
 func (r *repository) listAccounts(ctx context.Context, owner identity.OwnerID) ([]Account, error) {
@@ -210,17 +208,21 @@ func (r *repository) listCategories(ctx context.Context, owner identity.OwnerID)
 }
 
 func (r *repository) archiveAccount(ctx context.Context, owner identity.OwnerID, accountID string) error {
-	var id string
-	err := r.pool.QueryRow(ctx, `UPDATE finance_accounts SET archived_at = now(), updated_at = now(),balance_revision=balance_revision+1
+	return r.withHistoryMutation(ctx, owner, func(ctx context.Context, tx pgx.Tx) (bool, error) {
+		var id string
+		err := tx.QueryRow(ctx, `UPDATE finance_accounts SET archived_at = now(), updated_at = now(),balance_revision=balance_revision+1
 		WHERE owner_id = $1 AND id = $2 AND archived_at IS NULL RETURNING id`, owner.String(), accountID).Scan(&id)
-	return notFoundOr("archive account", err)
+		return err == nil, notFoundOr("archive account", err)
+	})
 }
 
 func (r *repository) restoreAccount(ctx context.Context, owner identity.OwnerID, accountID string) error {
-	var id string
-	err := r.pool.QueryRow(ctx, `UPDATE finance_accounts SET archived_at = NULL, updated_at = now(),balance_revision=balance_revision+1
+	return r.withHistoryMutation(ctx, owner, func(ctx context.Context, tx pgx.Tx) (bool, error) {
+		var id string
+		err := tx.QueryRow(ctx, `UPDATE finance_accounts SET archived_at = NULL, updated_at = now(),balance_revision=balance_revision+1
 		WHERE owner_id = $1 AND id = $2 AND archived_at IS NOT NULL RETURNING id`, owner.String(), accountID).Scan(&id)
-	return notFoundOr("restore account", err)
+		return err == nil, notFoundOr("restore account", err)
+	})
 }
 
 func (r *repository) balance(ctx context.Context, owner identity.OwnerID, accountID string) (Balance, error) {
@@ -429,7 +431,7 @@ func (r *repository) postInTx(ctx context.Context, tx pgx.Tx, owner identity.Own
 	if err := captureRevision(ctx, tx, owner, event.ID, "create", spec.requestKey); err != nil {
 		return Event{}, err
 	}
-	return event, nil
+	return event, bumpHistoryRevision(ctx, tx, owner)
 }
 
 func (r *repository) voidEventInTx(ctx context.Context, tx pgx.Tx, owner identity.OwnerID, eventID, reason string, expected int64, requestKey string) error {
@@ -468,7 +470,10 @@ func (r *repository) voidEventInTx(ctx context.Context, tx pgx.Tx, owner identit
 	if err := bumpBalanceRevisions(ctx, tx, owner, movements); err != nil {
 		return err
 	}
-	return captureRevision(ctx, tx, owner, eventID, "void", requestKey)
+	if err := captureRevision(ctx, tx, owner, eventID, "void", requestKey); err != nil {
+		return err
+	}
+	return bumpHistoryRevision(ctx, tx, owner)
 }
 
 func (r *repository) deleteEventInTx(ctx context.Context, tx pgx.Tx, owner identity.OwnerID, eventID string, expected int64, requestKey string) error {
@@ -512,7 +517,10 @@ func (r *repository) deleteEventInTx(ctx context.Context, tx pgx.Tx, owner ident
 	if err := bumpBalanceRevisions(ctx, tx, owner, movements); err != nil {
 		return err
 	}
-	return captureRevision(ctx, tx, owner, eventID, "delete", requestKey)
+	if err := captureRevision(ctx, tx, owner, eventID, "delete", requestKey); err != nil {
+		return err
+	}
+	return bumpHistoryRevision(ctx, tx, owner)
 }
 
 func eventMovementSpecs(ctx context.Context, tx pgx.Tx, owner identity.OwnerID, eventID string) ([]movementSpec, error) {

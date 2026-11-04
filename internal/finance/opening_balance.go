@@ -124,7 +124,7 @@ func confirmOpeningBalanceInTx(ctx context.Context, tx pgx.Tx, owner identity.Ow
 	account.OpeningBalanceAt = &at
 	account.OpeningConfirmedAt = &confirmed
 	account.BalanceRevision++
-	return account, nil
+	return account, bumpHistoryRevision(ctx, tx, owner)
 }
 
 func requireOpeningZone(ctx context.Context, tx pgx.Tx, owner identity.OwnerID) error {

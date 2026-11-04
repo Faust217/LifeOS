@@ -193,3 +193,30 @@
 @media (max-width: 360px) { .money-edit-part { grid-template-columns: minmax(0, 1fr); } }
 .money-edit-dialog { overflow: hidden; }
 .money-edit-dialog .money-dialog-content { overscroll-behavior-y: contain; }
+.money-event-details summary .money-history-positions {
+  list-style: none;
+  margin: .4rem 0 0;
+  padding: 0;
+  color: var(--text-muted, #53665f);
+  font-size: .875rem;
+  line-height: 1.5;
+}
+.money-history-positions li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .1rem .5rem;
+  min-width: 0;
+}
+.money-history-position-name { min-width: 0; overflow-wrap: anywhere; }
+.money-history-position-name::after { content: " ·"; }
+.money-history-position-value { font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.money-reconstructed-details { min-width: 0; overflow-wrap: anywhere; }
+.money-reconstructed-details li { margin-block: .5rem; }
+.money-history-load { display: grid; justify-items: center; gap: .5rem; padding: 1rem 0; }
+.money-history-load .button { min-height: 44px; max-width: 100%; white-space: normal; }
+.money-event-details summary { scroll-margin-block: 1rem calc(6rem + env(safe-area-inset-bottom)); }
+.money-history-explanation { margin: 0 0 .7rem; color: var(--text-muted, #53665f); font-size: .875rem; }
+.money-history-explanation summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; text-decoration: underline; }
+.money-history-explanation p { max-width: 65ch; line-height: 1.6; }
+.money-history-explanation summary:focus-visible { outline: 2px solid var(--sage-700, #285e51); outline-offset: 3px; }
+.money-history-changed h2 { font-size: 1.2rem; }

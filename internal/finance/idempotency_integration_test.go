@@ -57,7 +57,7 @@ func TestFinancialWriteIdempotencyIntegration(t *testing.T) {
 	if _, err := pool.Exec(ctx, `INSERT INTO finance_accounts(id,owner_id,name,account_type,currency,opening_balance_minor) VALUES($1,$2,'Legacy at v8','bank','MYR',5000)`, legacyID, user); err != nil {
 		t.Fatal(err)
 	}
-	if err := runner.Up(); err != nil {
+	if err := runner.Migrate(9); err != nil {
 		t.Fatal(err)
 	}
 	var opening int64

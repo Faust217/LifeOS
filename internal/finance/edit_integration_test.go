@@ -35,11 +35,10 @@ func TestAtomicEditIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	category, err := service.CreateCategory(ctx, owner, CategoryInput{Name: "Archived baseline", Kind: "expense"})
+	// A truthful old-schema fixture, not a v11 service writing to v9.
+	category := Category{ID: newFinancialWriteKey(), Name: "Archived baseline", Kind: "expense"}
+	_, err = pool.Exec(ctx, `INSERT INTO finance_categories(id,owner_id,name,kind,archived_at) VALUES($1,$2,$3,$4,now())`, category.ID, owner.String(), category.Name, category.Kind)
 	if err != nil {
-		t.Fatal(err)
-	}
-	if err = service.ArchiveCategory(ctx, owner, category.ID); err != nil {
 		t.Fatal(err)
 	}
 	baselineIDs := []string{newFinancialWriteKey(), newFinancialWriteKey(), newFinancialWriteKey()}

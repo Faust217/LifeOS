@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { previewOpeningBalance, confirmOpeningBalance, retryFinancialWrite, editMoneyEvent, getMoneyEvent } from "./money";
+import { previewOpeningBalance, confirmOpeningBalance, retryFinancialWrite, editMoneyEvent, getMoneyEvent, listRunningHistory } from "./money";
 
 import { archiveMoneyAccount, archiveMoneyCategory, createMoneyAccount, deleteMoneyEvent, listMoneyAccounts, listMoneyHistory, MoneyApiError, postMoneyEvent, renameMoneyCategory, restoreMoneyAccount, restoreMoneyCategory, voidMoneyEvent } from "./money";
 
@@ -12,6 +12,15 @@ beforeEach(() => {
 afterEach(() => { pendingFinancialWrite.bindOwner(null); vi.unstubAllGlobals(); });
 
 describe("Money API boundary", () => {
+  it("opts in to stable pages without changing Today offset reads or accepting an owner", async () => {
+    const request=vi.fn().mockResolvedValue({ok:true,status:200,json:async()=>({items:[]})});vi.stubGlobal("fetch",request);
+    await listRunningHistory({limit:10,history_revision:"a".repeat(64),cursor:"canonical_opaque-cursor"});
+    const url=new URL(request.mock.calls[0][0],"https://lifeos.invalid");
+    expect(Object.fromEntries(url.searchParams)).toEqual({view:"running_balances",limit:"10",history_revision:"a".repeat(64),cursor:"canonical_opaque-cursor"});
+    expect(request.mock.calls[0][1]).toMatchObject({method:"GET",credentials:"same-origin",cache:"no-store"});
+    request.mockResolvedValue({ok:false,status:409,json:async()=>({error:{code:"history_changed"}})});
+    await expect(listRunningHistory({limit:10})).rejects.toMatchObject({status:409,code:"history_changed"});
+  });
   it("uses guarded exact balance preview and revision confirmation without owner input", async () => {
     const request=vi.fn().mockResolvedValue({ok:true,status:200,headers:new Headers({"Idempotency-Replayed":"false"}),json:async()=>({id:"account",currency:"MYR",opening_balance_minor:"0"})}); vi.stubGlobal("fetch",request);
     await previewOpeningBalance("csrf","11111111-1111-4111-8111-111111111111",{opening_balance_at:"2026-10-01T00:00:00Z"});

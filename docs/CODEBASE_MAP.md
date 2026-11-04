@@ -1,6 +1,6 @@
 # LifeOS Codebase Map
 
-**Current code:** Issue #34 is implemented locally under accepted ADR-019 and awaiting final Product Owner review; migration v9, keyed write coordination and frozen browser recovery are described below. Issues #26–#31 are complete, pushed and closed. Issue #32 Me / Owner Data Export is implemented and Product Owner approved under accepted ADR-017; see [Export Design](EXPORT_DESIGN.md). Issue #33 known-balance dates and v2 exports are implemented under accepted ADR-018 and Product Owner accepted for final delivery on 2026-10-23. This is a navigation guide; [Architecture](ARCHITECTURE.md), [Domain Model](DOMAIN_MODEL.md), and accepted [ADRs](adr/README.md) define the rules.
+**Current code:** Issues #26-#35 are delivered. Issue #36 complete-ledger historical balances, Option B and continuous History are implemented with forward migration v11 and accepted for final delivery on 2026-11-04. Final regressions and Product Owner manual 390px review passed; 320px/physical mobile/native automation remain unverified. This guide maps actual code; accepted ADRs and [History Balance Design](HISTORY_BALANCE_DESIGN.md) define the rules.
 
 ## Start here
 
@@ -9,7 +9,7 @@
 | Web | [`apps/web/src/main.tsx`](../apps/web/src/main.tsx) mounts [`App`](../apps/web/src/LifeApp.tsx) through [`App.tsx`](../apps/web/src/App.tsx). `LifeApp.tsx` confirms the session before rendering [`AuthenticatedShell`](../apps/web/src/LifeApp.tsx). [`navigation.ts`](../apps/web/src/navigation.ts) resolves Today, Money, Plans, Me, and Goal detail URLs. [`lifeos.css`](../apps/web/src/lifeos.css), [`money.css`](../apps/web/src/money.css), and [`goals.css`](../apps/web/src/goals.css) carry the Sage Green UI. |
 | API | [`cmd/lifeos-api/main.go`](../cmd/lifeos-api/main.go) `run` creates services and registers identity, Finance, Planning and Export on one `/api/v1` chi router. [`httpapi.NewRouter`](../internal/platform/httpapi/router.go) mounts it beside health/readiness and request middleware. |
 | Identity | [`internal/identity/auth.go`](../internal/identity/auth.go) owns Google OIDC, sessions, `Auth.RequireRead`, and `Auth.RequireMutation`; [`owner.go`](../internal/identity/owner.go) defines the server-derived `OwnerID`. [`repository.go`](../internal/identity/repository.go) persists identity and sessions. [`cmd/lifeos-admin/main.go`](../cmd/lifeos-admin/main.go) is the trusted local invitation operator. |
-| Persistence | [`database.OpenPostgreSQL`](../internal/platform/database/postgres.go) opens the pool. [`db/migrations/`](../db/migrations/) holds numbered SQL; [`cmd/lifeos-migrate/main.go`](../cmd/lifeos-migrate/main.go) applies or reports them. v2/v3 add identity/sessions; v4 adds Money; v5 adds Goals; v6 adds the nullable Finance Soft Delete marker; v7 adds nullable owner `time_zone`; v8 adds dated opening balances; v9 adds minimal financial request markers. [`migrations.CurrentVersion`](../internal/platform/migrations/version.go) makes `/readyz` require v9. |
+| Persistence | [`database.OpenPostgreSQL`](../internal/platform/database/postgres.go) opens the pool. [`db/migrations/`](../db/migrations/) holds numbered SQL; [`cmd/lifeos-migrate/main.go`](../cmd/lifeos-migrate/main.go) applies or reports them. v2/v3 add identity/sessions; v4 adds Money; v5 adds Goals; v6 adds the nullable Finance Soft Delete marker; v7 adds nullable owner `time_zone`; v8 adds dated opening balances; v9 adds financial request markers; v10 adds immutable event snapshots; v11 adds owner history versions and old-writer fencing. [`migrations.CurrentVersion`](../internal/platform/migrations/version.go) makes `/readyz` require v11. |
 | Contracts and deployment | [`api/openapi/openapi.yaml`](../api/openapi/openapi.yaml) is the API contract; [`apps/web/src/api/generated/schema.ts`](../apps/web/src/api/generated/schema.ts) is generated from it. [`deploy/compose.yaml`](../deploy/compose.yaml) starts PostgreSQL, migration job, API, and web; the [`API`](../deploy/api.Dockerfile) and [`web`](../deploy/web.Dockerfile) Dockerfiles build their images. |
 
 ## Feature paths
@@ -286,3 +286,33 @@ flowchart TD
   K --> L
   L --> M[PendingFinancialWrites.finish / loadMoney]
 ```
+
+## Issue #36 - historical account positions and stable pages
+
+- [`MoneyPage.tsx`](../apps/web/src/MoneyPage.tsx) `loadMoney` uses `listRunningHistory`; `loadMoreHistory` appends 25-row cursor-bound batches; `refreshHistory` builds a fresh bounded visited prefix before publishing it. `switchPanel` preserves mounted views and per-panel scroll. A 409 renders `HistoryChanged` instead of old balance rows. Open Edit state, entry/account forms and `PendingFinancialWrites` are separate from History paging. Open date forms keep their labelled entry zone while the existing shell callback synchronizes the saved preference.
+- [`historyPages.ts`](../apps/web/src/historyPages.ts) `HistoryPages.query/accept` retains a coherent accumulated projection and next cursor, rejecting duplicate IDs or mismatched snapshots before appending. `historyPosition.ts` `captureHistoryLocation/restoreHistoryLocation` saves stable record/neighbor IDs and viewport offset; refresh restores context or gives an explicit fallback after at most 8 visited batches. [`api/money.ts`](../apps/web/src/api/money.ts) `listRunningHistory` sends same-origin/no-store query parameters, never an owner selector. Today continues `listMoneyHistory` with its unchanged limit/offset contract.
+- `HistorySection` uses snapshot account/category names, local date helpers and `HistoryBalanceLine` for one ordinary line or two Transfer lines. Explicit reasons replace unavailable numbers; Option B hides pre-anchor numbers in collapsed rows; `ReconstructedDetails` shows labelled non-bank-verified values and the account balance date inside expanded details. Automatic loading pauses for hidden/modal/protected/error states; manual Load more/Retry remains available. A contextual Overview action reaches existing legacy balance confirmation. Edit/confirmed Delete remain; ordinary Void/More actions stay absent. [`money.css`](../apps/web/src/money.css) wraps long account/amount lines without shrinking typography.
+- [`history_http.go`](../internal/finance/history_http.go) `privateHistoryRead` surrounds `Auth.RequireRead`; `moneyHandler.history` dispatches to `runningHistory` only for opt-in mode. The handler rejects unknown/duplicate/offset/body inputs and returns a complete projection; privacy headers also cover early guard failures.
+- [`history_page.go`](../internal/finance/history_page.go) `Service.HistoryPage` validates the query/canonical cursor and bounds the read. `repository.historyPage` opens one read-only REPEATABLE READ transaction, reads owner metadata and `identity.ExportProfile`, checks `historyProjectionToken`, selects keyset event IDs and obtains complete current children through `readEventInTx`. `readHistoryContexts` returns same-snapshot referenced labels; `readRunningBalancesInTx` applies exact numeric windows over complete relevant account partitions before selecting page events. Big-integer final range checking returns null per overflowing position. No audit-only or deleted rows enter the window.
+- [`history_write.go`](../internal/finance/history_write.go) `lockFinanceOwner` preserves the ADR-019 advisory key and sets the transaction-local v11 marker. `executeFinancialWrite` and `repository.withHistoryMutation` share it. `bumpHistoryRevision` runs once after actual ledger/management changes, in the same commit; existing-key replay, same-name rename and already-deleted no-op do not advance it. Counter failure rolls back domain state, audit and key registration.
+- [`000011_finance_history_revisions.up.sql`](../db/migrations/000011_finance_history_revisions.up.sql) adds owner/epoch/counter metadata, waits for old DML before baseline creation, and fences unmarked old writers. Down locks before refusing nonzero counters; baseline-only re-up gets new epochs. Readiness expects v11. Published migrations v1-v10 and normal export v1/v2 are unchanged.
+- [`history_integration_test.go`](../internal/finance/history_integration_test.go), [`history_reference_test.go`](../internal/finance/history_reference_test.go) and [`history_page_test.go`](../internal/finance/history_page_test.go) and `history_optionb_test.go` cover exact 400 -> 800 reconstruction, 25-row append/edit/delete/reorder scenarios, independent many-page reconstruction, strict cursor bytes, owner/timezone boundaries, coherent concurrent reads, rollback/replay, populated upgrade/fences and down guards. [`history_performance_test.go`](../internal/finance/history_performance_test.go) is an explicitly isolated opt-in 10k/100k workload. Existing fixture pools alone set the v11 marker for deliberate SQL upgrade/fault fixtures; production pools do not.
+
+```mermaid
+flowchart TD
+  A[MoneyPage.loadMoreHistory / refreshHistory] --> B[HistoryPages.query / listRunningHistory]
+  B --> C[privateHistoryRead / Auth.RequireRead]
+  C --> D[moneyHandler.history / runningHistory]
+  D --> E[Service.HistoryPage / repository.historyPage]
+  E --> F[RR snapshot / metadata / identity.ExportProfile]
+  F --> G[historyProjectionToken]
+  G -->|changed| H[409 / HistoryChanged / explicit Refresh]
+  G -->|fresh| I[readEventInTx / readHistoryContexts]
+  I --> J[readRunningBalancesInTx / complete windows]
+  J --> K[DTO / HistoryPages.accept / HistoryBalanceLine]
+  L[Finance mutation] --> M[executeFinancialWrite or withHistoryMutation]
+  M --> N[lockFinanceOwner / current mutation and audit]
+  N --> O[bumpHistoryRevision / atomic commit]
+```
+
+See [History Balance Design](HISTORY_BALANCE_DESIGN.md) and the [English journal](../learning/journal/2026-11-02-historical-account-balances.md) for actual inputs/errors/tests, benchmark resources and browser limitations. Issue #36 passed final delivery checks and Product Owner manual 390px review on 2026-11-04; its GitHub record will carry the delivery SHA/closure after verified delivery. No subsequent implementation is authorized.

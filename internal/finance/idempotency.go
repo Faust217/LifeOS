@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -151,8 +150,7 @@ func executeFinancialWrite[T any](parent context.Context, r *repository, owner i
 	if _, err = tx.Exec(ctx, `SET LOCAL lock_timeout='2s'; SET LOCAL statement_timeout='8s'; SET LOCAL idle_in_transaction_session_timeout='10s'`); err != nil {
 		return zero, financialWriteError(err)
 	}
-	ownerHash := sha256.Sum256([]byte("lifeos.finance.write-owner.v1|" + strings.ToLower(owner.String())))
-	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1)`, int64(binary.BigEndian.Uint64(ownerHash[:8]))); err != nil {
+	if err = lockFinanceOwner(ctx, tx, owner); err != nil {
 		return zero, financialWriteError(err)
 	}
 	// A new READ COMMITTED statement after waiting sees the previous writer's commit.

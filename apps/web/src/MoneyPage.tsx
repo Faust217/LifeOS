@@ -2,29 +2,33 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type FormE
 
 import {
   archiveMoneyAccount, archiveMoneyCategory, createMoneyAccount, createMoneyCategory, deleteMoneyEvent, getMoneyBalance,
-  listMoneyAccounts, listMoneyCategories, listMoneyHistory, MoneyApiError,
+  listMoneyAccounts, listMoneyCategories, listRunningHistory, MoneyApiError,
   postMoneyEvent, postMoneyTransfer, renameMoneyCategory, restoreMoneyAccount, restoreMoneyCategory,
   type AccountCreate, type CategoryCreate, type EventCreate, type MoneyAccount,
-  type MoneyBalance, type MoneyCategory, type MoneyEvent, type TransferCreate,
+  type MoneyBalance, type MoneyCategory, type MoneyEvent, type TransferCreate, type RunningHistory, type HistoryPosition,
 } from "./api/money";
 import { FinancialWriteRecovery, usePendingFinancialWrite } from "./FinancialWriteRecovery";
 import { FinancialRecoveryError, pendingFinancialWrite } from "./pendingFinancialWrite";
 import { OpeningBalanceSheet, type OpeningBalanceDraft } from "./OpeningBalanceSheet";
 import { EditTransactionSheet } from "./EditTransactionSheet";
+import { HistoryPages } from "./historyPages";
+import { captureHistoryLocation, restoreHistoryLocation, type HistoryLocation } from "./historyPosition";
 import { Icon } from "./Icons";
 import { currencyDigits, formatLocalDate, formatLocalTime, formatLocalTimeWithZone, formatMinorUnits, localDateKey, localDateTimeValue, matchingInstants, minorUnitsToInput, parseAmountToMinor, toOccurredAt } from "./moneyAmount";
 import "./money.css";
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 25;
+const RESTORE_BATCH_LIMIT = 8;
 const AUTO_VOID_REASON = "No reason provided by owner";
 type TransactionAction = "income" | "expense" | "transfer";
-type RunMutation = (message: string, action: () => Promise<unknown>) => Promise<boolean>;
+type RunMutation = (message: string, action: () => Promise<unknown>, location?: HistoryLocation) => Promise<boolean>;
 type MoneyData = {
   accounts: MoneyAccount[];
   categories: MoneyCategory[];
   balances: Record<string, MoneyBalance>;
   events: MoneyEvent[];
   hasNext: boolean;
+  history?: RunningHistory;
 };
 type MoneyView = { status: "loading" } | { status: "error"; message: string } | { status: "ready"; data: MoneyData };
 
@@ -37,36 +41,48 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : "Something went wrong. Please try again.";
 }
 
-function accountName(accounts: MoneyAccount[], id: string): string {
+function accountName(accounts: Pick<MoneyAccount, "id" | "name">[], id: string): string {
   return accounts.find((account) => account.id === id)?.name ?? "Unavailable account";
 }
 
-function categoryName(categories: MoneyCategory[], id: string): string {
+function categoryName(categories: Pick<MoneyCategory, "id" | "name">[], id: string): string {
   return categories.find((category) => category.id === id)?.name ?? "Unavailable category";
 }
 
-function historyTitle(event: MoneyEvent, categories: MoneyCategory[]): string {
+function historyTitle(event: MoneyEvent, categories: Pick<MoneyCategory, "id" | "name">[]): string {
   if (event.note?.trim()) return event.note.trim();
   if (event.kind === "transfer") return "Transfer between accounts";
   const names = event.allocations.map((allocation) => categoryName(categories, allocation.category_id));
   return names.length ? names.join(" + ") : "Uncategorized";
 }
 
-function historyAccounts(event: MoneyEvent, accounts: MoneyAccount[]): string {
+function historyAccounts(event: MoneyEvent, accounts: Pick<MoneyAccount, "id" | "name">[]): string {
   if (event.kind !== "transfer") return accountName(accounts, event.movements[0]?.account_id ?? "");
   const from = event.movements.find((movement) => BigInt(movement.amount_minor) < 0n);
   const to = event.movements.find((movement) => BigInt(movement.amount_minor) > 0n);
   return `${accountName(accounts, from?.account_id ?? "")} → ${accountName(accounts, to?.account_id ?? "")}`;
 }
 
-export function MoneyPage({ csrfToken, timeZone, onSessionExpired }: { csrfToken: string; timeZone: string | null; onSessionExpired: () => void }) {
+export function MoneyPage({ csrfToken, timeZone, onSessionExpired, onTimeZoneSaved }: { csrfToken: string; timeZone: string | null; onSessionExpired: () => void; onTimeZoneSaved?: (zone: string) => void }) {
   const financialRecovery = usePendingFinancialWrite();
   const financialBlocked = financialRecovery.kind !== "empty" && financialRecovery.kind !== "hidden";
-  const [editID, setEditID] = useState<string | null>(null);
+  const [editing, setEditing] = useState<{ id: string; zone: string; location: HistoryLocation } | null>(null);
+  const [entryZone, setEntryZone] = useState(timeZone);
+  const [setupZone, setSetupZone] = useState(timeZone);
+  const pages = useRef(new HistoryPages(PAGE_SIZE));
+  const [historyChanged, setHistoryChanged] = useState(false);
   const [balanceAccount, setBalanceAccount] = useState<MoneyAccount | null>(null);
+  const [balanceZone, setBalanceZone] = useState(timeZone);
   const openingDrafts = useRef<Record<string, OpeningBalanceDraft>>({});
   const [panel, setPanel] = useState<"overview" | "transactions">("transactions");
-  const [page, setPage] = useState(0);
+  const activePanel = useRef(panel);
+  activePanel.current = panel;
+  const staleLocation = useRef<HistoryLocation | null>(null);
+  const panelScroll = useRef({ overview: 0, transactions: 0 });
+  const [historyNotice, setHistoryNotice] = useState("");
+  const [appendError, setAppendError] = useState("");
+  const [appending, setAppending] = useState(false);
+  const reading = useRef(false);
   const [view, setView] = useState<MoneyView>({ status: "loading" });
   const [setupAction, setSetupAction] = useState<"account" | "category">("account");
   const [setupOpen, setSetupOpen] = useState(false);
@@ -80,28 +96,44 @@ export function MoneyPage({ csrfToken, timeZone, onSessionExpired }: { csrfToken
   const [operationError, setOperationError] = useState("");
   const pendingRef = useRef(false);
   const requestSequence = useRef(0);
+  const sessionExpired = useRef(onSessionExpired);
+  sessionExpired.current = onSessionExpired;
   const dialogRef = useRef<HTMLDialogElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const setupDialogRef = useRef<HTMLDialogElement>(null);
   const setupReturnFocusRef = useRef<HTMLElement | null>(null);
 
-  const loadMoney = useCallback(async (wantedPage: number): Promise<boolean> => {
+  const loadMoney = useCallback(async (restoreBatches = 1): Promise<boolean> => {
     const request = ++requestSequence.current;
+    reading.current = true;
+    setAppending(false);
+    setAppendError("");
     setRefreshing(true);
     try {
+      const fresh = new HistoryPages(PAGE_SIZE);
       const [accountResponse, categoryResponse, historyResponse] = await Promise.all([
-        listMoneyAccounts(), listMoneyCategories(), listMoneyHistory(PAGE_SIZE + 1, wantedPage * PAGE_SIZE),
+        listMoneyAccounts(), listMoneyCategories(), listRunningHistory(fresh.query()),
       ]);
+      let history = fresh.accept(historyResponse);
       const balanceItems = await Promise.all(accountResponse.items.map((account) => getMoneyBalance(account.id)));
+      // Rebuild only an already visited, bounded prefix. Never combine revisions,
+      // and never download the entire owner history to find an edited record.
+      for (let batch = 1; batch < Math.min(restoreBatches, RESTORE_BATCH_LIMIT) && history.has_more; batch++) {
+        history = fresh.accept(await listRunningHistory(fresh.query()));
+        if (request !== requestSequence.current) return false;
+      }
       if (request !== requestSequence.current) return false;
+      pages.current = fresh;
+      setHistoryChanged(false);
       setView({
         status: "ready",
         data: {
           accounts: accountResponse.items,
           categories: categoryResponse.items,
           balances: Object.fromEntries(balanceItems.map((balance) => [balance.account_id, balance])),
-          events: historyResponse.items.slice(0, PAGE_SIZE),
-          hasNext: historyResponse.items.length > PAGE_SIZE,
+          events: history.items,
+          hasNext: history.has_more,
+          history,
         },
       });
       setOperationError("");
@@ -109,18 +141,24 @@ export function MoneyPage({ csrfToken, timeZone, onSessionExpired }: { csrfToken
       return true;
     } catch (error) {
       if (request !== requestSequence.current) return false;
-      if (error instanceof MoneyApiError && error.status === 401) onSessionExpired();
+      if (error instanceof MoneyApiError && error.status === 401) sessionExpired.current();
+      if (error instanceof MoneyApiError && error.code === "history_changed") {
+        staleLocation.current ??= captureHistoryLocation();
+        setHistoryChanged(true); setRefreshing(false); setOperationError(""); return false;
+      }
       setView((current) => current.status === "ready" ? current : { status: "error", message: messageOf(error) });
       setRefreshing(false);
       setOperationError(messageOf(error));
       return false;
+    } finally {
+      if (request === requestSequence.current) reading.current = false;
     }
-  }, [onSessionExpired]);
+  }, []);
 
   useEffect(() => {
-    void loadMoney(page);
+    void loadMoney();
     return () => { requestSequence.current += 1; };
-  }, [loadMoney, page]);
+  }, [loadMoney]);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -145,7 +183,8 @@ export function MoneyPage({ csrfToken, timeZone, onSessionExpired }: { csrfToken
   }
 
   function openTransaction(kind: TransactionAction = "expense", original: MoneyEvent | null = null) {
-    if (!timeZone || financialBlocked) return;
+    if (!activeZone || financialBlocked) return;
+    setEntryZone(activeZone);
     returnFocusRef.current = document.querySelector<HTMLElement>(".money-quick-action");
     setTransactionAction(kind);
     setReplacement(original);
@@ -163,6 +202,7 @@ export function MoneyPage({ csrfToken, timeZone, onSessionExpired }: { csrfToken
     returnFocusRef.current = null;
     setReplacement(null);
     setTransactionOpen(false);
+    setSetupZone(activeZone);
     setSetupAction(item);
     setOperationError("");
     setSetupOpen(true);
@@ -176,7 +216,7 @@ export function MoneyPage({ csrfToken, timeZone, onSessionExpired }: { csrfToken
     window.setTimeout(() => target?.focus(), 0);
   }
 
-  const runMutation: RunMutation = async (successMessage, work) => {
+  const runMutation: RunMutation = async (successMessage, work, location) => {
     if (pendingRef.current) return false;
     pendingRef.current = true;
     setPending(true);
@@ -184,7 +224,7 @@ export function MoneyPage({ csrfToken, timeZone, onSessionExpired }: { csrfToken
     setOperationError("");
     try {
       await work();
-      const refreshed = await loadMoney(page);
+      const refreshed = await refreshHistory(location);
       setNotice(refreshed ? successMessage : "Saved, but the latest Money data could not be loaded. Check recent activity before doing this again.");
       return true;
     } catch (error) {
@@ -202,44 +242,100 @@ export function MoneyPage({ csrfToken, timeZone, onSessionExpired }: { csrfToken
     }
   };
 
+  async function refreshHistory(location = staleLocation.current ?? captureHistoryLocation()) {
+    const loaded = await loadMoney(Math.max(1, pages.current.count));
+    if (loaded) staleLocation.current = null;
+    if (loaded) window.requestAnimationFrame(() => {
+      if (activePanel.current !== "transactions") return;
+      const primary = location.ids[0] && document.getElementById(location.ids[0]);
+      if (!restoreHistoryLocation(location)) {
+        document.getElementById("money-history-title")?.focus();
+        setHistoryNotice("History refreshed from the latest transactions. The previous position is outside the refreshed section; load more to continue.");
+      } else if (location.occurredAt && (!primary || primary.getAttribute("data-occurred-at") !== location.occurredAt)) {
+        setHistoryNotice(primary ? "Transaction date changed. Showing it at its new position." : "Transaction updated. Its position changed; showing the nearest previously viewed transaction.");
+      } else setHistoryNotice("");
+    });
+    return loaded;
+  }
+  async function loadMoreHistory(manual = false) {
+    if (reading.current || pendingRef.current || historyChanged || !pages.current.current?.has_more) return;
+    reading.current = true;
+    const request = ++requestSequence.current;
+    setAppending(true); setAppendError("");
+    try {
+      const response = await listRunningHistory(pages.current.query());
+      if (request !== requestSequence.current) return;
+      const history = pages.current.accept(response);
+      setView((current) => current.status !== "ready" ? current : { status: "ready", data: { ...current.data, events: history.items, history, hasNext: history.has_more } });
+      if (manual && response.items[0]) window.requestAnimationFrame(() => document.getElementById(`money-event-${response.items[0].id}`)?.focus());
+    } catch (error) {
+      if (request !== requestSequence.current) return;
+      if (error instanceof MoneyApiError && error.status === 401) sessionExpired.current();
+      if (error instanceof MoneyApiError && error.code === "history_changed") { staleLocation.current ??= captureHistoryLocation(); setHistoryChanged(true); }
+      else setAppendError(messageOf(error));
+    } finally {
+      if (request === requestSequence.current) { reading.current = false; setAppending(false); }
+    }
+  }
+  function closeEditing() {
+    const id = editing?.id;
+    setEditing(null);
+    window.setTimeout(() => {
+      const record = id ? document.getElementById(`money-event-${id}`) : null;
+      if (record) record.focus({ preventScroll: true });
+      else (document.getElementById("money-history-title") ?? document.getElementById("money-history-refresh"))?.focus();
+    }, 0);
+  }
   const data = view.status === "ready" ? view.data : null;
+  const activeZone = data?.history ? data.history.time_zone : timeZone;
+  useEffect(() => {
+    if (activeZone && activeZone !== timeZone) onTimeZoneSaved?.(activeZone);
+  }, [activeZone, timeZone, onTimeZoneSaved]);
+  function switchPanel(next: "overview" | "transactions") {
+    if (next === panel) return;
+    panelScroll.current[panel] = window.scrollY;
+    setPanel(next);
+    window.requestAnimationFrame(() => window.scrollTo({ top: panelScroll.current[next], behavior: "instant" }));
+  }
+  function showOverview() { switchPanel("overview"); }
   const hasActiveAccount = data?.accounts.some((account) => !account.archived_at) ?? false;
   const hasExpenseCategory = data?.categories.some((category) => !category.archived_at && category.kind === "expense") ?? false;
   return (
     <div className="page-stack money-page">
-      {editID && data && timeZone && <EditTransactionSheet id={editID} csrfToken={csrfToken} timeZone={timeZone} accounts={data.accounts} categories={data.categories} onClose={() => setEditID(null)} onSaved={() => { setEditID(null); setNotice("Transaction updated."); void loadMoney(page); }} onSessionExpired={onSessionExpired} />}
-      {balanceAccount && (timeZone ? <OpeningBalanceSheet account={balanceAccount} csrfToken={csrfToken} timeZone={timeZone} draft={openingDrafts.current[balanceAccount.id]} onDraft={(draft) => { openingDrafts.current[balanceAccount.id] = draft; }} onClose={() => setBalanceAccount(null)} onSaved={() => { delete openingDrafts.current[balanceAccount.id]; setBalanceAccount(null); setNotice("Balance date confirmed."); void loadMoney(page); }} onRecovered={() => { setBalanceAccount(null); setNotice("Save confirmed. Showing current records."); void loadMoney(page); }} onSessionExpired={onSessionExpired} /> : <section className="money-state"><p>Confirm your timezone in Me before choosing a balance date.</p><a className="button button-primary" href="/me#timezone">Open timezone settings</a><button type="button" className="money-text-action" onClick={() => setBalanceAccount(null)}>Cancel</button></section>)}
+      {editing && data && <EditTransactionSheet id={editing.id} csrfToken={csrfToken} timeZone={editing.zone} accounts={data.accounts} categories={data.categories} onClose={closeEditing} onSaved={() => { setEditing(null); setNotice("Transaction updated."); void refreshHistory(editing.location); }} onSessionExpired={onSessionExpired} />}
+      {balanceAccount && (activeZone ? <OpeningBalanceSheet account={balanceAccount} csrfToken={csrfToken} timeZone={balanceZone!} draft={openingDrafts.current[balanceAccount.id]} onDraft={(draft) => { openingDrafts.current[balanceAccount.id] = draft; }} onClose={() => setBalanceAccount(null)} onSaved={() => { delete openingDrafts.current[balanceAccount.id]; setBalanceAccount(null); setNotice("Balance date confirmed."); void refreshHistory(); }} onRecovered={() => { setBalanceAccount(null); setNotice("Save confirmed. Showing current records."); void refreshHistory(); }} onSessionExpired={onSessionExpired} /> : <section className="money-state"><p>Confirm your timezone in Me before choosing a balance date.</p><a className="button button-primary" href="/me#timezone">Open timezone settings</a><button type="button" className="money-text-action" onClick={() => setBalanceAccount(null)}>Cancel</button></section>)}
       <header className="money-page-header">
         <h1>Money</h1>
-        {data && timeZone && <div className="money-header-actions"><button type="button" className="button button-primary money-quick-action" onClick={() => openTransaction()} disabled={pending || financialBlocked}>+ Add transaction</button><a className="button button-outline money-settings-action" href="/me#timezone">Settings</a></div>}
+        {data && activeZone && <div className="money-header-actions"><button type="button" className="button button-primary money-quick-action" onClick={() => openTransaction()} disabled={pending || financialBlocked}>+ Add transaction</button><a className="button button-outline money-settings-action" href="/me#timezone">Settings</a></div>}
       </header>
-      <FinancialWriteRecovery csrfToken={csrfToken} onSessionExpired={onSessionExpired} onRecovered={() => { closeTransaction(); closeSetup(); setBalanceAccount(null); setNotice("Save confirmed. Showing current records."); void loadMoney(page); }} />
+      <FinancialWriteRecovery csrfToken={csrfToken} onSessionExpired={onSessionExpired} onRecovered={() => { closeTransaction(); closeSetup(); setBalanceAccount(null); setNotice("Save confirmed. Showing current records."); void refreshHistory(); }} />
       {notice && <p className="money-quick-feedback" role="status">{notice}</p>}
+      {historyNotice && <p className="money-help" role="status">{historyNotice}</p>}
 
-      {operationError && <div className="money-feedback money-error money-retry-read"><p role="alert">{operationError}</p><button type="button" className="button button-outline" onClick={() => void loadMoney(page)}>{financialBlocked ? "Refresh data (Save stays pending)" : "Refresh accounts and activity"}</button></div>}
+      {operationError && <div className="money-feedback money-error money-retry-read"><p role="alert">{operationError}</p><button type="button" className="button button-outline" onClick={() => void refreshHistory()}>{financialBlocked ? "Refresh data (Save stays pending)" : "Refresh accounts and activity"}</button></div>}
       {refreshing && data && <p className="money-refreshing" role="status">Refreshing Money…</p>}
 
       {view.status === "loading" && <section className="money-state" role="status" aria-live="polite"><span className="loading-orb" aria-hidden="true" /><h2>Loading your Money space…</h2><p>Checking your latest accounts and activity.</p></section>}
-      {view.status === "error" && <section className="money-state" role="alert"><Icon name="shield" /><h2>Money could not load.</h2><p>{view.message}</p><button className="button button-primary" type="button" onClick={() => void loadMoney(page)}>Try again</button></section>}
+      {view.status === "error" && <section className="money-state" role="alert"><Icon name="shield" /><h2>Money could not load.</h2><p>{view.message}</p><button className="button button-primary" type="button" onClick={() => void refreshHistory()}>Try again</button></section>}
 
       {data && <>
-        {!timeZone && <section className="money-timezone-card"><h2>Set your transaction timezone</h2><p>Use the same dates and times on every device.</p><a className="button button-primary" href="/me#timezone">Confirm timezone in Me</a></section>}
-        {timeZone && <nav className="money-view-switch" aria-label="Money views"><button type="button" aria-pressed={panel === "overview"} disabled={pending} onClick={() => setPanel("overview")}>Overview</button><button type="button" aria-pressed={panel === "transactions"} disabled={pending} onClick={() => setPanel("transactions")}>Transactions</button></nav>}
-        {timeZone && (!hasActiveAccount || (page === 0 && data.events.length === 0)) && <section className="money-onboarding" aria-label="Get started with Money"><p className="eyebrow">GET STARTED</p><h2>Three small steps to your first record.</h2><ol><li className={hasActiveAccount ? "is-done" : ""}><span>1. Account</span>{hasActiveAccount ? "Ready" : <button type="button" disabled={financialBlocked} onClick={() => chooseSetup("account")}>Create an account</button>}</li><li className={hasExpenseCategory ? "is-done" : ""}><span>2. Category (optional)</span>{hasExpenseCategory ? "Ready" : <button type="button" disabled={financialBlocked} onClick={() => chooseSetup("category")}>Add a category</button>}</li><li className={data.events.length > 0 ? "is-done" : ""}><span>3. First transaction</span>{data.events.length > 0 ? "Ready" : <button type="button" disabled={financialBlocked} onClick={() => openTransaction("expense")}>Record an expense</button>}</li></ol><p>Categories are optional: you can record income or expenses as Uncategorized. For existing accounts, confirm a balance date in Overview before relying on older entries. New accounts use the balance and date you confirm.</p></section>}
-        {(!timeZone || panel === "overview") && <AccountOverview onBalanceDate={setBalanceAccount} data={data} csrfToken={csrfToken} pending={pending || financialBlocked} runMutation={runMutation} operationError={operationError} onAddAccount={() => chooseSetup("account")} onCategories={() => chooseSetup("category")} />}
-        {timeZone && panel === "transactions" && <HistorySection data={data} timeZone={timeZone} page={page} setPage={setPage} csrfToken={csrfToken} pending={pending || financialBlocked} runMutation={runMutation} onEdit={setEditID} operationError={operationError} />}
+        {!activeZone && <section className="money-timezone-card"><h2>Set your transaction timezone</h2><p>Use the same dates and times on every device.</p><a className="button button-primary" href="/me#timezone">Confirm timezone in Me</a></section>}
+        {activeZone && <nav className="money-view-switch" aria-label="Money views"><button type="button" aria-pressed={panel === "overview"} disabled={pending} onClick={() => switchPanel("overview")}>Overview</button><button type="button" aria-pressed={panel === "transactions"} disabled={pending} onClick={() => switchPanel("transactions")}>Transactions</button></nav>}
+        {activeZone && !historyChanged && (!hasActiveAccount || (data.events.length === 0)) && <section className="money-onboarding" aria-label="Get started with Money"><p className="eyebrow">GET STARTED</p><h2>Three small steps to your first record.</h2><ol><li className={hasActiveAccount ? "is-done" : ""}><span>1. Account</span>{hasActiveAccount ? "Ready" : <button type="button" disabled={financialBlocked} onClick={() => chooseSetup("account")}>Create an account</button>}</li><li className={hasExpenseCategory ? "is-done" : ""}><span>2. Category (optional)</span>{hasExpenseCategory ? "Ready" : <button type="button" disabled={financialBlocked} onClick={() => chooseSetup("category")}>Add a category</button>}</li><li className={data.events.length > 0 ? "is-done" : ""}><span>3. First transaction</span>{data.events.length > 0 ? "Ready" : <button type="button" disabled={financialBlocked} onClick={() => openTransaction("expense")}>Record an expense</button>}</li></ol><p>Categories are optional: you can record income or expenses as Uncategorized. For existing accounts, confirm a balance date in Overview before relying on older entries. New accounts use the balance and date you confirm.</p></section>}
+        <div hidden={!!activeZone && panel !== "overview"}><AccountOverview onBalanceDate={(account) => { setBalanceZone(activeZone); setBalanceAccount(account); }} data={data} csrfToken={csrfToken} pending={pending || financialBlocked} runMutation={runMutation} operationError={operationError} onAddAccount={() => chooseSetup("account")} onCategories={() => chooseSetup("category")} /></div>
+        {activeZone && <div hidden={panel !== "transactions"}>{historyChanged ? <HistoryChanged onRefresh={() => void refreshHistory()} refreshing={refreshing} /> : <HistorySection data={data} timeZone={activeZone} onOverview={showOverview} onRefresh={() => void refreshHistory()} onLoadMore={(manual) => void loadMoreHistory(manual)} loadingMore={appending} loadError={appendError} autoLoad={panel === "transactions" && !editing && !transactionOpen && !setupOpen && !balanceAccount && !financialBlocked && !refreshing} csrfToken={csrfToken} pending={pending || financialBlocked || refreshing} runMutation={runMutation} onEdit={(id) => { const location = captureHistoryLocation(id); location.occurredAt = data.events.find((item) => item.id === id)?.occurred_at; setEditing({ id, zone: activeZone, location }); }} operationError={operationError} />}</div>}
         <dialog ref={setupDialogRef} className="money-transaction-dialog money-setup-dialog" aria-labelledby="money-setup-dialog-title" onCancel={(event) => { if (pending) event.preventDefault(); }} onClose={() => { if (!setupDialogRef.current?.open) closeSetup(); }} onClick={(event) => { if (event.target === setupDialogRef.current) closeSetup(); }}>
-          <div className="money-dialog-content"><div className="money-dialog-head"><h2 id="money-setup-dialog-title">{setupAction === "account" ? "Add account" : "Categories"}</h2><button type="button" className="money-dialog-close" onClick={closeSetup} disabled={pending} aria-label="Close setup panel">×</button></div><FinancialWriteRecovery csrfToken={csrfToken} onSessionExpired={onSessionExpired} onRecovered={() => { closeTransaction(); closeSetup(); void loadMoney(page); }} />
-            <div className="money-setup-pane" hidden={setupAction !== "account"}><AccountForm open={setupOpen && setupAction === "account"} timeZone={timeZone} csrfToken={csrfToken} pending={pending || financialBlocked} runMutation={runMutation} operationError={operationError} onSaved={closeSetup} /></div>
+          <div className="money-dialog-content"><div className="money-dialog-head"><h2 id="money-setup-dialog-title">{setupAction === "account" ? "Add account" : "Categories"}</h2><button type="button" className="money-dialog-close" onClick={closeSetup} disabled={pending} aria-label="Close setup panel">×</button></div><FinancialWriteRecovery csrfToken={csrfToken} onSessionExpired={onSessionExpired} onRecovered={() => { closeTransaction(); closeSetup(); void refreshHistory(); }} />
+            <div className="money-setup-pane" hidden={setupAction !== "account"}><AccountForm open={setupOpen && setupAction === "account"} timeZone={setupZone} csrfToken={csrfToken} pending={pending || financialBlocked} runMutation={runMutation} operationError={operationError} onSaved={closeSetup} /></div>
             <div className="money-setup-pane" hidden={setupAction !== "category"}><CategoryPanel categories={data.categories} csrfToken={csrfToken} pending={pending} runMutation={runMutation} operationError={operationError} /></div>
           </div>
         </dialog>
-        {timeZone && <dialog ref={dialogRef} className="money-transaction-dialog" aria-labelledby="money-dialog-title" onClose={closeTransaction} onClick={(event) => { if (event.target === dialogRef.current) closeTransaction(); }}>
-          <div className="money-dialog-content"><div className="money-dialog-head"><h2 id="money-dialog-title">{replacement ? "Review a replacement" : "Add transaction"}</h2><button type="button" className="money-dialog-close" onClick={closeTransaction} aria-label="Close transaction form">×</button></div><FinancialWriteRecovery csrfToken={csrfToken} onSessionExpired={onSessionExpired} onRecovered={() => { closeTransaction(); closeSetup(); void loadMoney(page); }} />
+        {activeZone && <dialog ref={dialogRef} className="money-transaction-dialog" aria-labelledby="money-dialog-title" onClose={closeTransaction} onClick={(event) => { if (event.target === dialogRef.current) closeTransaction(); }}>
+          <div className="money-dialog-content"><div className="money-dialog-head"><h2 id="money-dialog-title">{replacement ? "Review a replacement" : "Add transaction"}</h2><button type="button" className="money-dialog-close" onClick={closeTransaction} aria-label="Close transaction form">×</button></div><FinancialWriteRecovery csrfToken={csrfToken} onSessionExpired={onSessionExpired} onRecovered={() => { closeTransaction(); closeSetup(); void refreshHistory(); }} />
             {replacement && <p className="money-help">The original remains voided. Review every field and explicitly confirm the new transaction before saving.</p>}
             <div className="money-action-tabs" role="group" aria-label="Transaction type">{(["expense", "income", "transfer"] as const).map((item) => <button key={item} type="button" className={`money-action-tab${transactionAction === item ? " is-active" : ""}`} aria-pressed={transactionAction === item} disabled={pending || financialBlocked} onClick={() => { setTransactionAction(item); setReplacement(null); setOperationError(""); }}>{item[0].toUpperCase() + item.slice(1)}</button>)}</div>
-            {(transactionAction === "expense" || transactionAction === "income") && <EntryForm key={`${formSession}-${transactionAction}-${replacement?.id ?? "new"}`} kind={transactionAction} timeZone={timeZone} accounts={data.accounts} categories={data.categories} csrfToken={csrfToken} pending={pending || financialBlocked} runMutation={runMutation} onChooseAction={chooseSetup} initial={replacement} operationError={operationError} onSaved={closeTransaction} />}
-            {transactionAction === "transfer" && <TransferForm key={`${formSession}-${replacement?.id ?? "new"}`} timeZone={timeZone} accounts={data.accounts} csrfToken={csrfToken} pending={pending || financialBlocked} runMutation={runMutation} onChooseAction={chooseSetup} initial={replacement} operationError={operationError} onSaved={closeTransaction} />}
+            {(transactionAction === "expense" || transactionAction === "income") && <EntryForm key={`${formSession}-${transactionAction}-${replacement?.id ?? "new"}`} kind={transactionAction} timeZone={entryZone ?? activeZone!} accounts={data.accounts} categories={data.categories} csrfToken={csrfToken} pending={pending || financialBlocked} runMutation={runMutation} onChooseAction={chooseSetup} initial={replacement} operationError={operationError} onSaved={closeTransaction} />}
+            {transactionAction === "transfer" && <TransferForm key={`${formSession}-${replacement?.id ?? "new"}`} timeZone={entryZone ?? activeZone!} accounts={data.accounts} csrfToken={csrfToken} pending={pending || financialBlocked} runMutation={runMutation} onChooseAction={chooseSetup} initial={replacement} operationError={operationError} onSaved={closeTransaction} />}
           </div>
         </dialog>}
       </>}
@@ -255,7 +351,7 @@ function AccountOverview({ onBalanceDate, data, csrfToken, pending, runMutation,
   const archived = data.accounts.filter((account) => account.archived_at);
   return (
     <section className="money-section" aria-labelledby="money-accounts-title">
-      <div className="section-heading money-accounts-heading"><div><p className="eyebrow">YOUR ACCOUNTS</p><h2 id="money-accounts-title">A clear view of each balance.</h2></div><div className="money-setup-actions"><button type="button" className="button button-outline" onClick={onCategories} disabled={pending}>Categories</button><button type="button" className="button button-outline" onClick={onAddAccount} disabled={pending}>+ Account</button></div></div>
+      <div className="section-heading money-accounts-heading"><div><p className="eyebrow">YOUR ACCOUNTS</p><h2 id="money-accounts-title" tabIndex={-1}>A clear view of each balance.</h2></div><div className="money-setup-actions"><button type="button" className="button button-outline" onClick={onCategories} disabled={pending}>Categories</button><button type="button" className="button button-outline" onClick={onAddAccount} disabled={pending}>+ Account</button></div></div>
       {localNotice && <p className="money-feedback money-success" role="status">{localNotice}</p>}
       {data.accounts.length === 0 ? <div className="money-empty"><Icon name="money" /><h3>No accounts yet</h3><p>Use + Account to begin recording your money. No balance is assumed for you.</p></div> : <>
         <div className="money-account-grid">
@@ -495,16 +591,28 @@ function TransferForm({ timeZone, accounts, csrfToken, pending, runMutation, onC
   </form>;
 }
 
-export function HistorySection({ data, timeZone, page, setPage, csrfToken, pending, runMutation, onEdit, operationError }: { data: MoneyData; timeZone: string; page: number; setPage: (page: number) => void; csrfToken: string; pending: boolean; runMutation: RunMutation; onEdit: (id: string) => void; operationError: string }) {
+export function HistorySection({ data, timeZone, onLoadMore, onRefresh, loadingMore = false, loadError = "", autoLoad = false, csrfToken, pending, runMutation, onEdit, operationError, onOverview }: { onOverview?: () => void; data: MoneyData; timeZone: string; onLoadMore?: (manual?: boolean) => void; onRefresh?: () => void; loadingMore?: boolean; loadError?: string; autoLoad?: boolean; csrfToken: string; pending: boolean; runMutation: RunMutation; onEdit: (id: string) => void; operationError: string }) {
+  const accounts = data.history?.accounts ?? data.accounts;
+  const categories = data.history?.categories ?? data.categories;
+  const positions = new Map(data.history?.items.map((event) => [event.id, event.account_balances]));
+  const legacy = [...positions.values()].some((values) => values.some((value) => value.unavailable_reason === "anchor_required"));
+  const reconstructed = [...positions.values()].some((values) => values.some((value) => value.basis === "reconstructed_pre_anchor"));
   const [deleteID, setDeleteID] = useState<string | null>(null);
+  const sentinel = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!autoLoad || pending || loadingMore || loadError || !data.hasNext || !onLoadMore || !sentinel.current || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) onLoadMore();
+    }, { rootMargin: "400px 0px" });
+    observer.observe(sentinel.current);
+    return () => observer.disconnect();
+  }, [autoLoad, pending, loadingMore, loadError, data.hasNext, onLoadMore]);
   useEffect(() => {
     if (deleteID) document.getElementById(`money-delete-cancel-${deleteID}`)?.focus();
   }, [deleteID]);
   async function confirmDelete(event: MoneyEvent) {
-    if (await runMutation("Transaction deleted from LifeOS views.", () => deleteMoneyEvent(csrfToken, event.id, event.event_revision))) {
+    if (await runMutation("Transaction deleted from LifeOS views.", () => deleteMoneyEvent(csrfToken, event.id, event.event_revision), captureHistoryLocation(event.id))) {
       setDeleteID(null);
-      if (page > 0 && data.events.length === 1 && !data.hasNext) setPage(page - 1);
-      window.setTimeout(() => document.getElementById("money-history-title")?.focus(), 0);
     }
   }
   function cancelDelete(eventID: string) {
@@ -513,13 +621,16 @@ export function HistorySection({ data, timeZone, page, setPage, csrfToken, pendi
   }
   return <section className="money-section" aria-labelledby="money-history-title">
     <h2 id="money-history-title" className="money-screen-reader-only" tabIndex={-1}>Transactions</h2>
-    {data.events.length === 0 ? <div className="money-empty"><Icon name="today" /><h3>{page === 0 ? "No transactions yet" : "No more transactions"}</h3><p>{page === 0 ? "Recorded income, expenses, and transfers will appear here." : "Go back to the previous page to see your activity."}</p></div> : <ol className="money-history-list">{data.events.map((event, index) => <Fragment key={event.id}>
+    {legacy && onOverview && <button type="button" className="money-text-action money-history-balance-link" onClick={onOverview}>Confirm balance dates in Overview</button>}
+    {reconstructed && <details className="money-history-explanation"><summary>About balance dates</summary><p>Before a confirmed balance date, open a transaction to see its reconstructed balance. These are calculated from recorded transactions, not verified bank balances.</p></details>}
+    {data.events.length === 0 ? <div className="money-empty"><Icon name="today" /><h3>No transactions yet</h3><p>Recorded income, expenses, and transfers will appear here.</p></div> : <ol className="money-history-list">{data.events.map((event, index) => <Fragment key={event.id}>
       {(index === 0 || localDateKey(data.events[index - 1].occurred_at, timeZone) !== localDateKey(event.occurred_at, timeZone)) && <li className="money-date-heading"><h3>{formatLocalDate(event.occurred_at, timeZone)}</h3></li>}
-      <li className="money-history-item"><details className="money-event-details"><summary aria-label={`View details for ${historyTitle(event, data.categories)}`}>
-      <div className="money-history-main"><div className="money-history-copy"><strong>{historyTitle(event, data.categories)} <span className="money-row-chevron" aria-hidden="true">▾</span></strong><span className="money-history-meta">{event.kind === "transfer" ? "Transfer" : event.allocations.length === 0 ? "Uncategorized" : event.allocations.map((allocation) => categoryName(data.categories, allocation.category_id)).join(" + ")} · {historyAccounts(event, data.accounts)} · {formatLocalTime(event.occurred_at, timeZone)}{event.status === "voided" ? " · Voided" : ""}</span></div><strong className={`money-history-amount${event.status === "voided" ? " is-voided" : ""}`}>{event.kind === "expense" ? "−" : event.kind === "income" ? "+" : "↔ "}{formatMinorUnits(event.amount_minor, event.currency)}</strong></div></summary>
+      <li className="money-history-item"><details className="money-event-details"><summary data-occurred-at={event.occurred_at} id={`money-event-${event.id}`} aria-describedby={positions.has(event.id) ? `money-balances-${event.id}` : undefined} aria-label={`View details for ${historyTitle(event, categories)}`}>
+      <div className="money-history-main"><div className="money-history-copy"><strong>{historyTitle(event, categories)} <span className="money-row-chevron" aria-hidden="true">▾</span></strong><span className="money-history-meta">{event.kind === "transfer" ? "Transfer" : event.allocations.length === 0 ? "Uncategorized" : event.allocations.map((allocation) => categoryName(categories, allocation.category_id)).join(" + ")} · {positions.has(event.id) ? null : `${historyAccounts(event, accounts)} · `}{formatLocalTime(event.occurred_at, timeZone)}{event.status === "voided" ? " · Voided" : ""}</span></div><strong className={`money-history-amount${event.status === "voided" ? " is-voided" : ""}`}>{event.kind === "expense" ? "−" : event.kind === "income" ? "+" : "↔ "}{formatMinorUnits(event.amount_minor, event.currency)}</strong></div>{positions.get(event.id)?.length ? <ul id={`money-balances-${event.id}`} className="money-history-positions" aria-label="Account balances after transaction">{positions.get(event.id)!.map((position) => <HistoryBalanceLine key={position.movement_id} position={position} name={accountName(accounts, position.account_id)} />)}</ul> : null}</summary>
         {event.note && <p><strong>Note:</strong> {event.note}</p>}
-        <p><strong>Account movements</strong></p><ul>{event.movements.map((movement) => <li key={movement.id}>{accountName(data.accounts, movement.account_id)}: {formatMinorUnits(movement.amount_minor, movement.currency)}</li>)}</ul>
-        {event.kind !== "transfer" && (event.allocations.length > 0 ? <><p><strong>Categories</strong></p><ul>{event.allocations.map((allocation) => <li key={allocation.id}>{categoryName(data.categories, allocation.category_id)}: {formatMinorUnits(allocation.amount_minor, allocation.currency)}</li>)}</ul></> : <p><strong>Category:</strong> Uncategorized</p>)}
+        <ReconstructedDetails positions={positions.get(event.id) ?? []} accounts={data.history?.accounts ?? []} timeZone={timeZone} />
+        <p><strong>Account movements</strong></p><ul>{event.movements.map((movement) => <li key={movement.id}>{accountName(accounts, movement.account_id)}: {formatMinorUnits(movement.amount_minor, movement.currency)}</li>)}</ul>
+        {event.kind !== "transfer" && (event.allocations.length > 0 ? <><p><strong>Categories</strong></p><ul>{event.allocations.map((allocation) => <li key={allocation.id}>{categoryName(categories, allocation.category_id)}: {formatMinorUnits(allocation.amount_minor, allocation.currency)}</li>)}</ul></> : <p><strong>Category:</strong> Uncategorized</p>)}
         {event.status === "voided" && <p><strong>Void reason:</strong> {event.void_reason === AUTO_VOID_REASON ? "N/A" : event.void_reason || "Unavailable"}</p>}
         <div className="money-event-actions">
           {event.status === "posted" && <button type="button" className="button button-primary" aria-label="Edit transaction" disabled={pending} onClick={() => onEdit(event.id)}>Edit</button>}
@@ -529,6 +640,28 @@ export function HistorySection({ data, timeZone, page, setPage, csrfToken, pendi
           : null}
       </details>
     </li></Fragment>)}</ol>}
-    <div className="money-pagination"><button type="button" className="button button-outline" disabled={page === 0 || pending} onClick={() => setPage(page - 1)}>Previous</button><span>Page {page + 1}</span><button type="button" className="button button-outline" disabled={!data.hasNext || pending} onClick={() => setPage(page + 1)}>Next</button></div>
+    <div ref={sentinel} className="money-history-load" aria-busy={loadingMore}>
+      {loadError && <><p className="money-field-error" role="alert">Could not load older transactions. {loadError}</p>{onRefresh && <button type="button" className="money-text-action" disabled={pending || loadingMore} onClick={onRefresh}>Refresh history</button>}</>}
+      {data.hasNext ? <button type="button" className="button button-outline" disabled={pending || loadingMore} onClick={() => onLoadMore?.(true)}>{loadingMore ? "Loading older transactions…" : loadError ? "Retry loading" : "Load more"}</button> : data.events.length > 0 ? <p className="money-help" role="status">All transactions loaded.</p> : null}
+      <span className="money-screen-reader-only" role="status">{loadingMore ? "Loading older transactions." : `${data.events.length} transactions loaded.`}</span>
+    </div>
   </section>;
+}
+
+export function HistoryChanged({ onRefresh, refreshing }: { onRefresh: () => void; refreshing: boolean }) {
+  return <section className="money-state money-history-changed" role="status"><h2>History changed</h2><p>Refresh to see the latest transactions. Your open drafts and any pending Save are kept.</p><button id="money-history-refresh" type="button" className="button button-primary" disabled={refreshing} onClick={onRefresh}>Refresh history</button></section>;
+}
+export function HistoryBalanceLine({ position, name }: { position: HistoryPosition; name: string }) {
+  const reason = position.unavailable_reason;
+  const label = reason === "voided" ? "Voided: no balance effect" : reason === "anchor_required" ? "Confirm balance date in Overview" : position.basis === "reconstructed_pre_anchor" ? "Before balance date" : reason === "amount_out_of_range" ? "Balance outside supported range" : position.balance_after_minor === null ? "Balance unavailable" : `After ${formatMinorUnits(position.balance_after_minor, position.currency)}`;
+  return <li><span className="money-history-position-name">{name}</span><span className="money-history-position-value">{label}</span></li>;
+}
+
+export function ReconstructedDetails({ positions, accounts, timeZone }: { positions: HistoryPosition[]; accounts: RunningHistory["accounts"]; timeZone: string }) {
+  const reconstructed = positions.filter((position) => position.basis === "reconstructed_pre_anchor" && position.unavailable_reason !== "voided");
+  if (!reconstructed.length) return null;
+  return <section className="money-reconstructed-details" aria-label="Reconstructed balances"><p><strong>Reconstructed balances · Not bank verified</strong></p><p className="money-help">Calculated backwards from a later confirmed balance using recorded transactions. Older history may be incomplete.</p><ul>{reconstructed.map((position) => {
+    const account = accounts.find((item) => item.id === position.account_id);
+    return <li key={position.movement_id}><strong>{account?.name ?? "Unavailable account"}</strong>: {position.balance_after_minor !== null ? `after ${formatMinorUnits(position.balance_after_minor, position.currency)}` : "Balance outside supported range"}{account?.opening_balance_at && <span className="money-help"> · Balance date: {formatLocalDate(account.opening_balance_at, timeZone)}, {formatLocalTimeWithZone(account.opening_balance_at, timeZone)}</span>}</li>;
+  })}</ul></section>;
 }

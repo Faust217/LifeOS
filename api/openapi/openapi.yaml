@@ -517,20 +517,40 @@ paths:
   /api/v1/events:
     get:
       tags: [Money]
-      summary: List paginated financial event history
+      summary: List owner history with optional running balances and stable pages
+      description: >-
+        Without view, preserves limit/offset history used by Today. With view=running_balances,
+        offset is forbidden. Continuation requires the returned history_revision and cursor
+        with the same limit. Unknown or repeated parameters are rejected. Changed Finance data
+        or saved timezone returns 409 history_changed; explicitly restart from page one.
+        Each response uses one read-only REPEATABLE READ snapshot and private no-store caching.
       operationId: listMoneyEvents
       security: [{ sessionCookie: [] }]
       parameters:
         - { $ref: "#/components/parameters/MoneyLimit" }
         - { $ref: "#/components/parameters/MoneyOffset" }
+        - in: query
+          name: view
+          schema: { type: string, enum: [running_balances] }
+        - in: query
+          name: history_revision
+          schema: { type: string, pattern: '^[0-9a-f]{64}$' }
+        - in: query
+          name: cursor
+          description: Canonical opaque base64url cursor bound to revision and page size; not authorization.
+          schema: { type: string, minLength: 1, maxLength: 384 }
       responses:
         "200":
           description: Owner-scoped events, including voided history and child records.
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/MoneyHistoryResponse" }
+              schema:
+                oneOf:
+                  - { $ref: "#/components/schemas/MoneyHistoryResponse" }
+                  - { $ref: "#/components/schemas/MoneyRunningHistoryResponse" }
         "400": { $ref: "#/components/responses/MoneyBadRequest" }
         "401": { $ref: "#/components/responses/MoneyUnauthorized" }
+        "409": { $ref: "#/components/responses/MoneyConflict" }
         "500": { $ref: "#/components/responses/MoneyInternalError" }
         "503": { $ref: "#/components/responses/MoneyUnavailable" }
     post:
@@ -1307,7 +1327,7 @@ components:
           properties:
             code:
               type: string
-              enum: [event_revision_required, event_revision_conflict, event_not_editable, idempotency_key_required, invalid_idempotency_key, idempotency_key_conflict, idempotency_capacity_exceeded, financial_write_busy, financial_write_outcome_unknown, idempotency_version_unsupported, invalid_json, invalid_input, unsupported_media_type, request_too_large, authentication_required, invalid_origin, invalid_csrf, owner_override, method_not_allowed, session_unavailable, currency_mismatch, not_found, archived_record, conflict, amount_overflow, internal_error]
+              enum: [history_changed, invalid_history_cursor, history_unavailable, history_revision_exhausted, event_revision_required, event_revision_conflict, event_not_editable, idempotency_key_required, invalid_idempotency_key, idempotency_key_conflict, idempotency_capacity_exceeded, financial_write_busy, financial_write_outcome_unknown, idempotency_version_unsupported, invalid_json, invalid_input, unsupported_media_type, request_too_large, authentication_required, invalid_origin, invalid_csrf, owner_override, method_not_allowed, session_unavailable, currency_mismatch, not_found, archived_record, conflict, amount_overflow, internal_error]
             message: { type: string }
     MoneyAccountCreate:
       type: object
@@ -1530,6 +1550,89 @@ components:
         allocations:
           type: array
           items: { $ref: "#/components/schemas/MoneyAllocation" }
+    MoneyRunningHistoryEvent:
+      type: object
+      additionalProperties: false
+      required: [event_revision, id, kind, amount_minor, currency, occurred_at, note, status, movements, allocations, account_balances]
+      properties:
+        event_revision: { type: string, pattern: "^[1-9][0-9]*$", description: Current optimistic concurrency token; not an export field. }
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [income, expense, transfer] }
+        amount_minor: { $ref: "#/components/schemas/MoneyPositiveMinorUnits" }
+        currency: { $ref: "#/components/schemas/MoneyCurrency" }
+        occurred_at: { type: string, format: date-time }
+        note: { type: string }
+        status: { type: string, enum: [posted, voided] }
+        voided_at: { type: string, format: date-time }
+        void_reason: { type: string }
+        movements:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/MoneyMovement" }
+        allocations:
+          type: array
+          items: { $ref: "#/components/schemas/MoneyAllocation" }
+        account_balances:
+          type: array
+          minItems: 1
+          maxItems: 2
+          items: { $ref: "#/components/schemas/MoneyHistoryPosition" }
+    MoneyHistoryPosition:
+      type: object
+      additionalProperties: false
+      required: [movement_id, account_id, currency, balance_after_minor, basis, unavailable_reason]
+      properties:
+        movement_id: { type: string, format: uuid }
+        account_id: { type: string, format: uuid }
+        currency: { $ref: "#/components/schemas/MoneyCurrency" }
+        balance_after_minor:
+          type: [string, "null"]
+          pattern: '^(0|-?[1-9][0-9]*)$'
+          maxLength: 20
+          description: Exact signed int64 minor units from the complete ledger; null with an explicit reason.
+        basis: { type: string, enum: [anchored, reconstructed_pre_anchor, legacy_unconfirmed] }
+        unavailable_reason: { type: [string, "null"], enum: [null, voided, anchor_required, amount_out_of_range] }
+    MoneyHistoryAccount:
+      type: object
+      additionalProperties: false
+      required: [id, name, currency, archived_at, balance_basis, opening_balance_at]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        currency: { $ref: "#/components/schemas/MoneyCurrency" }
+        archived_at: { type: [string, "null"], format: date-time }
+        balance_basis: { type: string, enum: [legacy_all_movements, known_balance_before_instant] }
+        opening_balance_at: { type: [string, "null"], format: date-time }
+    MoneyHistoryCategory:
+      type: object
+      additionalProperties: false
+      required: [id, name, kind, archived_at]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        kind: { type: string, enum: [income, expense] }
+        archived_at: { type: [string, "null"], format: date-time }
+    MoneyRunningHistoryResponse:
+      type: object
+      additionalProperties: false
+      required: [projection, history_revision, time_zone, limit, has_more, next_cursor, items, accounts, categories]
+      properties:
+        projection: { type: string, const: lifeos-running-history-v1 }
+        history_revision: { type: string, pattern: '^[0-9a-f]{64}$' }
+        time_zone: { type: [string, "null"] }
+        limit: { type: integer, minimum: 1, maximum: 100 }
+        has_more: { type: boolean }
+        next_cursor: { type: [string, "null"], maxLength: 384 }
+        items:
+          type: array
+          maxItems: 100
+          items: { $ref: "#/components/schemas/MoneyRunningHistoryEvent" }
+        accounts:
+          type: array
+          items: { $ref: "#/components/schemas/MoneyHistoryAccount" }
+        categories:
+          type: array
+          items: { $ref: "#/components/schemas/MoneyHistoryCategory" }
     MoneyHistoryResponse:
       type: object
       additionalProperties: false

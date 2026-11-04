@@ -21,6 +21,7 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -35,7 +36,17 @@ func financeTestDatabase(t *testing.T, environmentKey string) (*pgxpool.Pool, *m
 		t.Fatal("finance test DSN must name a disposable *_test database")
 	}
 	ctx := context.Background()
-	pool, err := pgxpool.New(ctx, dsn)
+	cfg, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// These pools also execute explicit SQL upgrade/fault fixtures. Production pools
+	// do not set a session marker; lockFinanceOwner sets it transaction-locally.
+	cfg.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
+		_, err := conn.Exec(ctx, `SET lifeos.finance_writer_version='11'`)
+		return err
+	}
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}

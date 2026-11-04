@@ -44,7 +44,7 @@ func RegisterRoutes(router chi.Router, auth *identity.Auth, service *Service) {
 	router.MethodFunc(http.MethodGet, "/categories/{categoryID}/spending", auth.RequireRead(handler.categorySpending))
 	router.MethodFunc(http.MethodGet, "/events/{eventID}", auth.RequireRead(handler.getEvent))
 	router.MethodFunc(http.MethodPost, "/events/{eventID}/edit", handler.financialMutation(handler.editEvent))
-	router.MethodFunc(http.MethodGet, "/events", auth.RequireRead(handler.history))
+	router.MethodFunc(http.MethodGet, "/events", privateHistoryRead(auth.RequireRead(handler.history)))
 	router.MethodFunc(http.MethodPost, "/events", handler.financialMutation(handler.postEvent))
 	router.MethodFunc(http.MethodPost, "/transfers", handler.financialMutation(handler.transfer))
 	router.MethodFunc(http.MethodPost, "/events/{eventID}/void", handler.financialMutation(handler.voidEvent))
@@ -429,6 +429,10 @@ func (h moneyHandler) transfer(w http.ResponseWriter, r *http.Request, owner ide
 }
 
 func (h moneyHandler) history(w http.ResponseWriter, r *http.Request, owner identity.OwnerID) {
+	if r.URL.Query().Has("view") {
+		h.runningHistory(w, r, owner)
+		return
+	}
 	query, err := moneyQuery(r, "limit", "offset")
 	if err != nil {
 		writeMoneyError(w, err)
@@ -594,6 +598,15 @@ func writeMoneyJSON(w http.ResponseWriter, status int, value any) {
 
 func writeMoneyError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, ErrHistoryChanged):
+		writeMoneyErrorStatus(w, 409, "history_changed", "History changed. Refresh to see current balances.")
+	case errors.Is(err, ErrHistoryCursor):
+		writeMoneyErrorStatus(w, 400, "invalid_history_cursor", "Invalid History navigation.")
+	case errors.Is(err, ErrHistoryUnavailable):
+		w.Header().Set("Retry-After", "2")
+		writeMoneyErrorStatus(w, 503, "history_unavailable", "History could not load. Try again.")
+	case errors.Is(err, ErrHistoryRevisionExhausted):
+		writeMoneyErrorStatus(w, 503, "history_revision_exhausted", "History updates are unavailable. No changes were saved.")
 	case errors.Is(err, ErrRevisionRequired):
 		writeMoneyErrorStatus(w, 428, "event_revision_required", "Read the transaction before changing it")
 	case errors.Is(err, ErrRevisionConflict):

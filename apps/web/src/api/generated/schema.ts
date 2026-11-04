@@ -322,7 +322,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List paginated financial event history */
+        /**
+         * List owner history with optional running balances and stable pages
+         * @description Without view, preserves limit/offset history used by Today. With view=running_balances, offset is forbidden. Continuation requires the returned history_revision and cursor with the same limit. Unknown or repeated parameters are rejected. Changed Finance data or saved timezone returns 409 history_changed; explicitly restart from page one. Each response uses one read-only REPEATABLE READ snapshot and private no-store caching.
+         */
         get: operations["listMoneyEvents"];
         put?: never;
         /** Post income or expense with explicit allocations or as Uncategorized */
@@ -715,7 +718,7 @@ export interface components {
         MoneyErrorResponse: {
             error: {
                 /** @enum {string} */
-                code: "event_revision_required" | "event_revision_conflict" | "event_not_editable" | "idempotency_key_required" | "invalid_idempotency_key" | "idempotency_key_conflict" | "idempotency_capacity_exceeded" | "financial_write_busy" | "financial_write_outcome_unknown" | "idempotency_version_unsupported" | "invalid_json" | "invalid_input" | "unsupported_media_type" | "request_too_large" | "authentication_required" | "invalid_origin" | "invalid_csrf" | "owner_override" | "method_not_allowed" | "session_unavailable" | "currency_mismatch" | "not_found" | "archived_record" | "conflict" | "amount_overflow" | "internal_error";
+                code: "history_changed" | "invalid_history_cursor" | "history_unavailable" | "history_revision_exhausted" | "event_revision_required" | "event_revision_conflict" | "event_not_editable" | "idempotency_key_required" | "invalid_idempotency_key" | "idempotency_key_conflict" | "idempotency_capacity_exceeded" | "financial_write_busy" | "financial_write_outcome_unknown" | "idempotency_version_unsupported" | "invalid_json" | "invalid_input" | "unsupported_media_type" | "request_too_large" | "authentication_required" | "invalid_origin" | "invalid_csrf" | "owner_override" | "method_not_allowed" | "session_unavailable" | "currency_mismatch" | "not_found" | "archived_record" | "conflict" | "amount_overflow" | "internal_error";
                 message: string;
             };
         };
@@ -914,6 +917,73 @@ export interface components {
             void_reason?: string;
             movements: components["schemas"]["MoneyMovement"][];
             allocations: components["schemas"]["MoneyAllocation"][];
+        };
+        MoneyRunningHistoryEvent: {
+            /** @description Current optimistic concurrency token; not an export field. */
+            event_revision: string;
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            kind: "income" | "expense" | "transfer";
+            amount_minor: components["schemas"]["MoneyPositiveMinorUnits"];
+            currency: components["schemas"]["MoneyCurrency"];
+            /** Format: date-time */
+            occurred_at: string;
+            note: string;
+            /** @enum {string} */
+            status: "posted" | "voided";
+            /** Format: date-time */
+            voided_at?: string;
+            void_reason?: string;
+            movements: components["schemas"]["MoneyMovement"][];
+            allocations: components["schemas"]["MoneyAllocation"][];
+            account_balances: components["schemas"]["MoneyHistoryPosition"][];
+        };
+        MoneyHistoryPosition: {
+            /** Format: uuid */
+            movement_id: string;
+            /** Format: uuid */
+            account_id: string;
+            currency: components["schemas"]["MoneyCurrency"];
+            /** @description Exact signed int64 minor units from the complete ledger; null with an explicit reason. */
+            balance_after_minor: string | null;
+            /** @enum {string} */
+            basis: "anchored" | "reconstructed_pre_anchor" | "legacy_unconfirmed";
+            /** @enum {string|null} */
+            unavailable_reason: null | "voided" | "anchor_required" | "amount_out_of_range";
+        };
+        MoneyHistoryAccount: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            currency: components["schemas"]["MoneyCurrency"];
+            /** Format: date-time */
+            archived_at: string | null;
+            /** @enum {string} */
+            balance_basis: "legacy_all_movements" | "known_balance_before_instant";
+            /** Format: date-time */
+            opening_balance_at: string | null;
+        };
+        MoneyHistoryCategory: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** @enum {string} */
+            kind: "income" | "expense";
+            /** Format: date-time */
+            archived_at: string | null;
+        };
+        MoneyRunningHistoryResponse: {
+            /** @constant */
+            projection: "lifeos-running-history-v1";
+            history_revision: string;
+            time_zone: string | null;
+            limit: number;
+            has_more: boolean;
+            next_cursor: string | null;
+            items: components["schemas"]["MoneyRunningHistoryEvent"][];
+            accounts: components["schemas"]["MoneyHistoryAccount"][];
+            categories: components["schemas"]["MoneyHistoryCategory"][];
         };
         MoneyHistoryResponse: {
             items: components["schemas"]["MoneyEvent"][];
@@ -2413,6 +2483,10 @@ export interface operations {
             query?: {
                 limit?: components["parameters"]["MoneyLimit"];
                 offset?: components["parameters"]["MoneyOffset"];
+                view?: "running_balances";
+                history_revision?: string;
+                /** @description Canonical opaque base64url cursor bound to revision and page size; not authorization. */
+                cursor?: string;
             };
             header?: never;
             path?: never;
@@ -2426,11 +2500,12 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["MoneyHistoryResponse"];
+                    "application/json": components["schemas"]["MoneyHistoryResponse"] | components["schemas"]["MoneyRunningHistoryResponse"];
                 };
             };
             400: components["responses"]["MoneyBadRequest"];
             401: components["responses"]["MoneyUnauthorized"];
+            409: components["responses"]["MoneyConflict"];
             500: components["responses"]["MoneyInternalError"];
             503: components["responses"]["MoneyUnavailable"];
         };

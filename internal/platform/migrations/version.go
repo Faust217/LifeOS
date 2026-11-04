@@ -2,4 +2,4 @@
 package migrations
 
 // CurrentVersion is the latest production migration version required for readiness.
-const CurrentVersion uint = 10
+const CurrentVersion uint = 11

@@ -206,7 +206,7 @@ export function AuthenticatedShell({ area, goalID = null, user, onSignOut, onSes
         </header>
         <main id="main-content" className="page-content" tabIndex={-1}>
           {area === "today" && <TodayPage timeZone={user.time_zone} onSessionExpired={onSessionExpired} />}
-          {area === "money" && <MoneyPage csrfToken={user.csrf_token} timeZone={user.time_zone} onSessionExpired={onSessionExpired} />}
+          {area === "money" && <MoneyPage onTimeZoneSaved={onTimeZoneSaved} csrfToken={user.csrf_token} timeZone={user.time_zone} onSessionExpired={onSessionExpired} />}
           {area === "plans" && <GoalsPage goalID={goalID} csrfToken={user.csrf_token} onSessionExpired={onSessionExpired} />}
           {area === "me" && <MePage user={user} onSignOut={onSignOut} signingOut={signingOut} signOutError={signOutError} onTimeZoneSaved={onTimeZoneSaved} onSessionExpired={onSessionExpired} />}
           {area === null && <NotFoundPage />}

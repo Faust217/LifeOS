@@ -11,6 +11,8 @@ export type CategoryRename = components["schemas"]["MoneyCategoryRename"];
 export type EventCreate = components["schemas"]["MoneyEventCreate"];
 export type TransferCreate = components["schemas"]["MoneyTransferCreate"];
 export type MoneyHistory = components["schemas"]["MoneyHistoryResponse"];
+export type RunningHistory = components["schemas"]["MoneyRunningHistoryResponse"];
+export type HistoryPosition = components["schemas"]["MoneyHistoryPosition"];
 type MoneyErrorCode = components["schemas"]["MoneyErrorResponse"]["error"]["code"];
 
 export class MoneyApiError extends Error {
@@ -23,6 +25,10 @@ export class MoneyApiError extends Error {
 function moneyErrorMessage(status: number, code: MoneyErrorCode | "network_error"): string {
   if (status === 401) return "Your session has ended. Please sign in again.";
   switch (code) {
+    case "history_changed": return "Your history changed. Refresh to see the latest transactions.";
+    case "invalid_history_cursor": return "This history page is no longer available. Refresh history.";
+    case "history_unavailable": return "History could not load. Your drafts are kept; try again.";
+    case "history_revision_exhausted": return "Financial writes need operator attention. Your Save is kept for recovery.";
     case "idempotency_key_conflict": return "This recovery key conflicts with a different Save. Check activity before clearing recovery; do not submit it with a new key.";
     case "idempotency_capacity_exceeded": return "Financial write capacity is full. Contact the LifeOS operator; existing Saves can still be retried.";
     case "financial_write_busy": return "LifeOS is busy. Keep the original Save and use Retry Save.";
@@ -124,6 +130,12 @@ export const listMoneyAccounts = () => moneyRequest<components["schemas"]["Money
 export const getMoneyBalance = (id: string) => moneyRequest<MoneyBalance>(`/api/v1/accounts/${encodeURIComponent(id)}/balance`);
 export const listMoneyCategories = () => moneyRequest<components["schemas"]["MoneyCategoriesResponse"]>("/api/v1/categories");
 export const listMoneyHistory = (limit: number, offset: number) => moneyRequest<MoneyHistory>(`/api/v1/events?limit=${limit}&offset=${offset}`);
+export const listRunningHistory = (query: { limit: number; history_revision?: string; cursor?: string }) => {
+  const params = new URLSearchParams({ view: "running_balances", limit: String(query.limit) });
+  if (query.history_revision) params.set("history_revision", query.history_revision);
+  if (query.cursor) params.set("cursor", query.cursor);
+  return moneyRequest<RunningHistory>(`/api/v1/events?${params}`);
+};
 
 export const createMoneyAccount = (csrfToken: string, input: AccountCreate) => prepareFinancialRequest<MoneyAccount>("/api/v1/accounts", csrfToken, input);
 export const createMoneyCategory = (csrfToken: string, input: CategoryCreate) => moneyRequest<MoneyCategory>("/api/v1/categories", csrfToken, input);

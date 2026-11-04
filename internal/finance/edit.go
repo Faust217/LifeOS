@@ -237,6 +237,9 @@ func (r *repository) editEventInTx(ctx context.Context, tx pgx.Tx, owner identit
 	if err = captureRevision(ctx, tx, owner, id, "edit", spec.requestKey); err != nil {
 		return Event{}, err
 	}
+	if err = bumpHistoryRevision(ctx, tx, owner); err != nil {
+		return Event{}, err
+	}
 	result, _, err := readEventInTx(ctx, tx, owner, id, false)
 	return result, err
 }

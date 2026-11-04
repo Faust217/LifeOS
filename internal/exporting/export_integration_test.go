@@ -65,7 +65,17 @@ func TestOwnerExportIntegration(t *testing.T) {
 		t.Fatal("export integration requires disposable *_test database")
 	}
 	ctx := context.Background()
-	pool, err := pgxpool.New(ctx, dsn)
+	cfg, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Explicit SQL fixtures use a declared v11 fixture writer; normal Finance
+	// services still acquire their own owner lock and transaction-local marker.
+	cfg.AfterConnect = func(ctx context.Context, c *pgx.Conn) error {
+		_, err := c.Exec(ctx, `SET lifeos.finance_writer_version='11'`)
+		return err
+	}
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
